@@ -1,0 +1,1 @@
+[{"uuid": "c1", "name": "Pricing chat", "created_at": "2024-05-01T10:00:00Z", "chat_messages": [{"sender": "human", "text": "What payment provider should SelectiveOS use?"}, {"sender": "assistant", "content": [{"type": "text", "text": "Start with Stripe for UK card checkout."}]}]}]

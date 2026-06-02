@@ -4,8 +4,8 @@ from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
-from ai_cartridge.engine.healing import absorb_receipt, resolve
-from ai_cartridge.core.memory import ensure_root
+from koush.engine.healing import absorb_receipt, resolve
+from koush.core.memory import ensure_root
 
 class ReceiptHandler(FileSystemEventHandler):
     def __init__(self, root: Path):

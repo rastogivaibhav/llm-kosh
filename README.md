@@ -1,10 +1,13 @@
-# AI Memory Cartridge
+# Koush 🚀
 
-A **local-first, human-readable AI memory cartridge**. Not a SaaS, not an agent memory DB,
-not an Obsidian clone — a personal artifact you own that captures your decisions, prompts,
-projects and AI conversations as plain Markdown files, and that can produce focused,
-**bootable context packs** to upload into ChatGPT, Claude, Gemini, DeepSeek, Codex, or hand
-to another person.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Local First](https://img.shields.io/badge/architecture-local--first-success.svg)](#)
+
+A **local-first, zero-dependency LLM context compiler**. Not a SaaS, not an agent memory DB,
+not an Obsidian clone — Koush is a DevOps pipeline for your AI context. It captures your decisions, prompts,
+projects, and AI conversations as plain Markdown files, and compiles them into focused,
+**bootable context packs** to upload into ChatGPT, Claude, Gemini, DeepSeek, or Codex.
 
 The loop it gives you:
 
@@ -37,7 +40,7 @@ a secret gate first.
 No install. One file, Python 3.9+ standard library:
 
 ```bash
-python3 cartridge.py --help
+python3 koush_cli.py --help
 ```
 
 Optional local vector indexer (semantic search & auto-resolution):
@@ -49,12 +52,19 @@ pip install sentence-transformers sqlite-vec   # 100% offline, high-performance 
 ## Quick start
 
 ```bash
-python3 cartridge.py --root ~/AI-Cartridge init --owner "Your Name"
-python3 cartridge.py --root ~/AI-Cartridge add --kind decision \
+# Initialize a new Koush vault
+python3 koush_cli.py --root ~/Koush-Vault init --owner "Your Name"
+
+# Add a decision or memory to the vault
+python3 koush_cli.py --root ~/Koush-Vault add --kind decision \
     --project "SelectiveOS" --title "AI lessons require teacher approval" \
     --body "Generated lessons go to a teacher queue before student visibility."
-python3 cartridge.py --root ~/AI-Cartridge query "teacher approval"
-python3 cartridge.py --root ~/AI-Cartridge pack "SelectiveOS teacher lessons" \
+
+# Query your local knowledge base
+python3 koush_cli.py --root ~/Koush-Vault query "teacher approval"
+
+# Pack the context into a bootable zip for an LLM (with secrets scanned!)
+python3 koush_cli.py --root ~/Koush-Vault pack "SelectiveOS teacher lessons" \
     --for chatgpt --out selectiveos.zip --include-private
 ```
 
@@ -79,10 +89,10 @@ Create a pack, then upload the zip and tell the model to boot from it:
 When the model returns a `MEMORY_RECEIPT`, save it and absorb it:
 
 ```bash
-python3 cartridge.py --root ~/AI-Cartridge absorb MEMORY_RECEIPT.md
-python3 cartridge.py --root ~/AI-Cartridge resolve        # close out open corrections
-python3 cartridge.py --root ~/AI-Cartridge audit
-python3 cartridge.py --root ~/AI-Cartridge heal --safe
+python3 koush_cli.py --root ~/AI-Cartridge absorb MEMORY_RECEIPT.md
+python3 koush_cli.py --root ~/AI-Cartridge resolve        # close out open corrections
+python3 koush_cli.py --root ~/AI-Cartridge audit
+python3 koush_cli.py --root ~/AI-Cartridge heal --safe
 ```
 
 ### Automated Real-Time Monitoring (Daemon)
@@ -90,7 +100,7 @@ python3 cartridge.py --root ~/AI-Cartridge heal --safe
 To automate this loop completely without manual execution, run the watchdog daemon:
 
 ```bash
-python3 cartridge.py --root ~/AI-Cartridge watch
+python3 koush_cli.py --root ~/Koush-Vault watch
 ```
 
 This monitors your `receipts/` directory in real-time. Whenever an LLM writes a `MEMORY_RECEIPT*.md` file there, the daemon immediately:
@@ -102,10 +112,10 @@ This monitors your `receipts/` directory in real-time. Whenever an LLM writes a 
 ## Importing your history
 
 ```bash
-python3 cartridge.py --root ~/AI-Cartridge import-chatgpt ~/Downloads/chatgpt_export.zip --project "AI Portfolio"
-python3 cartridge.py --root ~/AI-Cartridge import-claude  ~/Downloads/claude_export.json
-python3 cartridge.py --root ~/AI-Cartridge import-gemini  ~/Downloads/MyActivity.json
-python3 cartridge.py --root ~/AI-Cartridge import-generic ~/notes/chat.md
+python3 koush_cli.py --root ~/Koush-Vault import-chatgpt ~/Downloads/chatgpt_export.zip --project "AI Portfolio"
+python3 koush_cli.py --root ~/Koush-Vault import-claude  ~/Downloads/claude_export.json
+python3 koush_cli.py --root ~/Koush-Vault import-gemini  ~/Downloads/MyActivity.json
+python3 koush_cli.py --root ~/Koush-Vault import-generic ~/notes/chat.md
 ```
 
 Add `--dry-run` to preview. Raw exports are preserved verbatim under `attachments/imports/`.
@@ -135,8 +145,8 @@ default. `pack` blocks on detected secrets unless you `--redact` or `--allow-sec
 ## Backup
 
 ```bash
-python3 cartridge.py --root ~/AI-Cartridge export-backup --out cartridge-backup.zip
-python3 cartridge.py --root ~/NewLocation import-backup cartridge-backup.zip
+python3 koush_cli.py --root ~/AI-Cartridge export-backup --out cartridge-backup.zip
+python3 koush_cli.py --root ~/NewLocation import-backup cartridge-backup.zip
 ```
 
 Backups contain the source of truth (Markdown + ledger + config), not derived indexes;
@@ -145,8 +155,8 @@ those rebuild on restore.
 ## Layout
 
 ```
-CARTRIDGE.json        config + cartridge_id
-CARTRIDGE_POLICY.json export policy (optional)
+KOUSH.json        config + koush_id
+KOUSH_POLICY.json export policy (optional)
 BOOT.md               boot instructions
 MEMORY_MAP.md         generated map
 source/               the source of truth (Markdown + frontmatter)

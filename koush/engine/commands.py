@@ -1,47 +1,20 @@
 
-from ai_cartridge.core.constants import *
-from ai_cartridge.core.utils import *
-from ai_cartridge.core.memory import *
-from ai_cartridge.engine.search import *
-from ai_cartridge.engine.search import _vmeta, _fts_query
-from ai_cartridge.engine.safety import *
-from ai_cartridge.engine.compiler import *
-from ai_cartridge.core.constants import *
-
-from ai_cartridge.core.utils import *
-
-from ai_cartridge.core.memory import *
-
-from ai_cartridge.engine.search import *
-
-from ai_cartridge.engine.safety import *
-
-from ai_cartridge.engine.compiler import *
-
-from ai_cartridge.engine.healing import *
-from ai_cartridge.daemon import *
+from koush.core.constants import *
+from koush.core.utils import *
+from koush.core.memory import *
+from koush.engine.search import *
+from koush.engine.search import _vmeta, _fts_query
+from koush.engine.safety import *
+from koush.engine.compiler import *
+from koush.engine.healing import *
+from koush.daemon import watch_command
 
 import os, re, json, uuid, shutil, zipfile, sqlite3, argparse, datetime as dt
-
 from datetime import timezone
 
 UTC = timezone.utc
-
 from pathlib import Path
-
 from typing import Dict, List, Optional, Tuple, Set
-
-from ai_cartridge.core.constants import *
-
-from ai_cartridge.core.utils import *
-
-from ai_cartridge.core.memory import *
-
-from ai_cartridge.engine.search import *
-
-from ai_cartridge.engine.safety import *
-
-from ai_cartridge.engine.compiler import *
 
 FOLDER_TO_KIND = {
     "projects": "project", "decisions": "decision", "prompts": "prompt",
@@ -359,7 +332,7 @@ def heal_safe(root: Path, dry_run: bool = False, fix_visibility: bool = False,
     if not (root / "BOOT.md").exists():
         record("regenerate BOOT.md")
         if not dry_run:
-            cfg = read_json(root / "CARTRIDGE.json", {})
+            cfg = read_json(root / "KOUSH.json", {})
             (root / "BOOT.md").write_text(boot_text(cfg.get("owner", "")), encoding="utf-8")
 
     if dry_run:
@@ -369,8 +342,9 @@ def heal_safe(root: Path, dry_run: bool = False, fix_visibility: bool = False,
         return {"repairs": repairs, "applied": False}
 
     rebuild_index(root, force=True)
-    if _vmeta(root):  # keep an existing vector index fresh
-        build_vector_index(root, backend=_vmeta(root)["backend"], model=_vmeta(root).get("model") or "all-MiniLM-L6-v2")
+    vmeta_cache = _vmeta(root)
+    if vmeta_cache:  # keep an existing vector index fresh
+        build_vector_index(root, backend=vmeta_cache["backend"], model=vmeta_cache.get("model") or "all-MiniLM-L6-v2")
         record("rebuilt vector index")
     memory_map(root, quiet=True)
     report = audit(root)
@@ -437,7 +411,7 @@ def status(root: Path) -> None:
     conn.close()
     ledger_path = root / "ledger" / "events.jsonl"
     events = sum(1 for _ in ledger_path.open("r", encoding="utf-8")) if ledger_path.exists() else 0
-    print(f"AI Memory Cartridge v{APP_VERSION}: {root}")
+    print(f"Koush v{APP_VERSION}: {root}")
     print(f"Total source documents: {total}  (superseded: {superseded})")
     print(f"Ledger events: {events}")
     for kind, count in counts:
@@ -461,12 +435,10 @@ TEXT_EXTS = {
 MAX_CHUNK = 6000
 
 def _existing_source_hashes(root: Path) -> set:
-    out = set()
-    for p in iter_source_files(root):
-        meta, _ = parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
-        if meta.get("source_hash"):
-            out.add(meta["source_hash"])
-    return out
+    conn = get_db(root)
+    rows = conn.execute("SELECT json_extract(meta, '$.source_hash') FROM documents WHERE json_extract(meta, '$.source_hash') IS NOT NULL").fetchall()
+    conn.close()
+    return {r[0] for r in rows if r[0]}
 
 def _split_markdown(text: str) -> List[Tuple[str, str]]:
     """Split a markdown doc into (heading, section-body) on level-1/2 headings."""
@@ -1255,7 +1227,7 @@ def _site_page(title: str, body_html: str) -> str:
     return (f"<!doctype html><html lang=en><head><meta charset=utf-8>"
             f"<meta name=viewport content='width=device-width,initial-scale=1'>"
             f"<title>{_html_escape(title)}</title><link rel=stylesheet href='style.css'></head>"
-            f"<body><header><h1>AI Memory Cartridge</h1>"
+            f"<body><header><h1>Koush</h1>"
             f"<div class=mut>{_html_escape(title)}</div></header>"
             f"<div class=wrap>{body_html}</div>"
             f"<footer>Generated {now_iso()} · local static site · stdlib only</footer></body></html>")
@@ -1349,18 +1321,18 @@ def static_site(root: Path, include_private: bool = False) -> Path:
 
 BACKUP_INCLUDE = ["source", "ledger", "attachments", "reports"]
 
-BACKUP_FILES = ["CARTRIDGE.json", "CARTRIDGE_POLICY.json", "BOOT.md", "MEMORY_MAP.md"]
+BACKUP_FILES = ["KOUSH.json", "KOUSH_POLICY.json", "BOOT.md", "MEMORY_MAP.md"]
 
 def export_backup(root: Path, out: Path) -> Path:
     """Write a portable backup zip of the source of truth (no derived indexes)."""
     ensure_root(root)
     out.parent.mkdir(parents=True, exist_ok=True)
-    cfg = read_json(root / "CARTRIDGE.json", {}) or {}
+    cfg = read_json(root / "KOUSH.json", {}) or {}
     meta = {
-        "schema": "ai-memory-cartridge-backup.v1", "created_at": now_iso(),
+        "schema": "koush-backup.v1", "created_at": now_iso(),
         "app_version": APP_VERSION,
-        "cartridge_id": cartridge_meta(root)["cartridge_id"],
-        "cartridge_version": cfg.get("version", APP_VERSION),
+        "koush_id": cartridge_meta(root)["koush_id"],
+        "koush_version": cfg.get("version", APP_VERSION),
         "owner": cfg.get("owner", ""),
     }
     n = 0
@@ -1395,7 +1367,7 @@ def import_backup(root: Path, backup: Path, force: bool = False) -> dict:
         if "BACKUP_MANIFEST.json" not in names:
             raise SystemExit("Not a cartridge backup (missing BACKUP_MANIFEST.json).")
         manifest = json.loads(zf.read("BACKUP_MANIFEST.json"))
-        existing = (root / "CARTRIDGE.json").exists()
+        existing = (root / "KOUSH.json").exists()
         has_source = (root / "source").exists() and any((root / "source").rglob("*.md"))
         if existing and has_source and not force:
             raise SystemExit(
@@ -1414,24 +1386,24 @@ def import_backup(root: Path, backup: Path, force: bool = False) -> dict:
     rebuild_index(root, force=True)
     append_ledger(root, "backup.imported",
                   {"backup": str(backup), "files": restored,
-                   "from_cartridge": manifest.get("cartridge_id"),
+                   "from_cartridge": manifest.get("koush_id"),
                    "backup_app_version": manifest.get("app_version")})
     print(f"Restored {restored} file(s) from {backup}")
-    print(f"  cartridge: {manifest.get('cartridge_id')} (backup made with v{manifest.get('app_version')})")
+    print(f"  cartridge: {manifest.get('koush_id')} (backup made with v{manifest.get('app_version')})")
     print("  rebuilt FTS index. Run `embed` to rebuild the vector index if you use semantic search.")
     return {"restored": restored, "manifest": manifest}
 
 def migrate(root: Path, dry_run: bool = False) -> dict:
     """Explicit, reversible migration: stamp current app version and ensure a
-    cartridge_id exists. Never rewrites memory content. Records the prior version."""
+    koush_id exists. Never rewrites memory content. Records the prior version."""
     ensure_root(root)
-    cfg = read_json(root / "CARTRIDGE.json", {}) or {}
+    cfg = read_json(root / "KOUSH.json", {}) or {}
     from_version = cfg.get("version", "unknown")
     changes = []
     if from_version != APP_VERSION:
         changes.append(f"version {from_version} -> {APP_VERSION}")
-    if not cfg.get("cartridge_id"):
-        changes.append("add cartridge_id")
+    if not cfg.get("koush_id"):
+        changes.append("add koush_id")
     if not changes:
         print(f"Already at v{APP_VERSION}; nothing to migrate.")
         return {"migrated": False, "from": from_version}
@@ -1441,15 +1413,15 @@ def migrate(root: Path, dry_run: bool = False) -> dict:
 
     new_cfg = dict(cfg)
     new_cfg["version"] = APP_VERSION
-    if not new_cfg.get("cartridge_id"):
-        new_cfg["cartridge_id"] = cartridge_meta(root)["cartridge_id"]  # deterministic
+    if not new_cfg.get("koush_id"):
+        new_cfg["koush_id"] = cartridge_meta(root)["koush_id"]  # deterministic
     history = new_cfg.get("migrated_from", [])
     if not isinstance(history, list):
         history = [history]
     history.append({"from": from_version, "to": APP_VERSION, "at": now_iso()})
     new_cfg["migrated_from"] = history
-    write_json(root / "CARTRIDGE.json", new_cfg)
+    write_json(root / "KOUSH.json", new_cfg)
     append_ledger(root, "cartridge.migrated", {"from": from_version, "to": APP_VERSION})
     print(f"Migrated cartridge: {', '.join(changes)}")
-    print("  (reversible: prior version recorded in CARTRIDGE.json 'migrated_from')")
+    print("  (reversible: prior version recorded in KOUSH.json 'migrated_from')")
     return {"migrated": True, "from": from_version, "to": APP_VERSION, "changes": changes}

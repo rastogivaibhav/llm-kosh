@@ -3,11 +3,11 @@ import uuid
 from pathlib import Path
 from typing import Dict, Optional
 
-from ai_cartridge.core.constants import APP_VERSION, KINDS
-from ai_cartridge.core.utils import (
+from koush.core.constants import APP_VERSION, KINDS
+from koush.core.utils import (
     now_iso, slugify, ensure_root, source_dir_for_kind, 
     sha256_file, frontmatter, parse_frontmatter, append_ledger, 
-    write_json, read_json
+    write_json, read_json, atomic_write_text
 )
 def init_cartridge(root: Path, owner: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
@@ -20,9 +20,9 @@ def init_cartridge(root: Path, owner: str) -> None:
         (root / rel).mkdir(parents=True, exist_ok=True)
 
     config = {
-        "schema": "ai-memory-cartridge.v0",
+        "schema": "koush.v0",
         "version": APP_VERSION,
-        "cartridge_id": "cart_" + uuid.uuid4().hex[:12],
+        "koush_id": "cart_" + uuid.uuid4().hex[:12],
         "owner": owner,
         "created_at": now_iso(),
         "principles": [
@@ -34,19 +34,19 @@ def init_cartridge(root: Path, owner: str) -> None:
             "Nothing leaves the machine through a pack without passing the secret gate.",
         ],
     }
-    write_json(root / "CARTRIDGE.json", config)
+    write_json(root / "KOUSH.json", config)
 
     (root / "BOOT.md").write_text(boot_text(owner), encoding="utf-8")
 
-    from ai_cartridge.engine.search import rebuild_index
+    from koush.engine.search import rebuild_index
     append_ledger(root, "cartridge.initialized", {"root": str(root), "owner": owner})
     rebuild_index(root, force=True)
-    print(f"Initialized AI Memory Cartridge v{APP_VERSION} at: {root}")
+    print(f"Initialized Koush v{APP_VERSION} at: {root}")
 
 
 def boot_text(owner: str = "") -> str:
     who = f"\nThis cartridge was created for: **{owner}**.\n" if owner else ""
-    return f"""# AI Memory Cartridge Boot Instructions
+    return f"""# Koush Boot Instructions
 
 You are reading a portable AI memory cartridge or a focused context pack exported from one.
 
@@ -127,12 +127,12 @@ def add_memory(
         meta.update(extra_meta)
 
     content = f"{frontmatter(meta)}\n\n# {title}\n\n{body.strip()}\n"
-    path.write_text(content, encoding="utf-8")
+    atomic_write_text(path, content, encoding="utf-8")
     append_ledger(root, f"{kind}.created", {
         "id": item_id, "path": str(path.relative_to(root)), "hash": sha256_file(path),
         **({"source_receipt": meta["source_receipt"]} if meta.get("source_receipt") else {}),
     })
-    from ai_cartridge.engine.search import rebuild_index
+    from koush.engine.search import rebuild_index
     if reindex:
         rebuild_index(root)
     if not quiet:
@@ -149,12 +149,12 @@ def update_doc_meta(root: Path, rel_path: str, updates: Dict[str, object]) -> di
     meta.update({k: str(v) for k, v in updates.items()})
     meta["updated"] = now_iso()
     content = f"{frontmatter(meta)}\n\n{body.strip()}\n"
-    path.write_text(content, encoding="utf-8")
+    atomic_write_text(path, content, encoding="utf-8")
     return meta
 
 
 def find_doc_by_id(root: Path, doc_id: str) -> Optional[str]:
-    from ai_cartridge.engine.search import iter_source_files
+    from koush.engine.search import iter_source_files
     for p in iter_source_files(root):
         meta, _ = parse_frontmatter(p.read_text(encoding="utf-8", errors="replace"))
         if meta.get("id") == doc_id:

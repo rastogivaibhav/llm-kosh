@@ -7,10 +7,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from ai_cartridge.core.utils import (
+from koush.core.utils import (
     now_iso, read_json, write_json, parse_frontmatter, sha256_file, append_ledger
 )
-from ai_cartridge.core.memory import ensure_root
+from koush.core.memory import ensure_root
 import struct
 try:
     import sqlite_vec
@@ -37,7 +37,7 @@ def iter_source_files(root: Path) -> Iterable[Path]:
 def get_db(root: Path) -> sqlite3.Connection:
     db_path = root / "indexes" / "memory.sqlite"
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=5.0)
     conn.execute("PRAGMA journal_mode=WAL")
     return conn
 
@@ -47,7 +47,8 @@ def corpus_fingerprint(root: Path) -> str:
     h = hashlib.sha256()
     for p in iter_source_files(root):
         h.update(str(p.relative_to(root)).encode("utf-8"))
-        h.update(sha256_file(p).encode("utf-8"))
+        st = p.stat()
+        h.update(f"{st.st_size}:{st.st_mtime}".encode("utf-8"))
     return h.hexdigest()
 
 
@@ -71,6 +72,10 @@ def rebuild_index(root: Path, force: bool = False) -> bool:
           visibility TEXT, status TEXT, path TEXT, body TEXT, hash TEXT,
           created TEXT, supersedes TEXT, superseded_by TEXT, source_receipt TEXT
         );
+        CREATE INDEX IF NOT EXISTS idx_docs_project ON documents(project);
+        CREATE INDEX IF NOT EXISTS idx_docs_kind ON documents(kind);
+        CREATE INDEX IF NOT EXISTS idx_docs_status ON documents(status);
+        CREATE INDEX IF NOT EXISTS idx_docs_visibility ON documents(visibility);
         CREATE VIRTUAL TABLE documents_fts USING fts5(
           id UNINDEXED, title, project, kind, body, content=''
         );
@@ -104,107 +109,6 @@ def rebuild_index(root: Path, force: bool = False) -> bool:
     return True
 
 
-# --------------------------------------------------------------------------- #
-# text similarity (pure-stdlib TF-IDF cosine)
-# --------------------------------------------------------------------------- #
-
-_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_]+")
-_STOPWORDS = {
-    "the", "a", "an", "and", "or", "of", "to", "in", "for", "on", "with", "is",
-    "are", "was", "be", "this", "that", "it", "as", "at", "by", "from", "we",
-    "our", "must", "should", "will", "can", "use", "using", "via", "into", "not",
-    "but", "they", "them", "than", "then", "now", "new", "its", "has", "have",
-}
-
-def tokenize(text: str) -> List[str]:
-    return [t for t in _TOKEN_RE.findall((text or "").lower()) if t not in _STOPWORDS]
-
-def _build_idf(doc_tokens: List[List[str]]) -> Dict[str, float]:
-    df: "Counter" = Counter()
-    for toks in doc_tokens:
-        for t in set(toks):
-            df[t] += 1
-    n = max(1, len(doc_tokens))
-    return {t: math.log((n + 1) / (c + 1)) + 1.0 for t, c in df.items()}
-
-def _vec(tokens: List[str], idf: Dict[str, float], default_idf: float = 1.0) -> Dict[str, float]:
-    if not tokens:
-        return {}
-    tf = Counter(tokens)
-    n = len(tokens)
-    return {t: (cnt / n) * idf.get(t, default_idf) for t, cnt in tf.items()}
-
-def _cosine(a: Dict[str, float], b: Dict[str, float]) -> float:
-    if not a or not b:
-        return 0.0
-    common = a.keys() & b.keys()
-    dot = sum(a[t] * b[t] for t in common)
-    na = math.sqrt(sum(v * v for v in a.values()))
-    nb = math.sqrt(sum(v * v for v in b.values()))
-    return dot / (na * nb) if na and nb else 0.0
-
-def _doc_text(m: dict, title_boost: int = 3) -> str:
-    return (((m.get("title") or "") + " ") * title_boost) + (m.get("body") or m.get("snippet") or "")
-
-def top_matches(root: Path, text: str, kinds: List[str], k: int = 3, semantic: bool = False) -> List[Tuple[float, str, str]]:
-    conn = get_db(root)
-    ph = ",".join("?" for _ in kinds)
-    rows = conn.execute(
-        f"SELECT id,title,body FROM documents WHERE status='active' AND kind IN ({ph})",
-        tuple(kinds),
-    ).fetchall()
-    conn.close()
-    if not rows:
-        return []
-    docs = [{"id": r[0], "title": r[1], "body": r[2]} for r in rows]
-    corpus = [tokenize(_doc_text(d)) for d in docs]
-    idf = _build_idf(corpus + [tokenize(text)])
-    qv = _vec(tokenize(text), idf)
-    scored = [(round(_cosine(qv, _vec(t, idf)), 4), d["id"], d["title"]) for d, t in zip(docs, corpus)]
-    scored.sort(reverse=True)
-    return scored[:k]
-
-def best_match(root: Path, text: str, kinds: List[str], threshold: float = 0.18, semantic: bool = False) -> Tuple[Optional[str], float]:
-    tm = top_matches(root, text, kinds, k=1, semantic=semantic)
-    if tm and tm[0][0] >= threshold:
-        return tm[0][1], tm[0][0]
-    return None, (tm[0][0] if tm else 0.0)
-
-def _fts_query(query: str) -> Optional[str]:
-    terms = [t for t in re.split(r"\W+", query) if len(t) > 1]
-    if not terms:
-        return None
-    return " OR ".join('"' + t.replace('"', "") + '"' for t in terms)
-
-def make_snippet(body: str, query: str, width: int = 200) -> str:
-    body = re.sub(r"\s+", " ", body).strip()
-    if not body:
-        return ""
-    terms = [t.lower() for t in re.split(r"\W+", query) if len(t) > 1]
-    low = body.lower()
-    hits = sorted(p for t in terms for p in [low.find(t)] if p != -1)
-    if not hits:
-        hits = sorted(m.start() for t in terms for m in re.finditer(re.escape(t), low)) if terms else []
-    if not hits:
-        return body[:width] + ("…" if len(body) > width else "")
-    best_start, best_count = hits[0], 0
-    for h in hits:
-        c = sum(1 for x in hits if h <= x < h + width)
-        if c > best_count:
-            best_count, best_start = c, h
-    start = max(0, best_start - width // 4)
-    end = min(len(body), start + width)
-    prefix = "…" if start > 0 else ""
-    suffix = "…" if end < len(body) else ""
-    return f"{prefix}{body[start:end]}{suffix}"
-
-
-FOLDER_TO_KIND = {
-    "projects": "project", "decisions": "decision", "prompts": "prompt",
-    "notes": "note", "generated-files": "file", "conversations": "conversation",
-    "receipts": "receipt", "corrections": "correction", "gaps": "gap",
-    "suggestions": "suggestion",
-}
 
 # --------------------------------------------------------------------------- #
 # text similarity (pure-stdlib TF-IDF cosine) — powers correction matching and
@@ -418,12 +322,18 @@ def query_memory(
         except sqlite3.OperationalError:
             rows = []
     if not rows:
-        rows = conn.execute(
-            f"""SELECT {cols} FROM documents d
-                WHERE lower(d.title||' '||d.body||' '||d.project||' '||d.kind) LIKE lower(?){where_extra}
-                LIMIT ?""",
-            (f"%{query}%", *params, pool),
-        ).fetchall()
+        if query.strip():
+            rows = conn.execute(
+                f"""SELECT {cols} FROM documents d
+                    WHERE lower(ifnull(d.title,'')||' '||ifnull(d.body,'')||' '||ifnull(d.project,'')||' '||ifnull(d.kind,'')) LIKE lower(?){where_extra}
+                    LIMIT ?""",
+                (f"%{query}%", *params, pool),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                f"""SELECT {cols} FROM documents d WHERE 1=1 {where_extra} LIMIT ?""",
+                (*params, pool),
+            ).fetchall()
     conn.close()
 
     items = [{
@@ -547,7 +457,7 @@ def semantic_search(root: Path, query: str, k: int = 10, kinds: Optional[List[st
                     active_only: bool = False, project: str = "") -> List[dict]:
     meta = _vmeta(root)
     if not meta:
-        raise SystemExit("No vector index yet. Build one:  cartridge.py --root <root> embed")
+        raise SystemExit("No vector index yet. Build one:  koush_cli.py --root <root> embed")
     if meta["backend"] == "tfidf":
         emb = TfidfEmbedder()
         emb.idf = json.loads(meta["idf"] or "{}")

@@ -5,15 +5,15 @@ import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from ai_cartridge.core.constants import SHAREABLE_VIS
-from ai_cartridge.core.utils import now_iso, read_json, write_json, append_ledger, parse_frontmatter
-from ai_cartridge.core.memory import (
+from koush.core.constants import SHAREABLE_VIS
+from koush.core.utils import now_iso, read_json, write_json, append_ledger, parse_frontmatter
+from koush.core.memory import (
     add_memory, update_doc_meta, find_doc_by_id, supersede, ensure_root
 )
-from ai_cartridge.engine.search import (
+from koush.engine.search import (
     rebuild_index, best_match, get_db, corpus_fingerprint, iter_source_files, top_matches
 )
-from ai_cartridge.engine.safety import scan_secrets
+from koush.engine.safety import scan_secrets
 
 RECEIPT_SECTIONS = {
     "new decisions": "decision",

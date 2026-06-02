@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from ai_cartridge.core.constants import SECRET_PATTERNS
+from koush.core.constants import SECRET_PATTERNS
 
 
 def scan_secrets(text: str) -> List[Tuple[str, str]]:
@@ -36,10 +36,10 @@ DEFAULT_POLICY = {
 }
 
 def policy_path(root) -> str:
-    return root / "CARTRIDGE_POLICY.json"
+    return root / "KOUSH_POLICY.json"
 
 def load_policy(root) -> dict:
-    from ai_cartridge.core.utils import read_json
+    from koush.core.utils import read_json
     p = policy_path(root)
     if p.exists():
         pol = dict(DEFAULT_POLICY)

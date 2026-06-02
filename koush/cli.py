@@ -2,18 +2,18 @@ import argparse
 import os
 from pathlib import Path
 
-from ai_cartridge.core.constants import APP_VERSION, KINDS, VISIBILITIES, DEFAULT_ROOT_NAME
-from ai_cartridge.core.memory import add_memory, ensure_root
-from ai_cartridge.engine.search import query_memory, semantic_search, print_query_results, rebuild_index, build_vector_index
-from ai_cartridge.engine.compiler import pack_context, validate_pack, explain_pack, PACK_PROFILES
-from ai_cartridge.engine.healing import absorb_receipt, resolve
-from ai_cartridge.daemon import watch_command
+from koush.core.constants import APP_VERSION, KINDS, VISIBILITIES, DEFAULT_ROOT_NAME
+from koush.core.memory import add_memory, ensure_root
+from koush.engine.search import query_memory, semantic_search, print_query_results, rebuild_index, build_vector_index
+from koush.engine.compiler import pack_context, validate_pack, explain_pack, PACK_PROFILES
+from koush.engine.healing import absorb_receipt, resolve
+from koush.daemon import watch_command
 
-# We will import the rest from ai_cartridge.engine.commands
-from ai_cartridge.engine.commands import *
+# We will import the rest from koush.engine.commands
+from koush.engine.commands import *
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=f"AI Memory Cartridge v{APP_VERSION}")
+    parser = argparse.ArgumentParser(description=f"Koush v{APP_VERSION}")
     parser.add_argument("--root", default=str(Path.cwd() / DEFAULT_ROOT_NAME), help="Cartridge root folder")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -39,7 +39,7 @@ def main() -> None:
     sub.add_parser("index", help="Rebuild search index")
 
     p = sub.add_parser("query", help="Query the cartridge")
-    p.add_argument("query")
+    p.add_argument("query", nargs="?", default="", help="Search query (empty for all)")
     p.add_argument("--limit", type=int, default=10)
     p.add_argument("--include-private", action="store_true", default=True)
     p.add_argument("--no-private", dest="include_private", action="store_false")
@@ -48,6 +48,7 @@ def main() -> None:
     p.add_argument("--project", default="", help="Filter to a single project")
     p.add_argument("--status", default="", help="Filter to a status (active, superseded, open, ...)")
     p.add_argument("--semantic", action="store_true", help="Use the vector index instead of FTS (run `embed` first)")
+    p.add_argument("--json", action="store_true", help="Output results as JSON")
 
     p = sub.add_parser("pack", help="Create uploadable context pack")
     p.add_argument("query")
@@ -72,7 +73,7 @@ def main() -> None:
     p.add_argument("zip")
 
     p = sub.add_parser("policy", help="Show or initialise the local export policy")
-    p.add_argument("--init", action="store_true", help="write a default CARTRIDGE_POLICY.json")
+    p.add_argument("--init", action="store_true", help="write a default KOUSH_POLICY.json")
 
     p = sub.add_parser("classify", help="Suggest (or apply) visibility changes for risky memories")
     p.add_argument("--apply", action="store_true", help="apply the suggested changes")
@@ -141,7 +142,7 @@ def main() -> None:
     p = sub.add_parser("import-backup", help="Restore a cartridge from a backup zip")
     p.add_argument("backup")
     p.add_argument("--force", action="store_true", help="overwrite a non-empty cartridge")
-    p = sub.add_parser("migrate", help="Stamp current version / ensure cartridge_id (reversible)")
+    p = sub.add_parser("migrate", help="Stamp current version / ensure koush_id (reversible)")
     p.add_argument("--dry-run", action="store_true")
 
     p = sub.add_parser("embed", help="Build the vector index (semantic search backend)")
@@ -174,6 +175,12 @@ def main() -> None:
     p = sub.add_parser("import-report", help="Show import report(s) written by import-* commands")
     p.add_argument("--import-id", default="", help="show a specific import; default lists all + most recent")
 
+    p = sub.add_parser("server", help="Start the background API server")
+    p.add_argument("--port", type=int, default=5555)
+    p.add_argument("--host", default="127.0.0.1")
+
+    p = sub.add_parser("mcp-server", help="Start the MCP Server on stdio")
+
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
 
@@ -202,7 +209,11 @@ def main() -> None:
                 root, args.query, args.limit, args.include_private,
                 active_only=args.active_only, kinds=kinds,
                 project=args.project, status=args.status)
-        print_query_results(results)
+        if args.json:
+            import json
+            print(json.dumps(results, indent=2))
+        else:
+            print_query_results(results)
     elif args.cmd == "embed":
         info = build_vector_index(root, args.backend, args.model)
         print(f"Vector index built: backend={info['backend']} dim={info['dim']} vectors={info['count']}")
@@ -277,9 +288,17 @@ def main() -> None:
         import_backup(root, Path(args.backup).expanduser().resolve(), force=args.force)
     elif args.cmd == "migrate":
         migrate(root, dry_run=args.dry_run)
+    elif args.cmd == "migrate":
+        migrate(root, dry_run=args.dry_run)
     elif args.cmd == "status":
         status(root)
-
+    elif args.cmd == "server":
+        from koush.server import start_server
+        start_server(root, args.host, args.port)
+    elif args.cmd == "mcp-server":
+        os.environ["CARTRIDGE_WORKSPACE"] = str(root)
+        from koush.mcp_server import mcp
+        mcp.run()
 
 if __name__ == "__main__":
     main()

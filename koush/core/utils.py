@@ -35,13 +35,27 @@ def sha256_file(path: Path) -> str:
 
 
 def ensure_root(root: Path) -> None:
-    if not (root / "CARTRIDGE.json").exists():
-        raise SystemExit(f"Not an AI cartridge root: {root}\nRun: cartridge.py --root {root} init")
+    if not (root / "KOUSH.json").exists():
+        raise SystemExit(f"Not an AI cartridge root: {root}\nRun: koush_cli.py --root {root} init")
+
+
+def atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:
+    import tempfile
+    import os
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", dir=str(path.parent), delete=False, encoding=encoding) as tf:
+        tf.write(text)
+        temp_name = tf.name
+    try:
+        os.replace(temp_name, str(path))
+    except Exception:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
+        raise
 
 
 def write_json(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    atomic_write_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 def read_json(path: Path, default=None):

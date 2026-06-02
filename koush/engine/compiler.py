@@ -6,12 +6,12 @@ import zipfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from ai_cartridge.core.constants import APP_VERSION
-from ai_cartridge.core.utils import (
+from koush.core.constants import APP_VERSION
+from koush.core.utils import (
     now_iso, read_json, write_json, slugify, append_ledger, parse_frontmatter
 )
-from ai_cartridge.core.memory import ensure_root
-from ai_cartridge.engine.safety import redact_text, scan_secrets, load_policy
+from koush.core.memory import ensure_root
+from koush.engine.safety import redact_text, scan_secrets, load_policy
 
 
 PACK_PROFILES = ("chatgpt", "claude", "gemini", "deepseek", "codex", "human")
@@ -33,16 +33,16 @@ PACK_REQUIRED = [
     "12_MEMORY_RECEIPT_TEMPLATE.md",
 ]
 MANIFEST_REQUIRED_KEYS = ["target", "query", "created_at", "redacted", "match_count",
-                          "cartridge_id", "cartridge_version"]
+                          "koush_id", "koush_version"]
 
 
 def cartridge_meta(root: Path) -> dict:
-    cfg = read_json(root / "CARTRIDGE.json", {}) or {}
-    cid = cfg.get("cartridge_id")
+    cfg = read_json(root / "KOUSH.json", {}) or {}
+    cid = cfg.get("koush_id")
     if not cid:
         seed = (cfg.get("owner", "") + "|" + cfg.get("created_at", "")).encode("utf-8")
         cid = "cart_" + hashlib.sha256(seed).hexdigest()[:12]
-    return {"cartridge_id": cid, "cartridge_version": cfg.get("version", APP_VERSION),
+    return {"koush_id": cid, "koush_version": cfg.get("version", APP_VERSION),
             "owner": cfg.get("owner", "")}
 
 def _provider_context(profile: str, query: str, decisions: List[dict], projects: List[dict], n: int) -> Tuple[str, str]:
@@ -114,7 +114,7 @@ def pack_context(
     budget: str = "", max_docs: Optional[int] = None, max_chars: Optional[int] = None,
     allow_blocked: bool = False, enforce_policy: bool = False,
 ) -> dict:
-    from ai_cartridge.engine.search import query_memory, read_doc
+    from koush.engine.search import query_memory, read_doc
     ensure_root(root)
     profile = target if target in PACK_PROFILES else "chatgpt"
     b_docs, b_chars = BUDGETS.get(budget, BUDGETS["medium"])
@@ -218,7 +218,7 @@ def pack_context(
 
     (tmp / "02_CONTEXT_BRIEF.md").write_text(
         f"# Context Brief\n\n**Query:** {query}\n\n**Target profile:** {profile}\n\n"
-        f"**Cartridge:** {meta['cartridge_id']} (v{meta['cartridge_version']})\n\n"
+        f"**Cartridge:** {meta['koush_id']} (v{meta['koush_version']})\n\n"
         f"This is a focused extract from a larger personal memory cartridge — {len(matches)} matched "
         f"item(s). Superseded memories are excluded unless explicitly included.\n", encoding="utf-8")
 
@@ -276,14 +276,14 @@ def pack_context(
     (tmp / "09_DO_NOT_ASSUME.md").write_text("".join(dna), encoding="utf-8")
 
     write_json(tmp / "10_SOURCE_MAP.json", {
-        "cartridge_id": meta["cartridge_id"], "cartridge_version": meta["cartridge_version"],
+        "koush_id": meta["koush_id"], "koush_version": meta["koush_version"],
         "query": query, "matches": source_map,
     })
 
     manifest = {
         "schema": "ai-memory-context-pack.v1", "created_at": now_iso(),
         "target": profile, "query": query,
-        "cartridge_id": meta["cartridge_id"], "cartridge_version": meta["cartridge_version"],
+        "koush_id": meta["koush_id"], "koush_version": meta["koush_version"],
         "app_version": APP_VERSION, "include_private": include_private,
         "include_superseded": include_superseded, "redacted": redact,
         "match_count": len(matches), "docs_selected": sum(1 for s in source_map if s["included"]),
@@ -335,7 +335,7 @@ def pack_context(
     append_ledger(root, "context_pack.exported", {
         "query": query, "target": profile, "output": str(out), "match_count": len(matches),
         "redactions": redactions, "chars_used": chars_used, "size_bytes": pack_size,
-        "cartridge_id": meta["cartridge_id"],
+        "koush_id": meta["koush_id"],
     })
     print(f"Created context pack: {out}")
     print(f"  profile: {profile} · matched: {len(matches)} · included: {manifest['docs_selected']}"
@@ -396,7 +396,7 @@ def explain_pack(zip_path: Path) -> dict:
     print(f"  target profile : {man.get('target')}")
     print(f"  query          : {man.get('query')}")
     print(f"  created        : {man.get('created_at')}")
-    print(f"  cartridge      : {man.get('cartridge_id')} (v{man.get('cartridge_version')})")
+    print(f"  cartridge      : {man.get('koush_id')} (v{man.get('koush_version')})")
     print(f"  redacted       : {man.get('redacted')}")
     print(f"  matched/incl   : {man.get('match_count')} / {man.get('docs_selected')}"
           + (f" (omitted {man.get('docs_omitted_for_budget')})" if man.get('docs_omitted_for_budget') else ""))

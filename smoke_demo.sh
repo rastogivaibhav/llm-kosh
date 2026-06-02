@@ -5,7 +5,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 CART="${1:-$(mktemp -d)/AI-Cartridge}"
-PY="python3 $HERE/cartridge.py --root $CART"
+PY="python3 $HERE/koush_cli.py --root $CART"
 
 echo "== smoke demo =="
 echo "cartridge: $CART"

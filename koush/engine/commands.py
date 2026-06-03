@@ -435,10 +435,18 @@ TEXT_EXTS = {
 MAX_CHUNK = 6000
 
 def _existing_source_hashes(root: Path) -> set:
-    conn = get_db(root)
-    rows = conn.execute("SELECT json_extract(meta, '$.source_hash') FROM documents WHERE json_extract(meta, '$.source_hash') IS NOT NULL").fetchall()
-    conn.close()
-    return {r[0] for r in rows if r[0]}
+    from koush.core.utils import parse_frontmatter
+    hashes = set()
+    active_dir = root / "active"
+    if active_dir.exists():
+        for f in active_dir.rglob("*.md"):
+            try:
+                meta, _ = parse_frontmatter(f.read_text(encoding="utf-8", errors="replace"))
+                if "source_hash" in meta:
+                    hashes.add(meta["source_hash"])
+            except Exception:
+                pass
+    return hashes
 
 def _split_markdown(text: str) -> List[Tuple[str, str]]:
     """Split a markdown doc into (heading, section-body) on level-1/2 headings."""

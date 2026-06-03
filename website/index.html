@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koush - DevOps for LLM Context</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #fdfbf7;
+            --bg-card: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --accent-start: #f97316;
+            --accent-end: #ea580c;
+            --accent-glow: rgba(249, 115, 22, 0.25);
+            --border: #e5e7eb;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.6;
+        }
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.25rem 5%;
+            background-color: rgba(253, 251, 247, 0.9);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+        .brand img {
+            height: 40px;
+            width: auto;
+        }
+        .logo-text { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent-start), var(--accent-end)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
+        .nav-links a { color: var(--text-muted); text-decoration: none; margin-left: 2rem; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--text-main); }
+        
+        .hero {
+            padding: 8rem 5%;
+            text-align: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .hero h1 { font-size: 4rem; line-height: 1.1; margin-bottom: 1.5rem; letter-spacing: -2px; color: #111827; }
+        .hero p { font-size: 1.25rem; color: var(--text-muted); margin-bottom: 2.5rem; }
+        
+        .cta-buttons { display: flex; gap: 1rem; justify-content: center; }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-start), var(--accent-end));
+            color: #fff;
+            box-shadow: 0 4px 15px var(--accent-glow);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 20px var(--accent-glow); }
+        .btn-secondary {
+            background-color: #fff;
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .btn-secondary:hover { border-color: #d1d5db; background-color: #f9fafb; }
+
+        .terminal {
+            background-color: #111827;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin: 4rem auto;
+            max-width: 700px;
+            text-align: left;
+            font-family: monospace;
+            color: #10b981;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        .terminal::before {
+            content: "• • •";
+            position: absolute;
+            top: 10px;
+            left: 15px;
+            color: #4b5563;
+            letter-spacing: 2px;
+            font-size: 1.2rem;
+        }
+        .terminal code { display: block; margin-top: 1rem; color: #d1d5db; }
+        .prompt { color: var(--accent-start); }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            padding: 5rem 5%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 2.5rem;
+            border-radius: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+        }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); border-color: #fdba74; }
+        .card h3 { color: #111827; margin-bottom: 1rem; font-size: 1.5rem; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="index.html" class="brand">
+            <img src="logo.png" alt="Koush Logo">
+            <span class="logo-text">Koush</span>
+        </a>
+        <div class="nav-links">
+            <a href="docs.html">Documentation</a>
+            <a href="docs.html#receipts">Memory Receipts</a>
+            <a href="https://github.com/yourusername/koush">GitHub</a>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <h1>Your Local LLM Context Engine</h1>
+        <p>Stop copy-pasting code into ChatGPT. Compile your projects, prompts, and architecture decisions into secure, bootable context packs for any LLM.</p>
+        
+        <div class="cta-buttons">
+            <a href="docs.html" class="btn btn-primary">Get Started</a>
+            <a href="docs.html#receipts" class="btn btn-secondary">Learn about Receipts</a>
+        </div>
+
+        <div class="terminal">
+            <code><span class="prompt">$</span> koush pack "Backend Architecture" --for chatgpt --out context.zip</code>
+            <code>✓ Packed 14 files (12,400 tokens)</code>
+            <code>✓ Scanned for secrets (Safe)</code>
+            <code>✓ Ready for ChatGPT</code>
+        </div>
+    </section>
+
+    <section class="features">
+        <div class="card">
+            <h3>Local-First</h3>
+            <p>Your files stay on your machine. Everything is backed by plain Markdown files and a local SQLite vector database. Zero cloud vendor lock-in.</p>
+        </div>
+        <div class="card">
+            <h3>Secret Scanning</h3>
+            <p>Never accidentally upload your AWS keys to Claude again. Koush statically analyzes your code before packing it.</p>
+        </div>
+        <div class="card">
+            <h3>Memory Receipts</h3>
+            <p>When the LLM finishes a task, ask it for a <code>MEMORY_RECEIPT</code>. Koush automatically parses this receipt into permanent, typed knowledge for the future.</p>
+        </div>
+    </section>
+
+</body>
+</html>

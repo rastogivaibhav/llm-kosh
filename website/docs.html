@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koush Documentation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #fdfbf7;
+            --bg-card: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --accent-start: #f97316;
+            --accent-end: #ea580c;
+            --accent-glow: rgba(249, 115, 22, 0.25);
+            --border: #e5e7eb;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            line-height: 1.6;
+            display: flex;
+        }
+        nav {
+            width: 280px;
+            height: 100vh;
+            border-right: 1px solid var(--border);
+            padding: 2.5rem 2rem;
+            position: sticky;
+            top: 0;
+            background: var(--bg-card);
+            box-shadow: 2px 0 10px rgba(0,0,0,0.02);
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            margin-bottom: 2.5rem;
+        }
+        .brand img {
+            height: 40px;
+            width: auto;
+        }
+        .logo-text { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent-start), var(--accent-end)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
+        nav a:not(.brand) { display: block; color: var(--text-muted); text-decoration: none; margin-bottom: 1rem; transition: color 0.2s, padding-left 0.2s; font-weight: 500; }
+        nav a:not(.brand):hover, nav a.active { color: var(--accent-start); padding-left: 5px; }
+        
+        main {
+            flex: 1;
+            padding: 4rem 8%;
+            max-width: 900px;
+        }
+        h1 { font-size: 3rem; margin-bottom: 1rem; color: #111827; letter-spacing: -1px; }
+        h2 { font-size: 2rem; margin-top: 3rem; margin-bottom: 1rem; color: #111827; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+        h3 { font-size: 1.5rem; margin-top: 2rem; margin-bottom: 1rem; color: #374151; }
+        p { margin-bottom: 1.5rem; color: var(--text-muted); font-size: 1.1rem; }
+        
+        pre {
+            background-color: #111827;
+            padding: 1.5rem;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            overflow-x: auto;
+            margin-bottom: 1.5rem;
+            color: #d1d5db;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.05);
+        }
+        code { font-family: monospace; }
+        
+        .alert {
+            background-color: var(--bg-card);
+            border-left: 4px solid var(--accent-start);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+            border-top: 1px solid var(--border);
+            border-right: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .alert p { margin-bottom: 0; color: #374151; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="index.html" class="brand">
+            <img src="logo.png" alt="Koush Logo">
+            <span class="logo-text">Koush</span>
+        </a>
+        <a href="#intro">Introduction</a>
+        <a href="#quickstart">Quickstart</a>
+        <a href="#receipts" class="active">Memory Receipts</a>
+        <a href="#daemon">Watchdog Daemon</a>
+    </nav>
+
+    <main>
+        <h1 id="intro">Documentation</h1>
+        <p>Koush is a DevOps pipeline for your AI context. It treats your architectural decisions, prompts, and knowledge as source code.</p>
+
+        <h2 id="receipts">The Memory Receipt Concept</h2>
+        <p>A major problem with chat interfaces like ChatGPT or Claude is that once a conversation ends, the context is lost forever. You might have made 10 brilliant architectural decisions in a chat thread, but your codebase doesn't know about them.</p>
+        
+        <p><strong>The solution is the <code>MEMORY_RECEIPT</code>.</strong></p>
+
+        <p>When you use Koush to generate a context pack for an LLM, you also give the LLM an instruction:</p>
+        
+        <div class="alert">
+            <p><em>"At the end of our work, you must return a MEMORY_RECEIPT detailing what we learned, what decisions we made, and what code was generated."</em></p>
+        </div>
+
+        <h3>How it works</h3>
+        <p>The LLM will generate a markdown block formatted as a receipt. You simply save this output as a file (e.g., <code>MEMORY_RECEIPT.md</code>) in your local Koush workspace, and run the absorb command:</p>
+
+        <pre><code>$ koush absorb MEMORY_RECEIPT.md</code></pre>
+
+        <p>Koush parses the receipt, splits it into strongly-typed local files (<code>decisions/</code>, <code>notes/</code>, <code>projects/</code>), and links them cryptographically using provenance hashes. Next time you pack context for the LLM, the LLM will remember exactly what it did last time!</p>
+
+        <h2 id="daemon">Automating with the Daemon</h2>
+        <p>Tired of manually absorbing receipts? Koush comes with a background watcher.</p>
+        
+        <pre><code>$ koush watch</code></pre>
+        
+        <p>If you save any file matching <code>MEMORY_RECEIPT*.md</code> into your <code>receipts/</code> folder, the daemon will instantly detect it, parse it into knowledge, auto-resolve any architectural corrections, and archive the raw receipt into a processed folder safely.</p>
+    </main>
+
+</body>
+</html>

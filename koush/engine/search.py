@@ -539,3 +539,73 @@ def semantic_search(root: Path, query: str, k: int = 10, kinds: Optional[List[st
             break
     conn.close()
     return out
+
+def get_memory_map(root):
+    from koush.engine.search import rebuild_index, get_db
+    rebuild_index(root)
+    conn = get_db(root)
+    projects = {}
+    rows = conn.execute("SELECT project, kind, COUNT(*) FROM documents WHERE status='active' AND project != '' GROUP BY project, kind").fetchall()
+    for proj, kind, count in rows:
+        if proj not in projects:
+            projects[proj] = {}
+        projects[proj][kind] = count
+    
+    orphans = {}
+    rows_orphans = conn.execute("SELECT kind, COUNT(*) FROM documents WHERE status='active' AND (project IS NULL OR project = '') GROUP BY kind").fetchall()
+    for kind, count in rows_orphans:
+        orphans[kind] = count
+    
+    conn.close()
+    return {
+        "projects": projects,
+        "unassigned": orphans
+    }
+
+def get_project_context(root, project_name: str):
+    from koush.engine.search import rebuild_index, get_db
+    rebuild_index(root)
+    conn = get_db(root)
+    out = []
+    rows = conn.execute(
+        "SELECT id, kind, title, visibility, status, path, body, supersedes, superseded_by, source_receipt "
+        "FROM documents WHERE status='active' AND LOWER(project) = LOWER(?)", 
+        (project_name,)
+    ).fetchall()
+    for d in rows:
+        out.append({
+            "id": d[0], "kind": d[1], "title": d[2], "visibility": d[3],
+            "status": d[4], "path": d[5], "body": d[6], 
+            "supersedes": d[7], "superseded_by": d[8], "source_receipt": d[9]
+        })
+    conn.close()
+    return out
+
+def list_open_corrections(root):
+    from koush.engine.search import rebuild_index, get_db
+    rebuild_index(root)
+    conn = get_db(root)
+    out = []
+    rows = conn.execute(
+        "SELECT id, title, path, body, supersedes "
+        "FROM documents WHERE kind='correction' AND status='open'"
+    ).fetchall()
+    for d in rows:
+        out.append({
+            "id": d[0], "title": d[1], "path": d[2], "body": d[3], "supersedes": d[4]
+        })
+    conn.close()
+    return out
+
+def daemon_status(root) -> str:
+    pid_file = root / 'indexes' / 'daemon.pid'
+    if not pid_file.exists():
+        return 'Daemon is NOT running.'
+    try:
+        import psutil
+        pid = int(pid_file.read_text(encoding='utf-8').strip())
+        if psutil.pid_exists(pid):
+            return f'Daemon IS running (PID: {pid}).'
+    except Exception:
+        pass
+    return 'Daemon is NOT running (stale PID file).'

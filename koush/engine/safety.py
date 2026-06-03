@@ -33,6 +33,12 @@ DEFAULT_POLICY = {
     "blocked_terms": ["client secret", "api key", "password", "private key"],
     "allowed_export_visibility": ["public", "shareable", "work-safe"],
     "require_redaction": True,
+    "intake": {
+        "auto_apply_receipts": False,
+        "auto_apply_folder_notes": False,
+        "require_review_for_corrections": True,
+        "require_review_for_private": True
+    }
 }
 
 def policy_path(root) -> str:

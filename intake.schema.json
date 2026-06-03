@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Koush Intake Record",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "koush.intake.v1"
+    },
+    "intake_id": {
+      "type": "string"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["receipt", "daemon", "folder", "import", "mcp", "cli", "skill"]
+    },
+    "source_path": {
+      "type": "string"
+    },
+    "raw_hash": {
+      "type": "string"
+    },
+    "received_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "validated", "reviewed", "applied", "rejected", "quarantined"]
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": ["untrusted", "reviewed", "trusted"]
+    },
+    "project": {
+      "type": "string"
+    },
+    "visibility": {
+      "type": "string",
+      "enum": ["private", "work-safe", "shareable", "public", "blocked"]
+    },
+    "processor": {
+      "type": "string",
+      "enum": ["receipt", "generic_file", "importer", "manual"]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "ledger_event": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "intake_id",
+    "source_type",
+    "source_path",
+    "raw_hash",
+    "received_at",
+    "status",
+    "trust_level",
+    "processor"
+  ]
+}

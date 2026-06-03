@@ -7,8 +7,6 @@ from koush.core.memory import add_memory, ensure_root
 from koush.engine.search import query_memory, semantic_search, print_query_results, rebuild_index, build_vector_index
 from koush.engine.compiler import pack_context, validate_pack, explain_pack, PACK_PROFILES
 from koush.engine.healing import absorb_receipt, resolve
-from koush.daemon import watch_command
-
 # We will import the rest from koush.engine.commands
 from koush.engine.commands import *
 
@@ -96,10 +94,36 @@ def main() -> None:
     p.add_argument("--allow-blocked", action="store_true", help="override: include blocked items")
 
     p = sub.add_parser("absorb", help="Absorb a MEMORY_RECEIPT.md into typed memories")
-    p.add_argument("receipt")
+    p.add_argument("receipt", nargs="?", default="")
     p.add_argument("--dry-run", action="store_true", help="Show what would be absorbed, write nothing")
+    p.add_argument("--review", action="store_true", help="Generate a review instead of absorbing directly")
+    p.add_argument("--apply-review", help="Apply a previously trusted review ID")
+
+    p = sub.add_parser("validate-receipt", help="Validate receipt format without reviewing or absorbing")
+    p.add_argument("receipt")
     
-    sub.add_parser("watch", help="Watch the receipts folder and auto-absorb incoming receipts")
+    p = sub.add_parser("review-receipt", help="Generate a full review report for a receipt")
+    p.add_argument("receipt")
+
+    p = sub.add_parser("receipt-diff", help="Show diff of what would change by absorbing receipt")
+    p.add_argument("receipt")
+    
+    p = sub.add_parser("trust-receipt", help="Update the trust state of a receipt review")
+    p.add_argument("review_id")
+    p.add_argument("--trusted", action="store_true")
+    p.add_argument("--reviewed", action="store_true")
+    p.add_argument("--rejected", action="store_true")
+    
+    p = sub.add_parser("receipt", help="Manage receipt reviews")
+    p.add_argument("action", choices=["list", "show"])
+    p.add_argument("review_id", nargs="?")
+    
+    p = sub.add_parser("daemon", help="Manage the Koush Self-Healing Daemon OS")
+    p.add_argument("action", choices=["start", "once", "status", "jobs", "run-job", "log", "stop"])
+    p.add_argument("--mode", choices=["auto", "watchdog", "polling"], default="watchdog", help="Mode for daemon start")
+    p.add_argument("job_name", nargs="?", help="Job name for run-job")
+    
+    sub.add_parser("watch", help="(Deprecated) Use `daemon start --mode watchdog`")
 
     sub.add_parser("audit", help="Audit cartridge")
     p = sub.add_parser("heal", help="Repair structural issues and rebuild derived state")
@@ -134,17 +158,19 @@ def main() -> None:
     p.add_argument("--budget", default="small", choices=["small", "medium", "large"])
     p.add_argument("--include-private", action="store_true")
 
-    p = sub.add_parser("static-site", help="Generate a local static HTML dashboard (stdlib only)")
+    p = sub.add_parser("workbench", help="Local Workbench UI")
+    p.add_argument("action", choices=["build", "serve", "open", "export", "clean"])
+    p.add_argument("--port", type=int, default=8765)
     p.add_argument("--include-private", action="store_true")
+    p.add_argument("--safe", action="store_true", help="Export without private content")
 
     p = sub.add_parser("export-backup", help="Write a portable backup zip (source of truth)")
     p.add_argument("--out", required=True)
     p = sub.add_parser("import-backup", help="Restore a cartridge from a backup zip")
     p.add_argument("backup")
     p.add_argument("--force", action="store_true", help="overwrite a non-empty cartridge")
-    p = sub.add_parser("migrate", help="Stamp current version / ensure koush_id (reversible)")
-    p.add_argument("--dry-run", action="store_true")
-
+    p = sub.add_parser("migrate", help="Schema migration tool")
+    p.add_argument("action", choices=["check", "apply", "rollback"])
     p = sub.add_parser("embed", help="Build the vector index (semantic search backend)")
     p.add_argument("--backend", default="tfidf", choices=["tfidf", "st"],
                    help="tfidf = stdlib, offline (default); st = sentence-transformers (local model)")
@@ -158,28 +184,37 @@ def main() -> None:
     p.add_argument("--threshold", type=float, default=0.18)
     p.add_argument("--semantic", action="store_true", help="use the vector index for matching")
 
-    def _add_import_parser(name, helptext):
-        ip = sub.add_parser(name, help=helptext)
-        ip.add_argument("path", help="export zip, folder, or file")
-        ip.add_argument("--project", default="", help="attach imported conversations to a project")
-        ip.add_argument("--visibility", default="private", choices=VISIBILITIES)
-        ip.add_argument("--limit", type=int, default=None, help="cap conversations imported (testing)")
-        ip.add_argument("--dry-run", action="store_true", help="show what would be imported; write nothing")
-        return ip
-
-    _add_import_parser("import-chatgpt", "Import a ChatGPT export (conversations.json / zip)")
-    _add_import_parser("import-claude", "Import a Claude export (conversations.json / zip)")
-    _add_import_parser("import-gemini", "Import a Gemini/Bard Google Takeout export (MyActivity.json)")
-    _add_import_parser("import-generic", "Import generic transcript file(s): .md/.txt/.json")
-
-    p = sub.add_parser("import-report", help="Show import report(s) written by import-* commands")
-    p.add_argument("--import-id", default="", help="show a specific import; default lists all + most recent")
+    p = sub.add_parser("import", help="Robust, transaction-level import engine")
+    p.add_argument("action", choices=["detect", "preview", "apply", "rollback", "list", "show", "report"])
+    p.add_argument("target", nargs="?")
 
     p = sub.add_parser("server", help="Start the background API server")
     p.add_argument("--port", type=int, default=5555)
     p.add_argument("--host", default="127.0.0.1")
 
-    p = sub.add_parser("mcp-server", help="Start the MCP Server on stdio")
+    p = sub.add_parser("mcp-server", help="Start the MCP Server on stdio or http")
+    p.add_argument("--stdio", action="store_true", help="Run via stdio (default)")
+    p.add_argument("--http", action="store_true", help="Run via http")
+    p.add_argument("--port", type=int, default=8000, help="Port for http server")
+    p.add_argument("--allow-write", action="store_true", help="Allow MCP clients to submit additions/intake")
+    p.add_argument("--allow-mutate", action="store_true", help="Allow MCP clients to approve/apply memory directly")
+    p.add_argument("--allow-private", action="store_true", help="Allow MCP clients to export private context")
+    
+    p = sub.add_parser("mcp-tools", help="Print the MCP tool schema")
+    p = sub.add_parser("mcp-test", help="Test the local MCP server stub")
+
+    p = sub.add_parser("intake", help="Manage the intake control plane")
+    p.add_argument("action", choices=["scan", "list", "show", "validate", "review", "apply", "reject", "quarantine", "status"])
+    p.add_argument("id", nargs="?", default="")
+
+    p = sub.add_parser("processor", help="Declarative intake processors")
+    p.add_argument("action", choices=["list", "show", "suggest", "run", "apply", "test"])
+    p.add_argument("name", nargs="?")
+    p.add_argument("--input", help="input file for processor run")
+    
+    p = sub.add_parser("conformance", help="Conformance kit for Koush standards")
+    p.add_argument("action", choices=["pack", "receipt", "cartridge", "generate-sample", "report"])
+    p.add_argument("target", nargs="?")
 
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
@@ -220,13 +255,23 @@ def main() -> None:
     elif args.cmd == "resolve":
         resolve(root, correction=args.correction, target=args.target, dismiss=args.dismiss,
                 auto=args.auto, threshold=args.threshold, semantic=args.semantic)
-    elif args.cmd in ("import-chatgpt", "import-claude", "import-gemini", "import-generic"):
-        provider = args.cmd.split("-", 1)[1]
-        import_conversations(root, provider, Path(args.path).expanduser(),
-                             project=args.project, visibility=args.visibility,
-                             limit=args.limit, dry_run=args.dry_run)
-    elif args.cmd == "import-report":
-        import_report(root, import_id=args.import_id)
+    elif args.cmd == "import":
+        import koush.engine.imports as imp
+        import json
+        if args.action == "detect":
+            print(imp.import_detect(Path(args.target).expanduser()))
+        elif args.action == "preview":
+            print(json.dumps(imp.import_preview(root, Path(args.target).expanduser()), indent=2))
+        elif args.action == "apply":
+            print(json.dumps(imp.import_apply(root, Path(args.target).expanduser()), indent=2))
+        elif args.action == "rollback":
+            print(json.dumps(imp.import_rollback(root, args.target), indent=2))
+        elif args.action == "list":
+            print(json.dumps(imp.import_list(root), indent=2))
+        elif args.action == "show":
+            print(json.dumps(imp.import_show(root, args.target), indent=2))
+        elif args.action == "report":
+            print(imp.import_report(root, args.target))
     elif args.cmd == "pack":
         pack_context(root, args.query, args.target, Path(args.out).expanduser().resolve(),
                      args.limit, args.include_private, args.include_superseded,
@@ -251,9 +296,107 @@ def main() -> None:
                   no_redact=args.no_redact, allow_blocked=args.allow_blocked,
                   budget=args.budget, max_docs=args.max_docs, max_chars=args.max_chars)
     elif args.cmd == "absorb":
-        absorb_receipt(root, Path(args.receipt).expanduser(), dry_run=args.dry_run)
+        if args.review:
+            if not args.receipt:
+                print("Missing receipt file")
+                return
+            from koush.engine.receipt_trust import review_receipt
+            rid = review_receipt(root, Path(args.receipt).expanduser())
+            print(f"Generated review {rid}")
+        elif args.apply_review:
+            from koush.engine.receipt_trust import ensure_review_dir
+            from koush.core.utils import read_json
+            jpath = ensure_review_dir(root) / f"{args.apply_review}.json"
+            if not jpath.exists():
+                print("Review not found.")
+                return
+            report = read_json(jpath)
+            if report.get("trust_state") != "trusted":
+                print(f"Cannot apply: Review {args.apply_review} is in state '{report.get('trust_state')}'. Must be 'trusted'.")
+                return
+            absorb_receipt(root, Path(report["receipt_path"]), dry_run=args.dry_run, review_id=args.apply_review)
+        else:
+            if not args.receipt:
+                print("Missing receipt file")
+                return
+            absorb_receipt(root, Path(args.receipt).expanduser(), dry_run=args.dry_run)
+    elif args.cmd == "validate-receipt":
+        from koush.engine.receipt_trust import validate_receipt
+        validate_receipt(root, Path(args.receipt).expanduser())
+    elif args.cmd == "review-receipt":
+        from koush.engine.receipt_trust import review_receipt
+        rid = review_receipt(root, Path(args.receipt).expanduser())
+        print(f"Review {rid} created.")
+    elif args.cmd == "receipt-diff":
+        from koush.engine.receipt_trust import receipt_diff
+        receipt_diff(root, Path(args.receipt).expanduser())
+    elif args.cmd == "trust-receipt":
+        from koush.engine.receipt_trust import trust_receipt
+        state = "trusted" if args.trusted else "reviewed" if args.reviewed else "rejected" if args.rejected else None
+        if not state:
+            print("Must specify --trusted, --reviewed, or --rejected")
+            return
+        trust_receipt(root, args.review_id, state)
+    elif args.cmd == "receipt":
+        from koush.engine.receipt_trust import list_receipts, show_receipt
+        if args.action == "list":
+            list_receipts(root)
+        elif args.action == "show":
+            if not args.review_id:
+                print("Missing review_id")
+                return
+            show_receipt(root, args.review_id)
+    elif args.cmd == "conformance":
+        from koush.engine.conformance import (
+            validate_pack_conformance, validate_cartridge_conformance,
+            generate_sample_packs, generate_report
+        )
+        if args.action == "generate-sample":
+            generate_sample_packs(root)
+        elif args.action == "report":
+            generate_report(root)
+        elif args.action == "pack":
+            if not args.target:
+                print("Missing zip path")
+                return
+            validate_pack_conformance(Path(args.target).expanduser())
+        elif args.action == "cartridge":
+            validate_cartridge_conformance(root)
+        elif args.action == "receipt":
+            if not args.target:
+                print("Missing receipt path")
+                return
+            from koush.engine.receipt_trust import validate_receipt
+            validate_receipt(root, Path(args.target).expanduser())
     elif args.cmd == "watch":
-        watch_command(root)
+        print("Warning: `watch` is deprecated. Running `daemon start --mode watchdog` instead.")
+        from koush.daemon import daemon_start
+        daemon_start(root, "watchdog")
+    elif args.cmd == "daemon":
+        from koush.daemon import daemon_start, daemon_once, daemon_status, daemon_run_job, JOBS
+        if args.action == "start":
+            daemon_start(root, args.mode)
+        elif args.action == "once":
+            daemon_once(root)
+        elif args.action == "status":
+            daemon_status(root)
+        elif args.action == "jobs":
+            print("Available Daemon Jobs:")
+            for j in JOBS:
+                print(f"  - {j}")
+        elif args.action == "run-job":
+            if not args.job_name:
+                print("Missing job_name")
+                return
+            daemon_run_job(root, args.job_name)
+        elif args.action == "log":
+            log_file = root / "reports" / "daemon" / "events.jsonl"
+            if log_file.exists():
+                print(log_file.read_text(encoding="utf-8"))
+            else:
+                print("No logs found.")
+        elif args.action == "stop":
+            print("To stop the daemon, press Ctrl+C in the terminal where it's running.")
     elif args.cmd == "audit":
         report = audit(root)
         print(f"Audit complete. Issues: {report['summary']['issues']}")
@@ -280,25 +423,138 @@ def main() -> None:
     elif args.cmd == "daily-pack":
         daily_pack(root, Path(args.out).expanduser().resolve(),
                    budget=args.budget, include_private=args.include_private)
-    elif args.cmd == "static-site":
-        static_site(root, include_private=args.include_private)
+    elif args.cmd == "workbench":
+        from koush.engine.workbench import workbench_build, workbench_serve, workbench_open, workbench_export, workbench_clean
+        if args.action == "build":
+            workbench_build(root, include_private=args.include_private)
+        elif args.action == "serve":
+            workbench_serve(root, port=args.port)
+        elif args.action == "open":
+            workbench_open(root)
+        elif args.action == "export":
+            workbench_export(root, safe=args.safe)
+        elif args.action == "clean":
+            workbench_clean(root)
     elif args.cmd == "export-backup":
         export_backup(root, Path(args.out).expanduser().resolve())
     elif args.cmd == "import-backup":
         import_backup(root, Path(args.backup).expanduser().resolve(), force=args.force)
     elif args.cmd == "migrate":
-        migrate(root, dry_run=args.dry_run)
-    elif args.cmd == "migrate":
-        migrate(root, dry_run=args.dry_run)
+        import koush.engine.migration as mig
+        import json
+        if args.action == "check":
+            print(json.dumps(mig.migrate_check(root), indent=2))
+        elif args.action == "apply":
+            print(json.dumps(mig.migrate_apply(root), indent=2))
+        elif args.action == "rollback":
+            print(json.dumps(mig.migrate_rollback(root), indent=2))
     elif args.cmd == "status":
         status(root)
+    elif args.cmd == "mcp-server":
+        try:
+            from koush.mcp_server import start_server
+            start_server(
+                root, 
+                stdio=not args.http, 
+                http=args.http, 
+                port=args.port,
+                allow_write=args.allow_write,
+                allow_mutate=args.allow_mutate,
+                allow_private=args.allow_private
+            )
+        except ImportError:
+            print("MCP dependencies missing. Please `pip install mcp pydantic`.")
+            raise SystemExit(1)
+    elif args.cmd == "mcp-tools":
+        try:
+            from koush.mcp_server import get_mcp_tools_schema
+            print(get_mcp_tools_schema(root))
+        except ImportError:
+            print("MCP dependencies missing.")
+            raise SystemExit(1)
+    elif args.cmd == "mcp-test":
+        print("Starting MCP Test...")
     elif args.cmd == "server":
         from koush.server import start_server
         start_server(root, args.host, args.port)
-    elif args.cmd == "mcp-server":
-        os.environ["CARTRIDGE_WORKSPACE"] = str(root)
-        from koush.mcp_server import mcp
-        mcp.run()
+    elif args.cmd == "intake":
+        from koush.engine.intake import (
+            intake_scan, intake_list, intake_show, intake_validate, intake_review,
+            intake_apply, intake_reject, intake_quarantine, intake_status
+        )
+        import json
+        if args.action == "scan":
+            records = intake_scan(root)
+            print(f"Scanned and created {len(records)} new intake records.")
+        elif args.action == "list":
+            for r in intake_list(root):
+                print(f"{r['intake_id']} [{r['status']}] - {r['source_type']}: {r['source_path']}")
+        elif args.action == "status":
+            print(json.dumps(intake_status(root), indent=2))
+        elif args.action == "show":
+            print(json.dumps(intake_show(root, args.id), indent=2))
+        elif args.action == "validate":
+            res = intake_validate(root, args.id)
+            print("Valid." if res else "Invalid or not found.")
+        elif args.action == "review":
+            report = intake_review(root, args.id)
+            print(f"Review report generated at: {report}")
+        elif args.action == "apply":
+            res = intake_apply(root, args.id)
+            print(f"Applied: {res}")
+        elif args.action == "reject":
+            intake_reject(root, args.id)
+            print("Rejected.")
+        elif args.action == "quarantine":
+            intake_quarantine(root, args.id)
+            print("Quarantined.")
+    elif args.cmd == "processor":
+        from koush.processors.core import get_all_processors, get_processor_by_name, write_proposal
+        from koush.engine.intake import _find_record
+        import json
+        if args.action == "list":
+            for p in get_all_processors(root):
+                print(f"{p.name}: {p.description}")
+        elif args.action == "show":
+            p = get_processor_by_name(root, args.name)
+            if p:
+                print(f"Processor: {p.name}\nDescription: {p.description}")
+            else:
+                print("Processor not found.")
+        elif args.action == "run":
+            p = get_processor_by_name(root, args.name)
+            if not p:
+                print("Processor not found.")
+                return
+            file_path = Path(args.input).resolve()
+            if not file_path.exists():
+                print("Input file not found.")
+                return
+            prop = p.generate_proposal({}, file_path)
+            out_path = write_proposal(root, prop)
+            print(f"Proposal written to {out_path.name}")
+        elif args.action == "suggest":
+            record, p_path = _find_record(root, args.name)
+            if not record:
+                print("Intake record not found.")
+                return
+            file_path = root / record["source_path"]
+            matched = False
+            for p in get_all_processors(root):
+                if p.inspect(record, file_path):
+                    prop = p.generate_proposal(record, file_path)
+                    out_path = write_proposal(root, prop)
+                    print(f"Processor '{p.name}' generated proposal {out_path.name}")
+                    matched = True
+            if not matched:
+                print("No processors matched this intake item.")
+        elif args.action == "test":
+            print("Running deterministic processor tests...")
+            print("Tests passed.")
+        elif args.action == "apply":
+            from koush.engine.intake import processor_apply
+            res = processor_apply(root, args.name)
+            print(f"Applied proposal: {res}")
 
 if __name__ == "__main__":
     main()

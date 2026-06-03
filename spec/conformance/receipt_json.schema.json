@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Koush Receipt Review Output",
+  "type": "object",
+  "required": ["review_id", "receipt_path", "created_at", "trust_state", "stats", "analysis"],
+  "properties": {
+    "review_id": { "type": "string" },
+    "receipt_path": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "trust_state": { "type": "string", "enum": ["pending", "reviewed", "trusted", "rejected"] },
+    "stats": {
+      "type": "object",
+      "properties": {
+        "decisions_found": { "type": "integer" },
+        "corrections_found": { "type": "integer" },
+        "generated_files": { "type": "integer" },
+        "open_gaps": { "type": "integer" },
+        "suggestions": { "type": "integer" }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "missing_projects": { "type": "array", "items": { "type": "string" } },
+        "unknown_refs": { "type": "array", "items": { "type": "string" } },
+        "likely_target_matches": { "type": "boolean" },
+        "high_impact_changes": { "type": "array", "items": { "type": "string" } },
+        "possible_prompt_injection": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

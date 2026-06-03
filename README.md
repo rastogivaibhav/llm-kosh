@@ -1,174 +1,53 @@
-# Koush 🚀
+# Koush
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Local First](https://img.shields.io/badge/architecture-local--first-success.svg)](#)
+**Local-first AI Memory Cartridge System v2.0**
 
-A **local-first, zero-dependency LLM context compiler**. Not a SaaS, not an agent memory DB,
-not an Obsidian clone — Koush is a DevOps pipeline for your AI context. It captures your decisions, prompts,
-projects, and AI conversations as plain Markdown files, and compiles them into focused,
-**bootable context packs** to upload into ChatGPT, Claude, Gemini, DeepSeek, or Codex.
+Koush is a zero-dependency, local-first context compiler that turns your file system into a structured memory graph for large language models (LLMs). It solves the problem of "context amnesia" by providing a standardized, auditable, and transportable memory cartridge.
 
-The loop it gives you:
+## Features
 
-```
-capture / import  ->  query  ->  pack  ->  upload to an LLM  ->  get a MEMORY_RECEIPT
-        ^                                                              |
-        +---------------  absorb  <-  resolve  <-  audit / heal  ------+
-```
+- **Human-Readable Storage**: Memory is stored as standard Markdown files with YAML frontmatter. No proprietary databases.
+- **Pack System**: Compile specific subsets of your memory graph into minimal `.koushpack.zip` files for transport to Claude, ChatGPT, or Gemini.
+- **MEMORY_RECEIPT Loop**: Asynchronous state synchronization. Give the AI a pack, receive a `MEMORY_RECEIPT.md` back, and apply the diff directly to your cartridge.
+- **Safe by Default**: The Trust Gate explicitly requires human approval for destructive or high-impact state changes.
+- **Background OS**: The Koush Daemon runs silently to heal relationships, generate memory maps, and index vectors.
+- **MCP Native**: Exposes your local cartridge to Model Context Protocol (MCP) compatible editors (like Cursor) without sacrificing your CLI workflow.
 
-## Why
-
-LLM memory today is either vendor-locked and opaque, or absent. This keeps the source of
-truth as files **you** can read, diff, back up and grep, and treats every index as a
-rebuildable derivative. Nothing leaves your machine unless you pack it, and the pack passes
-a secret gate first.
-
-## Principles
-
-1. Local-first; no cloud, no vendor dependency.
-2. The Python standard-library path always works. Optional deps (sentence-transformers) are
-   truly optional.
-3. Human-readable Markdown source is the source of truth; SQLite/vector indexes are derived
-   and rebuildable.
-4. No silent destructive edits. Every superseding/destructive action is logged. Corrections
-   supersede; they never delete; history is preserved.
-5. Every export remains understandable as a plain zip uploaded to any LLM.
-
-## Install
-
-No install. One file, Python 3.9+ standard library:
+## Installation
 
 ```bash
-python3 koush_cli.py --help
+pip install "koush[all]"
 ```
+*Optional Extras: `[watch]` for the daemon, `[semantic]` for vector search, `[server]` for HTTP MCP.*
 
-Optional local vector indexer (semantic search & auto-resolution):
+## Quick Start
 
 ```bash
-pip install sentence-transformers sqlite-vec   # 100% offline, high-performance local vector DB
+# Initialize a new cartridge in the current directory
+koush init
+
+# Add some memory
+koush add --kind decision "Use PostgreSQL for the backend" --project "MyApp"
+
+# View your memory graph
+koush query
+
+# Generate a pack to send to an LLM
+koush pack --project "MyApp"
+
+# Start the background daemon
+koush daemon start --mode watchdog
 ```
 
-## Quick start
+## Documentation
 
-```bash
-# Initialize a new Koush vault
-python3 koush_cli.py --root ~/Koush-Vault init --owner "Your Name"
-
-# Add a decision or memory to the vault
-python3 koush_cli.py --root ~/Koush-Vault add --kind decision \
-    --project "SelectiveOS" --title "AI lessons require teacher approval" \
-    --body "Generated lessons go to a teacher queue before student visibility."
-
-# Query your local knowledge base
-python3 koush_cli.py --root ~/Koush-Vault query "teacher approval"
-
-# Pack the context into a bootable zip for an LLM (with secrets scanned!)
-python3 koush_cli.py --root ~/Koush-Vault pack "SelectiveOS teacher lessons" \
-    --for chatgpt --out selectiveos.zip --include-private
-```
-
-See `QUICKSTART.md` for the full daily workflow and `EXAMPLES.md` for copy-paste recipes.
-
-## Using packs with each LLM
-
-Create a pack, then upload the zip and tell the model to boot from it:
-
-> Boot from this cartridge. Read `01_BOOT.md` first, then files `02`-`12` in order. Use this
-> as your source context. At the end, return a `MEMORY_RECEIPT`.
-
-- **ChatGPT / Claude / Gemini** - `--for chatgpt|claude|gemini`. Upload the zip (or paste
-  the numbered files). Each gets a tailored `provider/<NAME>_CONTEXT.md`.
-- **DeepSeek** - `--for deepseek` produces a compact `DEEPSEEK_CONTEXT.txt` for tighter
-  context windows.
-- **Codex / coding** - `--for codex` emphasises projects and engineering decisions as
-  binding constraints.
-- **Human handover** - `--for human` writes a narrative someone can read to pick up your
-  work.
-
-When the model returns a `MEMORY_RECEIPT`, save it and absorb it:
-
-```bash
-python3 koush_cli.py --root ~/AI-Cartridge absorb MEMORY_RECEIPT.md
-python3 koush_cli.py --root ~/AI-Cartridge resolve        # close out open corrections
-python3 koush_cli.py --root ~/AI-Cartridge audit
-python3 koush_cli.py --root ~/AI-Cartridge heal --safe
-```
-
-### Automated Real-Time Monitoring (Daemon)
-
-To automate this loop completely without manual execution, run the watchdog daemon:
-
-```bash
-python3 koush_cli.py --root ~/Koush-Vault watch
-```
-
-This monitors your `receipts/` directory in real-time. Whenever an LLM writes a `MEMORY_RECEIPT*.md` file there, the daemon immediately:
-1. Validates and auto-absorbs the receipt's memories and provenance.
-2. Auto-resolves any corrections using the local similarity model.
-3. Automatically archives the processed receipt into a `receipts/processed/` subdirectory to avoid duplicate triggers and keep the workspace perfectly clean!
-
-
-## Importing your history
-
-```bash
-python3 koush_cli.py --root ~/Koush-Vault import-chatgpt ~/Downloads/chatgpt_export.zip --project "AI Portfolio"
-python3 koush_cli.py --root ~/Koush-Vault import-claude  ~/Downloads/claude_export.json
-python3 koush_cli.py --root ~/Koush-Vault import-gemini  ~/Downloads/MyActivity.json
-python3 koush_cli.py --root ~/Koush-Vault import-generic ~/notes/chat.md
-```
-
-Add `--dry-run` to preview. Raw exports are preserved verbatim under `attachments/imports/`.
-
-## Command surface
-
-| Area | Commands |
-|------|----------|
-| Core | `init`, `add`, `ingest`, `index`, `query`, `status` |
-| Packs | `pack`, `validate-pack`, `explain-pack`, `daily-pack` |
-| Receipts | `absorb`, `watch`, `resolve`, `receipt-template` |
-| Semantic | `embed`, `query --semantic` |
-| Import | `import-chatgpt`, `import-claude`, `import-gemini`, `import-generic`, `import-report` |
-| Safety | `policy`, `classify`, `partition`, `quarantine`, `safe-pack` |
-| Health | `audit`, `heal`, `verify-ledger`, `memory-map`, `repair-plan` |
-| Daily | `today`, `inbox`, `promote`, `static-site` |
-| Backup | `export-backup`, `import-backup`, `migrate` |
-
-Every command has `--help`.
-
-## Safety in one line
-
-`safe-pack` never emits private or blocked memories, scans for secrets, and redacts by
-default. `pack` blocks on detected secrets unless you `--redact` or `--allow-secrets`. See
-`SECURITY.md`.
-
-## Backup
-
-```bash
-python3 koush_cli.py --root ~/AI-Cartridge export-backup --out cartridge-backup.zip
-python3 koush_cli.py --root ~/NewLocation import-backup cartridge-backup.zip
-```
-
-Backups contain the source of truth (Markdown + ledger + config), not derived indexes;
-those rebuild on restore.
-
-## Layout
-
-```
-KOUSH.json        config + koush_id
-KOUSH_POLICY.json export policy (optional)
-BOOT.md               boot instructions
-MEMORY_MAP.md         generated map
-source/               the source of truth (Markdown + frontmatter)
-ledger/events.jsonl   append-only event log
-indexes/              derived FTS + vector indexes (rebuildable)
-attachments/imports/  preserved raw imports
-exports/              packs + static site
-reports/              audit / import / repair reports
-```
-
-See `DESIGN.md` for the architecture and `CHANGELOG_v*.md` for the version history.
-
-## Status
-
-v1.0.0 - stable personal release. Standard library only, no internet required.
+- [Quickstart Guide](docs/QUICKSTART.md)
+- [Design Philosophy](docs/DESIGN.md)
+- [Architecture Map](docs/ARCHITECTURE.md)
+- [Security & Trust](docs/SECURITY.md)
+- [Receipt Review Guide](docs/RECEIPT_GUIDE.md)
+- [Daemon Operating Guide](docs/DAEMON_GUIDE.md)
+- [MCP Adapter Guide](docs/MCP_GUIDE.md)
+- [Local Workbench](docs/WORKBENCH_GUIDE.md)
+- [Data Imports & Migrations](docs/IMPORT_GUIDE.md)
+- [Koush Specification Index](docs/SPEC_INDEX.md)

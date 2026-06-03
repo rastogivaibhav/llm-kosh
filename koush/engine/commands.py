@@ -6,8 +6,7 @@ from koush.engine.search import *
 from koush.engine.search import _vmeta, _fts_query
 from koush.engine.safety import *
 from koush.engine.compiler import *
-from koush.engine.healing import *
-from koush.daemon import watch_command
+from koush.engine.healing import absorb_receipt, resolve
 
 import os, re, json, uuid, shutil, zipfile, sqlite3, argparse, datetime as dt
 from datetime import timezone
@@ -1201,131 +1200,7 @@ def daily_pack(root: Path, out: Path, budget: str = "small", include_private: bo
     return pack_context(root, query.strip(), "human", out,
                         include_private=include_private, budget=budget)
 
-def _html_escape(s: str) -> str:
-    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
-_SITE_CSS = """
-:root{--bg:#0f1115;--card:#181b22;--ink:#e6e8ee;--mut:#9aa3b2;--acc:#6ea8fe;--line:#262a33}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);
-font:15px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}
-a{color:var(--acc);text-decoration:none}a:hover{text-decoration:underline}
-header{padding:24px 28px;border-bottom:1px solid var(--line)}
-header h1{margin:0;font-size:18px}header .mut{color:var(--mut);font-size:13px}
-.wrap{max-width:960px;margin:0 auto;padding:24px 28px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
-.card h3{margin:0 0 8px;font-size:14px}.tag{display:inline-block;font-size:11px;color:var(--mut);
-border:1px solid var(--line);border-radius:6px;padding:1px 7px;margin-right:6px}
-.search{width:100%;padding:10px 12px;background:var(--card);border:1px solid var(--line);
-border-radius:8px;color:var(--ink);margin-bottom:16px}
-.muted{color:var(--mut)}.list li{margin:4px 0}h2{font-size:15px;margin:22px 0 10px;color:var(--mut)}
-footer{color:var(--mut);font-size:12px;padding:24px 28px;border-top:1px solid var(--line)}
-"""
-
-_SITE_SEARCH_JS = """
-let DATA=[];
-fetch('search.json').then(r=>r.json()).then(d=>{DATA=d.items||[]});
-function go(q){q=(q||'').toLowerCase().trim();const out=document.getElementById('results');
-if(!q){out.innerHTML='';return;}
-const hits=DATA.filter(x=>(x.title+' '+x.project+' '+x.kind).toLowerCase().includes(q)).slice(0,50);
-out.innerHTML=hits.map(h=>`<li><span class="tag">${h.kind}</span><a href="${h.href}">${h.title}</a>${h.project?' <span class="muted">· '+h.project+'</span>':''}</li>`).join('')||'<li class="muted">no matches</li>';}
-"""
-
-def _site_page(title: str, body_html: str) -> str:
-    return (f"<!doctype html><html lang=en><head><meta charset=utf-8>"
-            f"<meta name=viewport content='width=device-width,initial-scale=1'>"
-            f"<title>{_html_escape(title)}</title><link rel=stylesheet href='style.css'></head>"
-            f"<body><header><h1>Koush</h1>"
-            f"<div class=mut>{_html_escape(title)}</div></header>"
-            f"<div class=wrap>{body_html}</div>"
-            f"<footer>Generated {now_iso()} · local static site · stdlib only</footer></body></html>")
-
-def static_site(root: Path, include_private: bool = False) -> Path:
-    """Generate a local static HTML dashboard under exports/site/. No server, no framework."""
-    ensure_root(root)
-    rebuild_index(root)
-    site = root / "exports" / "site"
-    if site.exists():
-        shutil.rmtree(site)
-    (site / "projects").mkdir(parents=True)
-    (site / "decisions").mkdir(parents=True)
-    (site / "style.css").write_text(_SITE_CSS, encoding="utf-8")
-    (site / "search.js").write_text(_SITE_SEARCH_JS, encoding="utf-8")
-
-    conn = get_db(root)
-    vis_filter = "" if include_private else " AND visibility NOT IN ('private','blocked','quarantine')"
-    docs = conn.execute(
-        f"SELECT id,kind,title,project,status,path,body FROM documents WHERE 1=1{vis_filter}"
-    ).fetchall()
-    conn.close()
-
-    by_id = {d[0]: d for d in docs}
-    projects = sorted({d[3] for d in docs if d[3]})
-    decisions = [d for d in docs if d[1] == "decision"]
-    excluded = 0
-    if not include_private:
-        c2 = get_db(root)
-        excluded = c2.execute("SELECT COUNT(*) FROM documents WHERE "
-                              "visibility IN ('private','blocked','quarantine')").fetchone()[0]
-        c2.close()
-
-    search_items = []
-
-    # decision pages
-    for d in decisions:
-        did, _, title, project, status, path, body = d
-        fn = f"decisions/{slugify(did)}.html"
-        html = (f"<p><a href='../index.html'>← back</a></p>"
-                f"<div class=card><h3>{_html_escape(title)}</h3>"
-                f"<p><span class=tag>decision</span>"
-                f"{('<span class=tag>'+_html_escape(project)+'</span>') if project else ''}"
-                f"<span class=tag>{_html_escape(status)}</span></p>"
-                f"<pre style='white-space:pre-wrap'>{_html_escape(body)}</pre>"
-                f"<p class=muted>source: {_html_escape(path)}</p></div>")
-        (site / fn).write_text(_site_page(title, html), encoding="utf-8")
-        search_items.append({"title": title, "project": project, "kind": "decision", "href": fn})
-
-    # project pages
-    for proj in projects:
-        items = [d for d in docs if d[3] == proj]
-        fn = f"projects/{slugify(proj)}.html"
-        rows = "".join(
-            f"<li><span class=tag>{d[1]}</span>"
-            + (f"<a href='../decisions/{slugify(d[0])}.html'>{_html_escape(d[2])}</a>"
-               if d[1] == "decision" else _html_escape(d[2]))
-            + f" <span class=muted>· {_html_escape(d[4])}</span></li>"
-            for d in items)
-        html = (f"<p><a href='../index.html'>← back</a></p><h2>{_html_escape(proj)}</h2>"
-                f"<ul class=list>{rows}</ul>")
-        (site / fn).write_text(_site_page(f"Project · {proj}", html), encoding="utf-8")
-        search_items.append({"title": proj, "project": proj, "kind": "project", "href": fn})
-
-    write_json(site / "search.json", {"items": search_items})
-
-    # index
-    proj_cards = "".join(
-        f"<div class=card><h3><a href='projects/{slugify(p)}.html'>{_html_escape(p)}</a></h3>"
-        f"<p class=muted>{sum(1 for d in docs if d[3]==p)} item(s)</p></div>" for p in projects)
-    dec_list = "".join(
-        f"<li><a href='decisions/{slugify(d[0])}.html'>{_html_escape(d[2])}</a>"
-        f"{(' <span class=muted>· '+_html_escape(d[3])+'</span>') if d[3] else ''}</li>"
-        for d in decisions if d[4] == "active")
-    note = (f"<p class=muted>{excluded} private/blocked item(s) excluded. "
-            f"Re-run with --include-private to include them.</p>") if excluded else ""
-    body = (f"<input class=search placeholder='Search memories…' oninput='go(this.value)'>"
-            f"<ul class=list id=results></ul>"
-            f"<h2>Projects</h2><div class=grid>{proj_cards or '<p class=muted>none</p>'}</div>"
-            f"<h2>Active decisions</h2><ul class=list>{dec_list or '<li class=muted>none</li>'}</ul>"
-            f"{note}<script src='search.js'></script>")
-    (site / "index.html").write_text(_site_page("Dashboard", body), encoding="utf-8")
-
-    append_ledger(root, "static_site.generated",
-                  {"path": str(site.relative_to(root)), "include_private": include_private,
-                   "projects": len(projects), "decisions": len(decisions)})
-    print(f"Generated static site: {site / 'index.html'}")
-    print(f"  projects: {len(projects)} · decisions: {len(decisions)}"
-          + (f" · excluded private/blocked: {excluded}" if excluded else ""))
-    return site / "index.html"
 
 BACKUP_INCLUDE = ["source", "ledger", "attachments", "reports"]
 

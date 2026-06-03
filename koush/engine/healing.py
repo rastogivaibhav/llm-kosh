@@ -56,7 +56,7 @@ def parse_receipt(text: str) -> Dict[str, List[dict]]:
             sections[current].append(bullet)
     return sections
 
-def absorb_receipt(root: Path, receipt_path: Path, dry_run: bool = False) -> dict:
+def absorb_receipt(root: Path, receipt_path: Path, dry_run: bool = False, review_id: str = None) -> dict:
     ensure_root(root)
     if not receipt_path.exists():
         raise SystemExit(f"Receipt not found: {receipt_path}")
@@ -132,7 +132,7 @@ def absorb_receipt(root: Path, receipt_path: Path, dry_run: bool = False) -> dic
 
     rebuild_index(root, force=True)
     append_ledger(root, "receipt.absorbed", {
-        "source": str(receipt_path), "receipt_id": receipt_id,
+        "source": str(receipt_path), "receipt_id": receipt_id, "review_id": review_id,
         "stored_as": str(receipt_doc.relative_to(root)), "summary": {k: v for k, v in summary.items() if k != "actions"},
     })
 

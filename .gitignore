@@ -2,3 +2,17 @@ __pycache__/
 *.pyc
 .DS_Store
 exports/tmp-pack-*/
+.pytest_cache/
+.coverage
+.coveragerc
+AI-Cartridge/
+demo_cartridge/
+demo_fixture.json
+exports/
+indexes/
+ledger/
+pack.zip
+source/
+test_root/
+venv/
+.venv/

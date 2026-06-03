@@ -3,7 +3,7 @@ import re
 from typing import List, Tuple
 
 UTC = dt.timezone.utc
-APP_VERSION = "1.0.0"
+APP_VERSION = "2.0.0"
 
 KINDS = {
     "project", "decision", "prompt", "note", "file", "conversation",

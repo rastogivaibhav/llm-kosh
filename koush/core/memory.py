@@ -35,6 +35,16 @@ def init_cartridge(root: Path, owner: str) -> None:
         ],
     }
     write_json(root / "KOUSH.json", config)
+    
+    policy = {
+        "mcp": {
+            "read_only_default": True,
+            "allow_private_exports": False,
+            "allow_mutation": False,
+            "require_receipt_review": True
+        }
+    }
+    write_json(root / "CARTRIDGE_POLICY.json", policy)
 
     (root / "BOOT.md").write_text(boot_text(owner), encoding="utf-8")
 

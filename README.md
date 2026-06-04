@@ -1,53 +1,44 @@
-# LlmKosh
+# llm-kosh
 
-**Local-first AI Memory Cartridge System v2.0**
+**The ultimate local AI memory cartridge system and self-healing daemon.**
 
-LlmKosh is a zero-dependency, local-first context compiler that turns your file system into a structured memory graph for large language models (LLMs). It solves the problem of "context amnesia" by providing a standardized, auditable, and transportable memory cartridge.
+`llm-kosh` acts as a secure, local bridge between human developers and Large Language Models (LLMs). It allows you to ingest raw context, pack it securely for any AI, and seamlessly absorb the AI's structured output back into your personal memory system.
 
-## Features
+## Features at a Glance
 
-- **Human-Readable Storage**: Memory is stored as standard Markdown files with YAML frontmatter. No proprietary databases.
-- **Pack System**: Compile specific subsets of your memory graph into minimal `.koushpack.zip` files for transport to Claude, ChatGPT, or Gemini.
-- **MEMORY_RECEIPT Loop**: Asynchronous state synchronization. Give the AI a pack, receive a `MEMORY_RECEIPT.md` back, and apply the diff directly to your cartridge.
-- **Safe by Default**: The Trust Gate explicitly requires human approval for destructive or high-impact state changes.
-- **Background OS**: The LlmKosh Daemon runs silently to heal relationships, generate memory maps, and index vectors.
-- **MCP Native**: Exposes your local cartridge to Model Context Protocol (MCP) compatible editors (like Cursor) without sacrificing your CLI workflow.
+- 🧠 **Structured Local Memory:** Type-safe memory primitives (decisions, projects, gaps) with powerful FTS and vector search backends.
+- 🔄 **The "Pack & Absorb" Loop:** Generate optimized, budget-constrained context zips (`pack`) and effortlessly ingest AI outputs via `MEMORY_RECEIPT.md` (`absorb`).
+- 🛡️ **Privacy-First & Secure:** Completely local and air-gapped. Built-in redaction, export policies, and quarantine workflows to prevent secret leakage.
+- ⚡ **Self-Healing Daemon OS:** Background watcher that auto-heals corrupted structures, processes intake, and maintains indices.
+- 🔌 **Native MCP Server:** Exposes your local cartridge directly to AI IDEs (like Claude Desktop) via the Model Context Protocol.
 
-## Installation
+## Quickstart
 
+Get from zero to a running memory cartridge in under 2 minutes.
+
+> [!NOTE]
+> `llm-kosh` requires Python 3.10+ and operates entirely on your local filesystem.
+
+**1. Install**
 ```bash
-pip install "llm-kosh[all]"
+pip install llm-kosh
 ```
-*Optional Extras: `[watch]` for the daemon, `[semantic]` for vector search, `[server]` for HTTP MCP.*
 
-## Quick Start
-
+**2. Initialize a Cartridge**
 ```bash
-# Initialize a new cartridge in the current directory
-llm-kosh init
+# Creates a new .llm-kosh root in your current directory
+llm-kosh init --owner "Your Name"
+```
 
-# Add some memory
-llm-kosh add --kind decision "Use PostgreSQL for the backend" --project "MyApp"
-
-# View your memory graph
-llm-kosh query
-
-# Generate a pack to send to an LLM
-llm-kosh pack --project "MyApp"
-
-# Start the background daemon
+**3. Start the Background Daemon**
+```bash
+# Starts the self-healing background OS to watch for changes
 llm-kosh daemon start --mode watchdog
 ```
 
-## Documentation
+You are now ready to start packing context and absorbing memories. 
 
-- [Quickstart Guide](docs/QUICKSTART.md)
-- [Design Philosophy](docs/DESIGN.md)
-- [Architecture Map](docs/ARCHITECTURE.md)
-- [Security & Trust](docs/SECURITY.md)
-- [Receipt Review Guide](docs/RECEIPT_GUIDE.md)
-- [Daemon Operating Guide](docs/DAEMON_GUIDE.md)
-- [MCP Adapter Guide](docs/MCP_GUIDE.md)
-- [Local Workbench](docs/WORKBENCH_GUIDE.md)
-- [Data Imports & Migrations](docs/IMPORT_GUIDE.md)
-- [LlmKosh Specification Index](docs/SPEC_INDEX.md)
+---
+📚 **Deep Dives:**
+- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Comprehensive CLI Reference](docs/CLI_REFERENCE.md)

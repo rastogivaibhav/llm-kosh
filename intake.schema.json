@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Koush Intake Record",
+  "title": "LlmKosh Intake Record",
   "type": "object",
   "properties": {
     "schema": {
       "type": "string",
-      "const": "koush.intake.v1"
+      "const": "llm-kosh.intake.v1"
     },
     "intake_id": {
       "type": "string"

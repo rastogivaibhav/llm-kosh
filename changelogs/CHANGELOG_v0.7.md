@@ -16,7 +16,7 @@ the normal path.
 ## New commands
 
 - `policy [--init]` — show the effective export policy, or write a default
-  `KOUSH_POLICY.json`. Policy keys: `default_visibility`, `blocked_terms`,
+  `LLM_KOSH_POLICY.json`. Policy keys: `default_visibility`, `blocked_terms`,
   `allowed_export_visibility`, `require_redaction`. Missing file ⇒ safe defaults.
 - `classify [--apply]` — scans every memory; if a doc contains a secret or a policy
   blocked-term but is marked exportable, it **suggests** downgrading to `private`. Suggest
@@ -53,7 +53,7 @@ scan/redaction.
 
 ## Files changed / added
 
-- `koush_cli.py` — added the policy/classify/partition/quarantine/safe-pack module and the
+- `llm_kosh_cli.py` — added the policy/classify/partition/quarantine/safe-pack module and the
   pack visibility gate; added `quarantine` visibility; excluded blocked/quarantine from
   non-private query results (version → 0.7.0).
 - `test_v0_7.py` — 15 new tests.
@@ -71,13 +71,13 @@ guarantees above plus policy logging.
   gate); it flags shareable risk but won't infer sensitivity from meaning. Review before
   `--apply` on a large corpus.
 - `blocked_terms` is a substring match; very generic terms could over-flag. Tune the list in
-  `KOUSH_POLICY.json`.
+  `LLM_KOSH_POLICY.json`.
 - Policy applies at export time. It does not retroactively reclassify stored memories — use
   `classify --apply` for that.
 
 ## Compatibility
 
 Source format unchanged and backward compatible (`quarantine`/`prev_visibility` are new
-optional fields). Cartridges with no `KOUSH_POLICY.json` use safe built-in defaults, so
+optional fields). Cartridges with no `LLM_KOSH_POLICY.json` use safe built-in defaults, so
 nothing breaks; `pack` without the new flags behaves as before except that blocked items —
 which were always meant to be unexportable — are now actually withheld.

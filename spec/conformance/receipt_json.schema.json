@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Koush Receipt Review Output",
+  "title": "LlmKosh Receipt Review Output",
   "type": "object",
   "required": ["review_id", "receipt_path", "created_at", "trust_state", "stats", "analysis"],
   "properties": {

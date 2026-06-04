@@ -1,13 +1,13 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Koush Pack Source Map",
+  "title": "LlmKosh Pack Source Map",
   "type": "object",
-  "required": ["koush_id", "koush_version", "query", "matches"],
+  "required": ["llm_kosh_id", "llm_kosh_version", "query", "matches"],
   "properties": {
-    "koush_id": {
+    "llm_kosh_id": {
       "type": "string"
     },
-    "koush_version": {
+    "llm_kosh_version": {
       "type": "string"
     },
     "query": {

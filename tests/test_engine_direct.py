@@ -3,8 +3,8 @@ import pytest
 from pathlib import Path
 
 def test_engine_audit_and_heal(temp_workspace):
-    from koush.core.memory import init_cartridge
-    from koush.engine.commands import audit, heal_safe
+    from llm_kosh.core.memory import init_cartridge
+    from llm_kosh.engine.commands import audit, heal_safe
     
     root = Path(temp_workspace)
     init_cartridge(root, "user")
@@ -45,8 +45,8 @@ def test_engine_audit_and_heal(temp_workspace):
     heal_safe(root, fix_visibility=True)
 
 def test_engine_search_and_index(temp_workspace):
-    from koush.core.memory import init_cartridge, add_memory
-    from koush.engine.search import rebuild_index, query_memory, semantic_search, print_query_results
+    from llm_kosh.core.memory import init_cartridge, add_memory
+    from llm_kosh.engine.search import rebuild_index, query_memory, semantic_search, print_query_results
     import io
     from contextlib import redirect_stdout
     
@@ -60,8 +60,8 @@ def test_engine_search_and_index(temp_workspace):
     assert len(results) > 0
 
 def test_engine_compiler(temp_workspace, tmp_path):
-    from koush.core.memory import init_cartridge, add_memory
-    from koush.engine.compiler import pack_context, explain_pack
+    from llm_kosh.core.memory import init_cartridge, add_memory
+    from llm_kosh.engine.compiler import pack_context, explain_pack
     root = Path(temp_workspace)
     init_cartridge(root, "user")
     add_memory(root, "note", "Secret Note", "AKIAIOSFODNN7EXAMPLE")
@@ -74,6 +74,6 @@ def test_engine_compiler(temp_workspace, tmp_path):
     explain_pack(out_zip)
     
 def test_engine_daemon(temp_workspace):
-    from koush.daemon import daemon_once
+    from llm_kosh.daemon import daemon_once
     # Just checking it imports without error
     pass

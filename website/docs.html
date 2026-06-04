@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Koush Documentation</title>
+    <title>LlmKosh Documentation</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -89,8 +89,8 @@
 
     <nav>
         <a href="index.html" class="brand">
-            <img src="logo.png" alt="Koush Logo">
-            <span class="logo-text">Koush</span>
+            <img src="logo.png" alt="LlmKosh Logo">
+            <span class="logo-text">LlmKosh</span>
         </a>
         <a href="#intro">Introduction</a>
         <a href="#quickstart">Quickstart</a>
@@ -100,30 +100,30 @@
 
     <main>
         <h1 id="intro">Documentation</h1>
-        <p>Koush is a DevOps pipeline for your AI context. It treats your architectural decisions, prompts, and knowledge as source code.</p>
+        <p>LlmKosh is a DevOps pipeline for your AI context. It treats your architectural decisions, prompts, and knowledge as source code.</p>
 
         <h2 id="receipts">The Memory Receipt Concept</h2>
         <p>A major problem with chat interfaces like ChatGPT or Claude is that once a conversation ends, the context is lost forever. You might have made 10 brilliant architectural decisions in a chat thread, but your codebase doesn't know about them.</p>
         
         <p><strong>The solution is the <code>MEMORY_RECEIPT</code>.</strong></p>
 
-        <p>When you use Koush to generate a context pack for an LLM, you also give the LLM an instruction:</p>
+        <p>When you use LlmKosh to generate a context pack for an LLM, you also give the LLM an instruction:</p>
         
         <div class="alert">
             <p><em>"At the end of our work, you must return a MEMORY_RECEIPT detailing what we learned, what decisions we made, and what code was generated."</em></p>
         </div>
 
         <h3>How it works</h3>
-        <p>The LLM will generate a markdown block formatted as a receipt. You simply save this output as a file (e.g., <code>MEMORY_RECEIPT.md</code>) in your local Koush workspace, and run the absorb command:</p>
+        <p>The LLM will generate a markdown block formatted as a receipt. You simply save this output as a file (e.g., <code>MEMORY_RECEIPT.md</code>) in your local LlmKosh workspace, and run the absorb command:</p>
 
-        <pre><code>$ koush absorb MEMORY_RECEIPT.md</code></pre>
+        <pre><code>$ llm-kosh absorb MEMORY_RECEIPT.md</code></pre>
 
-        <p>Koush parses the receipt, splits it into strongly-typed local files (<code>decisions/</code>, <code>notes/</code>, <code>projects/</code>), and links them cryptographically using provenance hashes. Next time you pack context for the LLM, the LLM will remember exactly what it did last time!</p>
+        <p>LlmKosh parses the receipt, splits it into strongly-typed local files (<code>decisions/</code>, <code>notes/</code>, <code>projects/</code>), and links them cryptographically using provenance hashes. Next time you pack context for the LLM, the LLM will remember exactly what it did last time!</p>
 
         <h2 id="daemon">Automating with the Daemon</h2>
-        <p>Tired of manually absorbing receipts? Koush comes with a background watcher.</p>
+        <p>Tired of manually absorbing receipts? LlmKosh comes with a background watcher.</p>
         
-        <pre><code>$ koush watch</code></pre>
+        <pre><code>$ llm-kosh watch</code></pre>
         
         <p>If you save any file matching <code>MEMORY_RECEIPT*.md</code> into your <code>receipts/</code> folder, the daemon will instantly detect it, parse it into knowledge, auto-resolve any architectural corrections, and archive the raw receipt into a processed folder safely.</p>
     </main>

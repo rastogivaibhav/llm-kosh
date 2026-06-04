@@ -2,8 +2,8 @@ import pytest
 from pathlib import Path
 
 def test_brute_force_coverage(temp_workspace):
-    from koush.engine import commands, search, healing, compiler, safety
-    from koush.core import memory, utils
+    from llm_kosh.engine import commands, search, healing, compiler, safety
+    from llm_kosh.core import memory, utils
     import inspect
     
     root = Path(temp_workspace)

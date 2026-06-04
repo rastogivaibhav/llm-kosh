@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
-from koush.core.memory import init_cartridge
-from koush.processors.core import get_builtin_processors, get_all_processors
+from llm_kosh.core.memory import init_cartridge
+from llm_kosh.processors.core import get_builtin_processors, get_all_processors
 
 @pytest.fixture
 def processor_workspace(temp_workspace):
@@ -17,7 +17,7 @@ def test_processor_list(processor_workspace):
     assert "receipt_processor" in names
 
 def test_processor_suggest(processor_workspace):
-    from koush.engine.intake import intake_scan
+    from llm_kosh.engine.intake import intake_scan
     
     root = processor_workspace
     test_file = root / "inbox" / "decision-xyz.md"
@@ -28,7 +28,7 @@ def test_processor_suggest(processor_workspace):
     assert len(records) == 1
     record = records[0]
     
-    from koush.processors.core import get_processor_by_name, write_proposal
+    from llm_kosh.processors.core import get_processor_by_name, write_proposal
     p = get_processor_by_name(root, "decision_processor")
     assert p is not None
     
@@ -43,9 +43,9 @@ def test_processor_suggest(processor_workspace):
         assert path.exists()
 
 def test_processor_apply(processor_workspace):
-    from koush.processors.core import ProposalRecord, ProposalBatch, write_proposal
-    from koush.engine.intake import processor_apply
-    from koush.core.utils import read_json
+    from llm_kosh.processors.core import ProposalRecord, ProposalBatch, write_proposal
+    from llm_kosh.engine.intake import processor_apply
+    from llm_kosh.core.utils import read_json
     
     root = processor_workspace
     rec = ProposalRecord(

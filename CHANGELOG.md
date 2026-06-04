@@ -1,6 +1,6 @@
-# Koush: Changelog
+# LlmKosh: Changelog
 
-All notable changes to Koush are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+All notable changes to LlmKosh are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [1.9.0] - 2026-06-03
 
@@ -9,7 +9,7 @@ All notable changes to Koush are documented here. The format is based on [Keep a
 - New `import` CLI: `detect`, `preview`, `apply`, `rollback`, `list`, `show`, `report`.
 - New `migrate` CLI: `check`, `apply`, `rollback`.
 - `import apply` saves original payloads to `attachments/imports/<import_id>/` and deduplicates by SHA256.
-- Added Koush standardized conversational normalization.
+- Added LlmKosh standardized conversational normalization.
 
 ## [1.8.0] - 2026-06-03
 
@@ -23,14 +23,14 @@ All notable changes to Koush are documented here. The format is based on [Keep a
 ## [1.7.0] - 2026-06-03
 
 ### Added
-- Pack Standard + Conformance Kit: Formalized Koush pack levels 0 through 3.
+- Pack Standard + Conformance Kit: Formalized LlmKosh pack levels 0 through 3.
 - `conformance` command group to validate `.koushpack.zip`, `MEMORY_RECEIPT.md`, and cartridge layouts.
 - Pack schemas and documentation provided in `spec/conformance/` and `docs/PACK_CONFORMANCE.md`.
 
 ## [1.6.0] - 2026-06-03
 
 ### Added
-- Local Workbench UI: Added `workbench` command to generate a rich, static HTML dashboard (`koush workbench build/serve/open/export/clean`).
+- Local Workbench UI: Added `workbench` command to generate a rich, static HTML dashboard (`llm-kosh workbench build/serve/open/export/clean`).
 - The new dashboard provides visual access to Projects, Decisions, and an active Search interface, entirely locally and without external dependencies.
 - Replaced the basic `static-site` command with the new workbench module.
 
@@ -61,21 +61,21 @@ All notable changes to Koush are documented here. The format is based on [Keep a
 ## [1.0.0] - 2026-06-02
 
 ### Added
-- **Global Rebranding**: "AI Memory Cartridge" has been officially renamed to **Koush**.
-- `koush.spec` replaces `cartridge.spec` for PyInstaller binary generation.
-- Desktop UI now officially branded as Koush.
-- Added GitHub remote integration (`koush.git`).
+- **Global Rebranding**: "AI Memory Cartridge" has been officially renamed to **LlmKosh**.
+- `llm-kosh.spec` replaces `cartridge.spec` for PyInstaller binary generation.
+- Desktop UI now officially branded as LlmKosh.
+- Added GitHub remote integration (`llm-kosh.git`).
 
 ### Changed
-- The primary configuration file has been migrated from `CARTRIDGE.json` to `KOUSH.json`.
-- Policy configurations now use `KOUSH_POLICY.json`.
-- The CLI entrypoint has been renamed from `cartridge.py` to `koush_cli.py`.
+- The primary configuration file has been migrated from `CARTRIDGE.json` to `LLM_KOSH.json`.
+- Policy configurations now use `LLM_KOSH_POLICY.json`.
+- The CLI entrypoint has been renamed from `cartridge.py` to `llm_kosh_cli.py`.
 
 ---
 
 ## Historical Versions (AI Memory Cartridge)
 
-Older versions of the product before the Koush rebrand are preserved in the `changelogs/` directory:
+Older versions of the product before the LlmKosh rebrand are preserved in the `changelogs/` directory:
 
 - [v1.0.0-rc (Pre-Rebrand)](changelogs/CHANGELOG_v1.md)
 - [v0.9.0](changelogs/CHANGELOG_v0.9.md)

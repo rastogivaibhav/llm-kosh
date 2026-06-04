@@ -1,11 +1,11 @@
 import pytest
 from pathlib import Path
-from koush.cli import main
-from koush.core.utils import read_json
+from llm_kosh.cli import main
+from llm_kosh.core.utils import read_json
 
 def test_daemon_flow(tmp_path, monkeypatch, capsys):
     root = tmp_path / "cart"
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "init"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
     
     # 1. Provide a receipt
@@ -24,11 +24,11 @@ def test_daemon_flow(tmp_path, monkeypatch, capsys):
 """, encoding="utf-8")
 
     # 2. Configure policy
-    policy_path = root / "KOUSH_POLICY.json"
+    policy_path = root / "LLM_KOSH_POLICY.json"
     policy_path.write_text('{"daemon": {"enabled_jobs": ["process_safe_receipts"]}}')
 
     # 3. Run daemon once
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "daemon", "once"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "daemon", "once"])
     main()
     out, _ = capsys.readouterr()
     
@@ -53,7 +53,7 @@ def test_daemon_flow(tmp_path, monkeypatch, capsys):
     assert (root / "receipts" / "MEMORY_RECEIPT_2.md").exists() # Left alone because it's risky
     
     # 4. Check status command
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "daemon", "status"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "daemon", "status"])
     main()
     out, _ = capsys.readouterr()
     assert "[SUCCESS] process_safe_receipts" in out

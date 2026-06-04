@@ -3,8 +3,8 @@ import os
 import json
 from pathlib import Path
 
-from koush.core.memory import init_cartridge, ensure_root
-from koush.engine.intake import intake_scan, intake_list, intake_status, intake_validate, intake_review, intake_apply, intake_reject, intake_quarantine
+from llm_kosh.core.memory import init_cartridge, ensure_root
+from llm_kosh.engine.intake import intake_scan, intake_list, intake_status, intake_validate, intake_review, intake_apply, intake_reject, intake_quarantine
 
 @pytest.fixture
 def intake_workspace(temp_workspace):
@@ -45,7 +45,7 @@ def test_intake_validate(intake_workspace):
     val2 = intake_validate(root, r2["intake_id"])
     
     # We don't know which is which by order, so let's check by status after
-    from koush.core.utils import read_json
+    from llm_kosh.core.utils import read_json
     st1 = read_json(root / "intake" / ("validated" if val1 else "pending") / f"{r1['intake_id']}.json")["status"]
     st2 = read_json(root / "intake" / ("validated" if val2 else "pending") / f"{r2['intake_id']}.json")["status"]
     

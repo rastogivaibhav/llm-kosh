@@ -1,6 +1,6 @@
 # Receipt Markdown Rules
 
-The `MEMORY_RECEIPT.md` file returned by the LLM must follow strict structural rules to be safely parsed by Koush.
+The `MEMORY_RECEIPT.md` file returned by the LLM must follow strict structural rules to be safely parsed by LlmKosh.
 
 ## Grammar
 

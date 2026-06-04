@@ -1,26 +1,26 @@
 import pytest
 from pathlib import Path
-from koush.cli import main
-from koush.engine.search import rebuild_index
+from llm_kosh.cli import main
+from llm_kosh.engine.search import rebuild_index
 
 def test_workbench_build(tmp_path, monkeypatch):
     root = tmp_path / "cart"
     # init
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "init"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
     
     # add private memory
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "add", "--kind", "note", "--title", "Secret", "--body", "Private data", "--visibility", "private"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "add", "--kind", "note", "--title", "Secret", "--body", "Private data", "--visibility", "private"])
     main()
     
     # add public memory
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "add", "--kind", "decision", "--title", "Public Decision", "--body", "Public data", "--visibility", "public"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "add", "--kind", "decision", "--title", "Public Decision", "--body", "Public data", "--visibility", "public"])
     main()
     
     rebuild_index(root)
     
     # build default (safe)
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "workbench", "build"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "workbench", "build"])
     main()
     
     site = root / "exports" / "workbench"
@@ -35,7 +35,7 @@ def test_workbench_build(tmp_path, monkeypatch):
     assert "1 private/blocked item(s) excluded" in idx
     
     # build with private
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "workbench", "build", "--include-private"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "workbench", "build", "--include-private"])
     main()
     
     idx_priv = (site / "index.html").read_text(encoding="utf-8")
@@ -43,11 +43,11 @@ def test_workbench_build(tmp_path, monkeypatch):
 
 def test_workbench_export(tmp_path, monkeypatch):
     root = tmp_path / "cart2"
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "init"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
     
     # export safe
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "workbench", "export", "--safe"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "workbench", "export", "--safe"])
     main()
     
     zip_path = root / "exports" / "workbench_export.zip"
@@ -55,16 +55,16 @@ def test_workbench_export(tmp_path, monkeypatch):
 
 def test_workbench_clean(tmp_path, monkeypatch):
     root = tmp_path / "cart3"
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "init"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
     
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "workbench", "build"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "workbench", "build"])
     main()
     
     site = root / "exports" / "workbench"
     assert site.exists()
     
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "workbench", "clean"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "workbench", "clean"])
     main()
     
     assert not site.exists()

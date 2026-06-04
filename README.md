@@ -1,8 +1,8 @@
-# Koush
+# LlmKosh
 
 **Local-first AI Memory Cartridge System v2.0**
 
-Koush is a zero-dependency, local-first context compiler that turns your file system into a structured memory graph for large language models (LLMs). It solves the problem of "context amnesia" by providing a standardized, auditable, and transportable memory cartridge.
+LlmKosh is a zero-dependency, local-first context compiler that turns your file system into a structured memory graph for large language models (LLMs). It solves the problem of "context amnesia" by providing a standardized, auditable, and transportable memory cartridge.
 
 ## Features
 
@@ -10,13 +10,13 @@ Koush is a zero-dependency, local-first context compiler that turns your file sy
 - **Pack System**: Compile specific subsets of your memory graph into minimal `.koushpack.zip` files for transport to Claude, ChatGPT, or Gemini.
 - **MEMORY_RECEIPT Loop**: Asynchronous state synchronization. Give the AI a pack, receive a `MEMORY_RECEIPT.md` back, and apply the diff directly to your cartridge.
 - **Safe by Default**: The Trust Gate explicitly requires human approval for destructive or high-impact state changes.
-- **Background OS**: The Koush Daemon runs silently to heal relationships, generate memory maps, and index vectors.
+- **Background OS**: The LlmKosh Daemon runs silently to heal relationships, generate memory maps, and index vectors.
 - **MCP Native**: Exposes your local cartridge to Model Context Protocol (MCP) compatible editors (like Cursor) without sacrificing your CLI workflow.
 
 ## Installation
 
 ```bash
-pip install "koush[all]"
+pip install "llm-kosh[all]"
 ```
 *Optional Extras: `[watch]` for the daemon, `[semantic]` for vector search, `[server]` for HTTP MCP.*
 
@@ -24,19 +24,19 @@ pip install "koush[all]"
 
 ```bash
 # Initialize a new cartridge in the current directory
-koush init
+llm-kosh init
 
 # Add some memory
-koush add --kind decision "Use PostgreSQL for the backend" --project "MyApp"
+llm-kosh add --kind decision "Use PostgreSQL for the backend" --project "MyApp"
 
 # View your memory graph
-koush query
+llm-kosh query
 
 # Generate a pack to send to an LLM
-koush pack --project "MyApp"
+llm-kosh pack --project "MyApp"
 
 # Start the background daemon
-koush daemon start --mode watchdog
+llm-kosh daemon start --mode watchdog
 ```
 
 ## Documentation
@@ -50,4 +50,4 @@ koush daemon start --mode watchdog
 - [MCP Adapter Guide](docs/MCP_GUIDE.md)
 - [Local Workbench](docs/WORKBENCH_GUIDE.md)
 - [Data Imports & Migrations](docs/IMPORT_GUIDE.md)
-- [Koush Specification Index](docs/SPEC_INDEX.md)
+- [LlmKosh Specification Index](docs/SPEC_INDEX.md)

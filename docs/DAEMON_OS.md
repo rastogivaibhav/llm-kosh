@@ -1,6 +1,6 @@
 # Self-Healing Daemon OS
 
-The Koush Daemon (`koush daemon`) acts as an automated background maintenance runtime. Instead of relying on crontabs or external automation tools, Koush can manage its own health and intake queues.
+The LlmKosh Daemon (`llm-kosh daemon`) acts as an automated background maintenance runtime. Instead of relying on crontabs or external automation tools, LlmKosh can manage its own health and intake queues.
 
 ## Modes
 
@@ -10,12 +10,12 @@ The Koush Daemon (`koush daemon`) acts as an automated background maintenance ru
 
 ## Jobs
 
-The Daemon executes jobs defined in `koush.daemon.JOBS`. Common jobs include:
+The Daemon executes jobs defined in `llm-kosh.daemon.JOBS`. Common jobs include:
 
 1. `scan_intake`: Ingests records from various sources into the Intake Queue.
 2. `process_safe_receipts`: Reviews receipts, blocks high-impact/risky changes, and automatically applies safe changes, archiving them to `receipts/processed/`.
 3. `rebuild_stale_index`: Rebuilds derived sqlite/FTS indices if stale.
-4. `audit`: Validates Koush integrity.
+4. `audit`: Validates LlmKosh integrity.
 5. `heal_safe`: Repairs missing source-maps or structure without human intervention.
 6. `regenerate_memory_map`: Rebuilds the `MEMORY_MAP.md`.
 7. `regenerate_workbench`: Compiles the static web UI.
@@ -23,7 +23,7 @@ The Daemon executes jobs defined in `koush.daemon.JOBS`. Common jobs include:
 
 ## Policy Configuration
 
-You can enable or disable specific jobs by editing the `KOUSH_POLICY.json` at the root of your cartridge:
+You can enable or disable specific jobs by editing the `LLM_KOSH_POLICY.json` at the root of your cartridge:
 
 ```json
 {
@@ -41,5 +41,5 @@ You can enable or disable specific jobs by editing the `KOUSH_POLICY.json` at th
 
 ## Logs and Status
 
-- Run `koush daemon status` to view the last time each job ran and its output.
-- Run `koush daemon log` to output the structured JSONL events log stored at `reports/daemon/events.jsonl`.
+- Run `llm-kosh daemon status` to view the last time each job ran and its output.
+- Run `llm-kosh daemon log` to output the structured JSONL events log stored at `reports/daemon/events.jsonl`.

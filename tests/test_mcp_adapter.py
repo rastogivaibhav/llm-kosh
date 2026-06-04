@@ -2,9 +2,9 @@ import pytest
 import os
 import json
 from pathlib import Path
-from koush.mcp_server import mcp, start_server, get_mcp_tools_schema, WORKSPACE_PATH, MCP_FLAGS
-from koush.core.memory import init_cartridge
-from koush.core.utils import read_json
+from llm_kosh.mcp_server import mcp, start_server, get_mcp_tools_schema, WORKSPACE_PATH, MCP_FLAGS
+from llm_kosh.core.memory import init_cartridge
+from llm_kosh.core.utils import read_json
 
 @pytest.fixture
 def mcp_cartridge(tmp_path):

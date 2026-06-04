@@ -13,7 +13,7 @@ the source and can be regenerated at any time.
 |-------|-------|--------|---------|
 | Memories | `source/**/*.md` | yes | n/a |
 | Event ledger | `ledger/events.jsonl` | yes (append-only history) | n/a |
-| Config / policy | `KOUSH.json`, `KOUSH_POLICY.json` | yes | n/a |
+| Config / policy | `LLM_KOSH.json`, `LLM_KOSH_POLICY.json` | yes | n/a |
 | FTS index | `indexes/memory.sqlite` | no | `index` / any query |
 | Vector index | `indexes/vectors.sqlite` | no | `embed` |
 | Memory map | `MEMORY_MAP.md` | no | `memory-map` / `heal` |
@@ -104,7 +104,7 @@ indexes, regenerate BOOT/MEMORY_MAP, assign/repair ids and supersession links) a
 `export-backup` zips the source of truth (source + ledger + config + policy + reports +
 preserved imports), explicitly **not** the derived indexes. `import-backup` restores and
 rebuilds indexes, refusing to overwrite a non-empty cartridge without `--force`. `migrate`
-is explicit and reversible: it stamps the app version and ensures a `koush_id`, recording
+is explicit and reversible: it stamps the app version and ensures a `llm_kosh_id`, recording
 the prior version in `migrated_from`, and never rewrites memory content.
 
 ## Dependencies

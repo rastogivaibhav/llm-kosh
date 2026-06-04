@@ -1,24 +1,24 @@
-# Koush Workbench
+# LlmKosh Workbench
 
-The **Koush Workbench** (v1.6+) provides a local, statically generated UI dashboard over your cartridge. It runs entirely on your local machine using standard Python libraries—no external JS frameworks, no cloud connections, and no tracking.
+The **LlmKosh Workbench** (v1.6+) provides a local, statically generated UI dashboard over your cartridge. It runs entirely on your local machine using standard Python libraries—no external JS frameworks, no cloud connections, and no tracking.
 
 ## Usage
 
 ```bash
 # Build the static HTML dashboard in `exports/workbench/`
-koush workbench build
+llm-kosh workbench build
 
 # Serve the dashboard locally
-koush workbench serve --port 8765
+llm-kosh workbench serve --port 8765
 
 # Build and immediately open in your default browser
-koush workbench open
+llm-kosh workbench open
 
 # Export the entire workbench to a zip file (ready for sharing/archiving)
-koush workbench export
+llm-kosh workbench export
 
 # Clean up generated files
-koush workbench clean
+llm-kosh workbench clean
 ```
 
 ## Privacy & Security
@@ -27,10 +27,10 @@ By default, the workbench **excludes all private and quarantined data**. Any mem
 
 To include private data (e.g. for your own local inspection only):
 ```bash
-koush workbench build --include-private
+llm-kosh workbench build --include-private
 ```
 
-When exporting, Koush defaults to a "safe" export (excluding private content). You can force it to export what is currently built by removing `--safe`.
+When exporting, LlmKosh defaults to a "safe" export (excluding private content). You can force it to export what is currently built by removing `--safe`.
 
 ## Generated Structure
 

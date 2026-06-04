@@ -54,7 +54,7 @@ source-files/
 
 ## Cartridge identity
 
-New cartridges get a `koush_id` in `KOUSH.json`. Pre-v0.6 cartridges (no id) get a
+New cartridges get a `llm_kosh_id` in `LLM_KOSH.json`. Pre-v0.6 cartridges (no id) get a
 **deterministic, stable** id derived from owner + created_at at pack time — no file is
 mutated, so it stays backward compatible and reversible.
 
@@ -67,8 +67,8 @@ zipping. Default is still block; `--redact` masks across the whole pack (source 
 
 ## Files changed / added
 
-- `koush_cli.py` — rewrote `pack_context`; added `validate_pack`, `explain_pack`,
-  `cartridge_meta`, profile/budget helpers; `koush_id` in init (version → 0.6.0).
+- `llm_kosh_cli.py` — rewrote `pack_context`; added `validate_pack`, `explain_pack`,
+  `cartridge_meta`, profile/budget helpers; `llm_kosh_id` in init (version → 0.6.0).
 - `test_v0_6.py` — 15 new tests.
 
 ## Tests

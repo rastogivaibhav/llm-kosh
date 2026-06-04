@@ -16,3 +16,10 @@ source/
 test_root/
 venv/
 .venv/
+
+desktop-app/node_modules/
+desktop-app/dist-electron/
+desktop-app/dist/
+desktop-app/build/
+sidecar/
+

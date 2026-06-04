@@ -8,14 +8,14 @@ complete after v0.9. All 106 prior tests still pass (total now 114).
 ## New commands
 
 - `export-backup --out FILE` — writes a portable backup zip of the **source of truth**
-  (`source/`, `ledger/`, `attachments/`, `reports/`, `KOUSH.json`,
-  `KOUSH_POLICY.json`, `BOOT.md`, `MEMORY_MAP.md`) with a `BACKUP_MANIFEST.json`.
+  (`source/`, `ledger/`, `attachments/`, `reports/`, `LLM_KOSH.json`,
+  `LLM_KOSH_POLICY.json`, `BOOT.md`, `MEMORY_MAP.md`) with a `BACKUP_MANIFEST.json`.
   Derived indexes are deliberately excluded — they rebuild on restore.
 - `import-backup BACKUP [--force]` — restores a backup into a cartridge root and rebuilds
   the FTS index. Refuses to overwrite a cartridge that already has memories unless `--force`.
   Rejects zips that aren't cartridge backups.
 - `migrate [--dry-run]` — explicit, reversible migration: stamps the current app version and
-  ensures a `koush_id`, recording the prior version under `migrated_from`. Never rewrites
+  ensures a `llm_kosh_id`, recording the prior version under `migrated_from`. Never rewrites
   memory content. No-op (and says so) when already current.
 
 ## Documentation
@@ -40,7 +40,7 @@ daily-pack → static-site → export-backup. Exits non-zero on any failure. Ver
 
 ## Files changed / added
 
-- `koush_cli.py` — added `export_backup`, `import_backup`, `migrate` and their subcommands
+- `llm_kosh_cli.py` — added `export_backup`, `import_backup`, `migrate` and their subcommands
   (version → 1.0.0).
 - `README.md` (rewritten), `QUICKSTART.md`, `DESIGN.md`, `SECURITY.md`, `EXAMPLES.md` (new).
 - `smoke_demo.sh` (new), `test_v1_0.py` (8 new tests).
@@ -49,9 +49,9 @@ daily-pack → static-site → export-backup. Exits non-zero on any failure. Ver
 
 `python3 -m unittest test_cartridge test_v0_3 test_v0_4 test_v0_5 test_v0_6 test_v0_7 test_v0_8 test_v0_9 test_v1_0`
 → 114 passing (106 prior + 8 new). New tests cover: backup contains source but not derived
-indexes; backup→restore round-trip with working query and preserved koush_id;
+indexes; backup→restore round-trip with working query and preserved llm_kosh_id;
 import refuses a non-empty target without `--force` and overwrites with it; non-backup zip
-rejected; migrate stamps version + koush_id and records history; migrate `--dry-run`
+rejected; migrate stamps version + llm_kosh_id and records history; migrate `--dry-run`
 changes nothing; migrate no-op when current.
 
 ## v1.0 quality bar (from the master plan)
@@ -69,7 +69,7 @@ changes nothing; migrate no-op when current.
 
 - `import-backup --force` replaces files present in the backup; it does not delete files
   that exist only in the target. For a clean restore, point it at a fresh root.
-- `migrate` covers the v0.x→1.0 line (version stamp + koush_id). There's no schema
+- `migrate` covers the v0.x→1.0 line (version stamp + llm_kosh_id). There's no schema
   rewrite because the on-disk format has stayed backward compatible throughout; future
   breaking changes would extend `migrate` with explicit, reversible steps.
 - The smoke demo shells out with `bash`; on Windows run the equivalent commands from
@@ -79,5 +79,5 @@ changes nothing; migrate no-op when current.
 ## Compatibility
 
 Source format unchanged and backward compatible across all versions. Older cartridges work
-as-is; run `migrate` once to stamp v1.0.0 and (if needed) add a `koush_id`. Backups are
+as-is; run `migrate` once to stamp v1.0.0 and (if needed) add a `llm_kosh_id`. Backups are
 forward-compatible: a backup carries its `app_version` so a restore knows what made it.

@@ -48,7 +48,7 @@ chat). No changes were needed to pack/resolve/embeddings/audit/heal.
 
 ## Files changed / added
 
-- `koush_cli.py` — added the importer module and five subcommands (version → 0.5.0).
+- `llm_kosh_cli.py` — added the importer module and five subcommands (version → 0.5.0).
 - `test_v0_5.py` — 11 new tests.
 - `fixtures/` — synthetic sample exports for each provider (no real user data).
 

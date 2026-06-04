@@ -33,7 +33,7 @@ the safety layer are untouched. All 95 prior tests still pass (total now 106).
 
 ## Files changed / added
 
-- `koush_cli.py` — added the v0.9 workflow module (`today`, `inbox`, `promote`,
+- `llm_kosh_cli.py` — added the v0.9 workflow module (`today`, `inbox`, `promote`,
   `receipt_template`, `daily_pack`, `static_site`, plus helpers) and six subcommands
   (version → 0.9.0).
 - `test_v0_9.py` — 11 new tests.

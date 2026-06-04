@@ -21,7 +21,7 @@ The only operation that produces something intended to leave your machine is `pa
 - `private` is excluded by default; `pack --include-private` opts in. `safe-pack` never
   includes private.
 - With `--enforce-policy` (always on for `safe-pack`), only visibilities in
-  `allowed_export_visibility` from `KOUSH_POLICY.json` may leave.
+  `allowed_export_visibility` from `LLM_KOSH_POLICY.json` may leave.
 
 ### Gate 2 — secret scan (before the zip is written)
 

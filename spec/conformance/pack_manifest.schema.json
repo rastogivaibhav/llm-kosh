@@ -1,8 +1,8 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Koush Pack Manifest",
+  "title": "LlmKosh Pack Manifest",
   "type": "object",
-  "required": ["target", "query", "created_at", "redacted", "match_count", "koush_id", "koush_version"],
+  "required": ["target", "query", "created_at", "redacted", "match_count", "llm_kosh_id", "llm_kosh_version"],
   "properties": {
     "schema": {
       "type": "string",
@@ -19,10 +19,10 @@
     "query": {
       "type": "string"
     },
-    "koush_id": {
+    "llm_kosh_id": {
       "type": "string"
     },
-    "koush_version": {
+    "llm_kosh_version": {
       "type": "string"
     },
     "app_version": {

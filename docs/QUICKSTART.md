@@ -1,5 +1,5 @@
 # Quickstart
 
-Run `koush init` to get started.
+Run `llm-kosh init` to get started.
 
-Use `koush add --kind decision "We chose Python"` to record memory.
+Use `llm-kosh add --kind decision "We chose Python"` to record memory.

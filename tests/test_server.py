@@ -13,7 +13,7 @@ def test_server(temp_workspace):
     
     def run_server():
         from http.server import HTTPServer
-        from koush.server import CartridgeAPIHandler
+        from llm_kosh.server import CartridgeAPIHandler
         
         # small hack to pass root to handler
         class CustomHTTPServer(HTTPServer):
@@ -91,22 +91,22 @@ def test_server_pack_endpoint(test_server):
 
 def test_mcp_tools(temp_workspace):
     pytest.importorskip("mcp")
-    import koush.mcp_server
+    import llm_kosh.mcp_server
     
     # Override workspace for the imported module
-    koush.mcp_server.WORKSPACE_PATH = Path(temp_workspace)
+    llm_kosh.mcp_server.WORKSPACE_PATH = Path(temp_workspace)
     
     # init so search doesn't fail on missing db
-    from koush.core.memory import init_cartridge, add_memory
-    init_cartridge(koush.mcp_server.WORKSPACE_PATH, "user")
-    add_memory(koush.mcp_server.WORKSPACE_PATH, "note", "MCP Test", "Body of the note")
+    from llm_kosh.core.memory import init_cartridge, add_memory
+    init_cartridge(llm_kosh.mcp_server.WORKSPACE_PATH, "user")
+    add_memory(llm_kosh.mcp_server.WORKSPACE_PATH, "note", "MCP Test", "Body of the note")
     
     # Test tools
-    res1 = koush.mcp_server.search_memory("MCP")
+    res1 = llm_kosh.mcp_server.search_memory("MCP")
     assert "MCP Test" in res1
     
     try:
-        res2 = koush.mcp_server.search_memory("MCP", use_semantic=True)
+        res2 = llm_kosh.mcp_server.search_memory("MCP", use_semantic=True)
         assert isinstance(res2, str)
     except SystemExit:
         pass

@@ -46,7 +46,7 @@ artifact, all logged and reversible.
 
 ## Files changed / added
 
-- `koush_cli.py` — rewrote `audit`/`heal_safe`; added `verify_ledger`, `memory_map`,
+- `llm_kosh_cli.py` — rewrote `audit`/`heal_safe`; added `verify_ledger`, `memory_map`,
   `build_repair_plan`/`write_repair_plan`, `index_is_stale`, `vector_index_stale`,
   `boot_text`; hardened `rebuild_index` against duplicate ids (version → 0.8.0).
 - `test_v0_8.py` — 20 new tests.

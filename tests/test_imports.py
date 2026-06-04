@@ -1,11 +1,11 @@
 import pytest
 from pathlib import Path
-from koush.cli import main
-from koush.core.utils import read_json
+from llm_kosh.cli import main
+from llm_kosh.core.utils import read_json
 
 def test_imports_flow(tmp_path, monkeypatch, capsys):
     root = tmp_path / "cart"
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "init"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
     
     # 1. Create a fixture
@@ -27,7 +27,7 @@ def test_imports_flow(tmp_path, monkeypatch, capsys):
     ]""")
     
     # 2. Preview
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "import", "preview", str(fixture)])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "import", "preview", str(fixture)])
     main()
     out, _ = capsys.readouterr()
     assert '"provider": "chatgpt"' in out
@@ -35,13 +35,13 @@ def test_imports_flow(tmp_path, monkeypatch, capsys):
     assert '"messages_found": 1' in out
     
     # 3. Apply
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "import", "apply", str(fixture)])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "import", "apply", str(fixture)])
     main()
     out, _ = capsys.readouterr()
     assert '"status": "applied"' in out
     
     # 4. Attempt duplicate apply
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "import", "apply", str(fixture)])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "import", "apply", str(fixture)])
     main()
     out, _ = capsys.readouterr()
     assert '"status": "skipped"' in out
@@ -51,7 +51,7 @@ def test_imports_flow(tmp_path, monkeypatch, capsys):
     import_id = list(import_list.keys())[0]
     
     # 5. Rollback
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "import", "rollback", import_id])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "import", "rollback", import_id])
     main()
     out, _ = capsys.readouterr()
     assert '"status": "ok"' in out
@@ -64,10 +64,10 @@ def test_imports_flow(tmp_path, monkeypatch, capsys):
     
 def test_migration_dryrun(tmp_path, monkeypatch, capsys):
     root = tmp_path / "cart"
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "init"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
     
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "migrate", "check"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "migrate", "check"])
     main()
     out, _ = capsys.readouterr()
     assert '"status": "up_to_date"' in out

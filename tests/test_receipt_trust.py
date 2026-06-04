@@ -1,11 +1,11 @@
 import pytest
 from pathlib import Path
-from koush.cli import main
+from llm_kosh.cli import main
 import json
 
 def test_receipt_trust_flow(tmp_path, monkeypatch, capsys):
     root = tmp_path / "cart"
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "init"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
     
     # Create a mock receipt
@@ -26,14 +26,14 @@ def test_receipt_trust_flow(tmp_path, monkeypatch, capsys):
 """, encoding="utf-8")
 
     # 1. Validate
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "validate-receipt", str(receipt)])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "validate-receipt", str(receipt)])
     main()
     out, _ = capsys.readouterr()
     assert "Validating MEMORY_RECEIPT.md..." in out
     assert "decisions_found: 1" in out
     
     # 2. Review
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "review-receipt", str(receipt)])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "review-receipt", str(receipt)])
     main()
     out, _ = capsys.readouterr()
     assert "Review rev_" in out
@@ -45,7 +45,7 @@ def test_receipt_trust_flow(tmp_path, monkeypatch, capsys):
     assert jpath.exists()
     
     # 3. Absorb --review
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "absorb", str(receipt), "--review"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "absorb", str(receipt), "--review"])
     main()
     out, _ = capsys.readouterr()
     assert "Generated review rev_" in out
@@ -54,33 +54,33 @@ def test_receipt_trust_flow(tmp_path, monkeypatch, capsys):
     jpath2 = root / "reports" / "receipt_reviews" / f"{rev_id_2}.json"
     
     # 4. Absorb --apply-review on untrusted
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "absorb", "--apply-review", rev_id_2])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "absorb", "--apply-review", rev_id_2])
     main()
     out, _ = capsys.readouterr()
     assert "Cannot apply: Review" in out
     
     # 5. Trust review
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "trust-receipt", rev_id_2, "--trusted"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "trust-receipt", rev_id_2, "--trusted"])
     main()
     
     report = json.loads(jpath2.read_text())
     assert report["trust_state"] == "trusted"
     
     # 6. Apply trusted review
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "absorb", "--apply-review", rev_id_2])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "absorb", "--apply-review", rev_id_2])
     main()
     
     out, _ = capsys.readouterr()
     assert "decisions added:        1" in out
     
     # 7. Check list
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "receipt", "list"])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "receipt", "list"])
     main()
     out, _ = capsys.readouterr()
     assert "TRUSTED" in out
     
     # 8. Check show
-    monkeypatch.setattr("sys.argv", ["koush", "--root", str(root), "receipt", "show", rev_id_2])
+    monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "receipt", "show", rev_id_2])
     main()
     out, _ = capsys.readouterr()
     assert "Status:** trusted" in out

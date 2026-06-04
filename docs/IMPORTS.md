@@ -1,6 +1,6 @@
 # Import Architecture
 
-Koush supports importing external conversational data (ChatGPT, Claude, Gemini, Generic) through a hardened transaction system.
+LlmKosh supports importing external conversational data (ChatGPT, Claude, Gemini, Generic) through a hardened transaction system.
 
 ## The Process
 
@@ -9,7 +9,7 @@ Koush supports importing external conversational data (ChatGPT, Claude, Gemini, 
 3. **Apply**: 
    - Generates a unique transaction `import_id`.
    - Copies raw payloads unmodified into `attachments/imports/<import_id>/`.
-   - Normalizes data into individual JSON bodies inside Koush Memory records under `kind: conversation`.
+   - Normalizes data into individual JSON bodies inside LlmKosh Memory records under `kind: conversation`.
    - Writes the transaction ID and related `record_ids` into the `reports/imports.json` ledger.
 4. **Rollback**: Uses the transaction ledger to find all generated records and marks their status as `superseded`. It does NOT destroy the raw payload, ensuring non-destructive behavior.
 
@@ -33,10 +33,10 @@ All conversational imports compile down to a universal format:
 
 ## Supported Commands
 
-- `koush import detect <path>`
-- `koush import preview <path>`
-- `koush import apply <path>`
-- `koush import rollback <import_id>`
-- `koush import list`
-- `koush import show <import_id>`
-- `koush import report <import_id>`
+- `llm-kosh import detect <path>`
+- `llm-kosh import preview <path>`
+- `llm-kosh import apply <path>`
+- `llm-kosh import rollback <import_id>`
+- `llm-kosh import list`
+- `llm-kosh import show <import_id>`
+- `llm-kosh import report <import_id>`

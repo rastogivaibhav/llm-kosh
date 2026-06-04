@@ -1,4 +1,4 @@
-# Koush Boot Instructions
+# LlmKosh Boot Instructions
 
 You are reading a portable AI memory cartridge or a focused context pack exported from one.
 

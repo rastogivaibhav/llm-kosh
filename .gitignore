@@ -23,6 +23,3 @@ desktop-app/dist/
 desktop-app/build/
 sidecar/
 
-*.egg-info/
-
-

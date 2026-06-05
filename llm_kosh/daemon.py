@@ -209,12 +209,39 @@ def daemon_start(root: Path, mode: str):
                         if "MEMORY_RECEIPT" in Path(event.src_path).name and "processed" not in Path(event.src_path).parts:
                             daemon_once(root)
                             
+            class ExternalFolderHandler(FileSystemEventHandler):
+                def on_created(self, event):
+                    self._handle(event)
+                def on_modified(self, event):
+                    self._handle(event)
+                def _handle(self, event):
+                    if not event.is_directory and (event.src_path.endswith(".md") or event.src_path.endswith(".txt")):
+                        src = Path(event.src_path)
+                        if src.name.startswith("."): return
+                        try:
+                            dest = root / "inbox" / f"{src.stem}_{int(time.time())}{src.suffix}"
+                            dest.parent.mkdir(exist_ok=True)
+                            shutil.copy2(src, dest)
+                            daemon_once(root)
+                        except Exception as e:
+                            print(f"Error copying external file {src}: {e}")
+                            
             observer = Observer()
             receipts_dir = root / "receipts"
             receipts_dir.mkdir(exist_ok=True)
             observer.schedule(ReceiptHandler(), str(receipts_dir), recursive=False)
-            observer.start()
             print(f"Watchdog active on {receipts_dir}")
+            
+            watched_dirs = pol.get("daemon", {}).get("watched_directories", [])
+            for d in watched_dirs:
+                if Path(d).exists() and Path(d).is_dir():
+                    try:
+                        observer.schedule(ExternalFolderHandler(), str(d), recursive=True)
+                        print(f"Watchdog active on external folder: {d}")
+                    except Exception as e:
+                        print(f"Could not watch {d}: {e}")
+            
+            observer.start()
 
     try:
         if mode in ["polling", "auto"]:

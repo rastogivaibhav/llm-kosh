@@ -7,20 +7,37 @@ export default {
   theme: {
     extend: {
       colors: {
+        brand: {
+          bg: '#FFFBF7', // Cream background from logo
+          panel: '#FFFFFF', // Pure white panels
+          surface: '#F5EFE6', // Slightly darker warm surface
+          border: '#E8DFD5', // Warm border
+          text: '#2D1B14', // Deep warm espresso text
+          muted: '#8A7366', // Muted warm gray/brown
+          accent: '#F26E22', // The exact vibrant orange from the logo
+          accentHover: '#D95A15',
+          success: '#10B981',
+          warning: '#F59E0B',
+          danger: '#EF4444',
+        },
         vscode: {
-          bg: '#1e1e1e',
-          sidebar: '#252526',
-          activityBar: '#333333',
-          statusBar: '#007acc',
-          text: '#cccccc',
-          border: '#3c3c3c',
-          activeTab: '#1e1e1e',
-          inactiveTab: '#2d2d2d',
-          hover: '#2a2d2e',
-          inputBg: '#3c3c3c',
-          buttonPrimary: '#0e639c',
-          buttonHover: '#1177bb'
+          bg: '#FFFBF7',
+          sidebar: '#FFFFFF',
+          activityBar: '#F5EFE6',
+          statusBar: '#F26E22',
+          text: '#2D1B14',
+          border: '#E8DFD5',
+          activeTab: '#FFFBF7',
+          inactiveTab: '#F5EFE6',
+          hover: '#E8DFD5',
+          inputBg: '#FFFFFF',
+          buttonPrimary: '#F26E22',
+          buttonHover: '#D95A15'
         }
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['Fira Code', 'monospace'],
       }
     },
   },

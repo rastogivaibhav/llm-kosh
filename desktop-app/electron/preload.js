@@ -19,6 +19,21 @@ contextBridge.exposeInMainWorld('llmKosh', {
   getDaemonStatus: (rootPath) => ipcRenderer.invoke('get-daemon-status', rootPath),
   getLocalDaemonDetails: () => ipcRenderer.invoke('get-local-daemon-details'),
   daemonOnce: (rootPath, mode) => ipcRenderer.invoke('daemon-once', rootPath, mode),
+  startMcp: (rootPath, options) => ipcRenderer.invoke('start-mcp', rootPath, options),
+  stopMcp: () => ipcRenderer.invoke('stop-mcp'),
+  getMcpStatus: () => ipcRenderer.invoke('get-mcp-status'),
+  onMcpStatusChanged: (callback) => {
+    ipcRenderer.on('mcp-status-changed', callback);
+    return () => {
+      ipcRenderer.removeListener('mcp-status-changed', callback);
+    };
+  },
+  onMcpLog: (callback) => {
+    ipcRenderer.on('mcp-log', callback);
+    return () => {
+      ipcRenderer.removeListener('mcp-log', callback);
+    };
+  },
   startDaemon: (rootPath, mode) => ipcRenderer.invoke('start-daemon', rootPath, mode),
   stopDaemon: () => ipcRenderer.invoke('stop-daemon'),
   onDaemonLog: (callback) => {
@@ -33,5 +48,6 @@ contextBridge.exposeInMainWorld('llmKosh', {
   removeWatchedFolder: (path) => ipcRenderer.invoke('remove-watched-folder', path),
   testCli: () => ipcRenderer.invoke('test-cli'),
   getLogs: () => ipcRenderer.invoke('get-logs'),
-  runSmokeTest: () => ipcRenderer.invoke('run-smoke-test')
+  runSmokeTest: () => ipcRenderer.invoke('run-smoke-test'),
+  runKoshCommand: (rootPath, command, args) => ipcRenderer.invoke('run-kosh-command', rootPath, command, args)
 });

@@ -1,19 +1,30 @@
 import React from 'react';
-import { Home, Settings, Package, Inbox, BookOpen, TerminalSquare, Activity } from 'lucide-react';
+import { Activity, Inbox, Search, RefreshCcw, ShieldAlert, Settings, BookOpen } from 'lucide-react';
 
 export default function Sidebar({ currentView, setCurrentView }) {
   const tabs = [
-    { id: 'home', icon: Home, label: 'Home' },
-    { id: 'daemon', icon: Activity, label: 'Daemon' },
-    { id: 'prompts', icon: BookOpen, label: 'Prompt Library' },
-    { id: 'generate', icon: Package, label: 'Generate Pack' },
-    { id: 'receipts', icon: Inbox, label: 'Receipt Inbox' },
-    { id: 'logs', icon: TerminalSquare, label: 'Logs' },
+    { id: 'dashboard', icon: Activity, label: 'Dashboard' },
+    { id: 'intake', icon: Inbox, label: 'Intake Hub' },
+    { id: 'search', icon: Search, label: 'Memory Explorer' },
+    { id: 'prompts', icon: BookOpen, label: 'Skills & Prompts' },
+    { id: 'ailoop', icon: RefreshCcw, label: 'AI Loop (Pack & Absorb)' },
+    { id: 'airlock', icon: ShieldAlert, label: 'Airlock (Security)' },
     { id: 'settings', icon: Settings, label: 'Settings' }
   ];
 
   return (
-    <div className="w-14 flex-shrink-0 h-full bg-vscode-activityBar flex flex-col items-center py-4 border-r border-vscode-border">
+    <div className="w-16 flex-shrink-0 h-full bg-brand-panel flex flex-col items-center py-6 border-r border-brand-border shadow-sm z-10">
+      <div className="mb-8 w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center bg-brand-surface border border-brand-border relative">
+        <img 
+          src="/logo.png" 
+          alt="KOSH" 
+          className="w-full h-full object-cover z-10" 
+          onError={(e) => {
+            e.target.style.display = 'none';
+          }} 
+        />
+        <span className="font-bold text-brand-accent tracking-tighter text-[10px] absolute z-0">KOSH</span>
+      </div>
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = currentView === tab.id;
@@ -21,12 +32,14 @@ export default function Sidebar({ currentView, setCurrentView }) {
           <button
             key={tab.id}
             onClick={() => setCurrentView(tab.id)}
-            className={`p-3 w-full flex justify-center mb-2 ${
-              isActive ? 'text-white border-l-2 border-vscode-statusBar' : 'text-gray-500 hover:text-white'
+            className={`p-3 w-12 h-12 flex items-center justify-center mb-4 rounded-xl transition-all duration-200 ${
+              isActive 
+                ? 'bg-brand-accent/10 text-brand-accent shadow-[inset_3px_0_0_0_rgba(242,110,34,1)]' 
+                : 'text-brand-muted hover:text-brand-accent hover:bg-brand-surface'
             }`}
             title={tab.label}
           >
-            <Icon size={24} />
+            <Icon size={22} strokeWidth={isActive ? 2.5 : 2} />
           </button>
         );
       })}

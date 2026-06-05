@@ -38,6 +38,9 @@ DEFAULT_POLICY = {
         "auto_apply_folder_notes": False,
         "require_review_for_corrections": True,
         "require_review_for_private": True
+    },
+    "daemon": {
+        "watched_directories": []
     }
 }
 

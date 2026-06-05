@@ -34,3 +34,6 @@ all = [
 
 [project.scripts]
 llm-kosh = "llm_kosh.cli:main"
+
+[tool.setuptools]
+packages = ["llm_kosh"]

@@ -467,35 +467,136 @@ ipcMain.handle('test-cli', () => {
 
 ipcMain.handle('list-watched-folders', () => {
   const config = readConfig();
-  return { success: true, folders: config.watchedFolders || [] };
+  if (!config.cartridgeRoot) return { success: false, folders: [] };
+  const policyPath = path.join(config.cartridgeRoot, 'LLM_KOSH_POLICY.json');
+  try {
+    if (fs.existsSync(policyPath)) {
+      const pol = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+      return { success: true, folders: pol?.daemon?.watched_directories || [] };
+    }
+  } catch (e) {}
+  return { success: true, folders: [] };
 });
 
 ipcMain.handle('add-watched-folder', async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ['openDirectory']
-  });
+  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (!result.canceled && result.filePaths.length > 0) {
     const selected = result.filePaths[0];
     const config = readConfig();
-    const folders = config.watchedFolders || [];
-    if (!folders.includes(selected)) {
-      folders.push(selected);
-      writeConfig({ ...config, watchedFolders: folders });
+    if (!config.cartridgeRoot) return { success: false, folders: [] };
+    const policyPath = path.join(config.cartridgeRoot, 'LLM_KOSH_POLICY.json');
+    let pol = {};
+    try {
+      if (fs.existsSync(policyPath)) pol = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+    } catch (e) {}
+    
+    if (!pol.daemon) pol.daemon = {};
+    if (!pol.daemon.watched_directories) pol.daemon.watched_directories = [];
+    
+    if (!pol.daemon.watched_directories.includes(selected)) {
+      pol.daemon.watched_directories.push(selected);
+      fs.writeFileSync(policyPath, JSON.stringify(pol, null, 2));
     }
-    return { success: true, folders };
+    return { success: true, folders: pol.daemon.watched_directories };
   }
-  return { success: false, folders: readConfig().watchedFolders || [] };
+  return { success: false, folders: [] };
 });
 
 ipcMain.handle('remove-watched-folder', (event, folderPath) => {
   const config = readConfig();
-  let folders = config.watchedFolders || [];
-  folders = folders.filter(f => f !== folderPath);
-  writeConfig({ ...config, watchedFolders: folders });
-  return { success: true, folders };
+  if (!config.cartridgeRoot) return { success: false, folders: [] };
+  const policyPath = path.join(config.cartridgeRoot, 'LLM_KOSH_POLICY.json');
+  let pol = {};
+  try {
+    if (fs.existsSync(policyPath)) pol = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+  } catch (e) {}
+  
+  if (!pol.daemon) pol.daemon = {};
+  if (!pol.daemon.watched_directories) pol.daemon.watched_directories = [];
+  
+  pol.daemon.watched_directories = pol.daemon.watched_directories.filter(f => f !== folderPath);
+  fs.writeFileSync(policyPath, JSON.stringify(pol, null, 2));
+  return { success: true, folders: pol.daemon.watched_directories };
 });
 
 ipcMain.handle('run-smoke-test', async () => {
   const { runSmokeTestSequence } = require('./smoke-test');
   return await runSmokeTestSequence(resolveLlmKoshExecutable(configPath, process.resourcesPath).path);
+});
+
+// MCP Server Manager
+let mcpProcess = null;
+let mcpLogs = [];
+let mcpStatus = { running: false, pid: null, startTime: null, lastEvent: null };
+
+function broadcastMcpLog(type, message) {
+  const entry = { type, message, timestamp: Date.now() };
+  mcpLogs.push(entry);
+  if (mcpLogs.length > 100) mcpLogs.shift();
+  if (mainWindow) {
+    try { mainWindow.webContents.send('mcp-log', entry); } catch (e) {}
+  }
+}
+
+ipcMain.handle('get-mcp-status', () => {
+  return { ...mcpStatus, logs: [...mcpLogs].reverse() };
+});
+
+ipcMain.handle('start-mcp', async (event, rootPath, options) => {
+  if (mcpProcess) {
+    return { ok: false, error: 'MCP server already running' };
+  }
+  
+  const resolveResult = resolveLlmKoshExecutable(configPath, process.resourcesPath);
+  if (!resolveResult.path) {
+    return { ok: false, error: 'Executable not found' };
+  }
+
+  const args = ['mcp', '--root', rootPath];
+  if (options?.allowWrite) args.push('--allow-write');
+  if (options?.allowMutate) args.push('--allow-mutate');
+  if (options?.allowPrivate) args.push('--allow-private');
+
+  mcpLogs = [];
+  mcpStatus = { running: true, pid: null, startTime: Date.now(), lastEvent: 'Started MCP Server' };
+  
+  broadcastMcpLog('system', `Spawning: llm-kosh ${args.join(' ')}`);
+
+  mcpProcess = spawn(resolveResult.path, args, {
+    cwd: app.getPath('home'),
+    shell: false
+  });
+
+  mcpStatus.pid = mcpProcess.pid;
+
+  mcpProcess.stdout.on('data', (data) => broadcastMcpLog('stdout', data.toString()));
+  mcpProcess.stderr.on('data', (data) => broadcastMcpLog('stderr', data.toString()));
+
+  mcpProcess.on('close', (code) => {
+    mcpStatus = { running: false, pid: null, startTime: null, lastEvent: `Exited with code ${code}` };
+    mcpProcess = null;
+    broadcastMcpLog('system', `MCP Process exited with code ${code}`);
+    if (mainWindow) {
+      try { mainWindow.webContents.send('mcp-status-changed', mcpStatus); } catch (e) {}
+    }
+  });
+
+  return { ok: true };
+});
+
+ipcMain.handle('stop-mcp', () => {
+  if (mcpProcess) {
+    broadcastMcpLog('system', 'Sending kill signal to MCP Process');
+    mcpProcess.kill();
+    mcpProcess = null;
+    mcpStatus = { running: false, pid: null, startTime: null, lastEvent: 'Stopped manually' };
+  }
+  return { ok: true };
+});
+
+// Generic command runner for the UI to access full CLI capabilities
+ipcMain.handle('run-kosh-command', async (event, rootPath, command, args) => {
+  // Safe generic execution since runLlmKosh prevents shell injection
+  const fullArgs = ['--root', rootPath, ...(args || [])];
+  return await runLlmKosh(command, fullArgs);
 });

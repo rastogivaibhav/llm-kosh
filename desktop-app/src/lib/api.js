@@ -9,4 +9,5 @@ export const api = {
   onMcpLog: (cb) => window.llmKosh.onMcpLog((e, log) => cb(log)),
 
   testCli: async () => window.llmKosh.testCli(),
+  closeQuickCapture: () => window.llmKosh.closeQuickCapture?.(),
 };

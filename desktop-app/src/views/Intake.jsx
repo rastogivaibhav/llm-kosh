@@ -1,8 +1,166 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../lib/api';
-import { Inbox, FileText, CheckCircle, RefreshCcw, Send } from 'lucide-react';
+import { Inbox, FileText, CheckCircle, RefreshCcw, Send, Zap, X } from 'lucide-react';
+
+// ─── Quick Capture Overlay ──────────────────────────────────────────────────
+// Rendered when Electron opens this window with ?quick=1 in the URL.
+// A slim, always-on-top, frameless floating bar — Spotlight-style.
+function QuickCaptureOverlay({ config }) {
+  const [text, setText] = useState('');
+  const [project, setProject] = useState('');
+  const [state, setState] = useState('idle'); // idle | loading | done | error
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    // Auto-focus the textarea as soon as the overlay appears
+    setTimeout(() => inputRef.current?.focus(), 80);
+
+    const onKey = (e) => {
+      if (e.key === 'Escape') api.closeQuickCapture();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const handleSubmit = useCallback(async (e) => {
+    e?.preventDefault();
+    if (!text.trim() || state === 'loading') return;
+
+    setState('loading');
+    const root = config?.cartridgeRoot;
+    if (!root) { setState('error'); return; }
+
+    const args = [text.trim()];
+    if (project.trim()) args.push('--project', project.trim());
+
+    const res = await api.runKoshCommand(root, 'inbox', args);
+    if (res.ok) {
+      setState('done');
+      setTimeout(() => api.closeQuickCapture(), 900);
+    } else {
+      setState('error');
+      setTimeout(() => setState('idle'), 2000);
+    }
+  }, [text, project, state, config]);
+
+  // Also submit on Ctrl+Enter
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') handleSubmit();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [handleSubmit]);
+
+  const borderColor = state === 'done' ? '#22c55e' : state === 'error' ? '#ef4444' : 'rgba(242,110,34,0.5)';
+
+  return (
+    <div
+      style={{
+        width: '100vw', height: '100vh',
+        background: 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        WebkitAppRegion: 'drag', // make the whole outer area draggable
+      }}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-full mx-3"
+        style={{
+          WebkitAppRegion: 'no-drag',
+          background: 'rgba(18, 18, 22, 0.92)',
+          backdropFilter: 'blur(24px)',
+          border: `1.5px solid ${borderColor}`,
+          borderRadius: '16px',
+          boxShadow: '0 8px 40px rgba(0,0,0,0.7)',
+          transition: 'border-color 0.2s',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Top row: icon + textarea */}
+        <div className="flex items-center px-4 py-3 gap-3">
+          <Zap size={18} color="#f26e22" style={{ flexShrink: 0 }} />
+          <textarea
+            ref={inputRef}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Capture a thought, decision, or note… (Ctrl+Enter to save, Esc to cancel)"
+            rows={2}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              resize: 'none',
+              color: '#e5e0da',
+              fontSize: '13px',
+              lineHeight: '1.5',
+              fontFamily: 'inherit',
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!text.trim() || state === 'loading' || state === 'done'}
+            style={{
+              flexShrink: 0,
+              background: state === 'done' ? '#22c55e' : state === 'error' ? '#ef4444' : '#f26e22',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '8px 14px',
+              color: '#fff',
+              fontSize: '12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              transition: 'background 0.2s',
+              opacity: !text.trim() ? 0.4 : 1,
+            }}
+          >
+            {state === 'loading' ? <RefreshCcw size={13} style={{ animation: 'spin 0.8s linear infinite' }} /> :
+             state === 'done'    ? <CheckCircle size={13} /> :
+             state === 'error'   ? <X size={13} /> :
+                                   <Send size={13} />}
+            {state === 'done' ? 'Saved!' : state === 'error' ? 'Failed' : 'Save'}
+          </button>
+        </div>
+
+        {/* Bottom row: project tag */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '6px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{ fontSize: '11px', color: '#6b6b6b', flexShrink: 0 }}>Project:</span>
+          <input
+            type="text"
+            value={project}
+            onChange={e => setProject(e.target.value)}
+            placeholder="optional (e.g. MyApp)"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              color: '#9a9a9a',
+              fontSize: '11px',
+              fontFamily: 'inherit',
+              flex: 1,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => api.closeQuickCapture()}
+            style={{ background: 'none', border: 'none', color: '#4a4a4a', cursor: 'pointer', padding: '2px' }}
+            title="Close (Esc)"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
 
 export default function Intake({ config, setStatusMessage }) {
+  // Detect if we were launched in Quick Capture mode by the global hotkey
+  const isQuickMode = new URLSearchParams(window.location.search).get('quick') === '1';
+  if (isQuickMode) return <QuickCaptureOverlay config={config} />;
+
   const [root] = useState(config?.cartridgeRoot || '');
   
   // Inbox state

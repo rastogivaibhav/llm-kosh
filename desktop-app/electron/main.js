@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Tray, Menu, globalShortcut } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -111,6 +111,7 @@ function runLlmKosh(command, args, cwd) {
 
 let mainWindow = null;
 let tray = null;
+let quickCaptureWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -139,6 +140,63 @@ function createWindow() {
     }
   });
 }
+
+function createQuickCaptureWindow() {
+  // If already open, bring to front and refocus
+  if (quickCaptureWindow && !quickCaptureWindow.isDestroyed()) {
+    quickCaptureWindow.focus();
+    return;
+  }
+
+  const { screen } = require('electron');
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+  const winWidth = 620;
+  const winHeight = 160;
+
+  quickCaptureWindow = new BrowserWindow({
+    width: winWidth,
+    height: winHeight,
+    x: Math.round((width - winWidth) / 2),
+    y: Math.round(height * 0.28), // 28% from top — spotlight-style
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    skipTaskbar: true,
+    title: 'Quick Capture',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  if (isDev) {
+    quickCaptureWindow.loadURL('http://localhost:5173/?quick=1');
+  } else {
+    quickCaptureWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
+      query: { quick: '1' }
+    });
+  }
+
+  // Close on blur — dismiss when user clicks away
+  quickCaptureWindow.on('blur', () => {
+    if (quickCaptureWindow && !quickCaptureWindow.isDestroyed()) {
+      quickCaptureWindow.close();
+    }
+  });
+
+  quickCaptureWindow.on('closed', () => {
+    quickCaptureWindow = null;
+  });
+}
+
+// IPC: renderer can close the quick capture window after submit
+ipcMain.on('close-quick-capture', () => {
+  if (quickCaptureWindow && !quickCaptureWindow.isDestroyed()) {
+    quickCaptureWindow.close();
+  }
+});
 
 function updateTrayMenu() {
   if (!tray) return;
@@ -207,6 +265,14 @@ app.whenReady().then(() => {
     daemonManager.start(configPath, process.resourcesPath, config.cartridgeRoot, config.daemonMode || 'auto');
   }
 
+  // Register global Quick Capture hotkey
+  const registered = globalShortcut.register('CommandOrControl+Shift+Space', () => {
+    createQuickCaptureWindow();
+  });
+  if (!registered) {
+    console.warn('Quick Capture hotkey (Ctrl+Shift+Space) could not be registered — may be taken by another app.');
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
@@ -214,6 +280,10 @@ app.whenReady().then(() => {
       mainWindow?.show();
     }
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on('window-all-closed', () => {

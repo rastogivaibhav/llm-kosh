@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../lib/api';
-import { Settings as SettingsIcon, Save, TerminalSquare, FolderOpen, ShieldCheck, HardDrive, TestTube, AlertCircle, CheckCircle, RefreshCcw } from 'lucide-react';
+import { Settings as SettingsIcon, Save, TerminalSquare, FolderOpen, ShieldCheck, HardDrive, TestTube, AlertCircle, CheckCircle, RefreshCcw, Plug, Copy, Play, Square, ClipboardCheck } from 'lucide-react';
 
 export default function Settings({ config, setConfig, setStatusMessage }) {
   const [formData, setFormData] = useState({
@@ -12,6 +12,14 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
   const [cliHealth, setCliHealth] = useState(null);
   const [runningSmokeTest, setRunningSmokeTest] = useState(false);
   const [smokeTestResults, setSmokeTestResults] = useState(null);
+
+  // MCP Panel State
+  const [mcpStatus, setMcpStatus] = useState({ running: false, pid: null });
+  const [mcpLogs, setMcpLogs] = useState([]);
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const mcpLogEndRef = useRef(null);
+  const [mcpOptions, setMcpOptions] = useState({ allowWrite: false, allowMutate: false, allowPrivate: false });
 
   useEffect(() => {
     if (config) {
@@ -27,7 +35,68 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
       });
     }
     checkCliHealth();
+    loadMcpStatus();
   }, [config]);
+
+  const loadMcpStatus = async () => {
+    const st = await api.getMcpStatus();
+    if (st) {
+      setMcpStatus(st);
+      if (st.logs) setMcpLogs(st.logs);
+    }
+  };
+
+  useEffect(() => {
+    const unsub = api.onMcpLog((entry) => {
+      setMcpLogs(prev => [...prev.slice(-99), entry]);
+    });
+    const unsubStatus = api.onMcpStatusChanged((st) => {
+      setMcpStatus(st);
+    });
+    return () => { unsub?.(); unsubStatus?.(); };
+  }, []);
+
+  useEffect(() => {
+    mcpLogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [mcpLogs]);
+
+  const handleStartMcp = async () => {
+    setMcpLoading(true);
+    setMcpLogs([]);
+    const root = formData.cartridgeRoot || config?.cartridgeRoot;
+    await api.startMcp(root, mcpOptions);
+    await loadMcpStatus();
+    setMcpLoading(false);
+  };
+
+  const handleStopMcp = async () => {
+    setMcpLoading(true);
+    await api.stopMcp();
+    await loadMcpStatus();
+    setMcpLoading(false);
+  };
+
+  const getMcpConfigJson = () => {
+    const root = formData.cartridgeRoot || config?.cartridgeRoot || 'C:\\path\\to\\your\\cartridge';
+    const exe = formData.executablePath || 'llm-kosh';
+    const args = ['mcp', '--root', root];
+    if (mcpOptions.allowWrite) args.push('--allow-write');
+    if (mcpOptions.allowMutate) args.push('--allow-mutate');
+    if (mcpOptions.allowPrivate) args.push('--allow-private');
+    return JSON.stringify({
+      mcpServers: {
+        'llm-kosh': { command: exe, args }
+      }
+    }, null, 2);
+  };
+
+  const handleCopyConfig = async () => {
+    try {
+      await navigator.clipboard.writeText(getMcpConfigJson());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch(e) {}
+  };
 
   const checkCliHealth = async () => {
     const res = await api.testCli();
@@ -329,6 +398,143 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
         </div>
 
       </div>
+
+      {/* MCP Setup Panel — full width below the grid */}
+      <div className="mt-8 max-w-6xl">
+        <div className="bg-brand-panel rounded-2xl border border-brand-border shadow-sm overflow-hidden">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-5 border-b border-brand-border">
+            <div>
+              <h2 className="text-sm font-bold tracking-widest uppercase text-brand-muted flex items-center gap-2">
+                <Plug size={16} className="text-brand-accent" /> Connect to Claude Desktop (MCP)
+              </h2>
+              <p className="text-xs text-brand-muted mt-1 max-w-lg">
+                The MCP server exposes your local cartridge directly to Claude Desktop, Cursor, and any MCP-compatible AI. 
+                Paste the generated config into <code className="bg-brand-surface px-1 py-0.5 rounded text-brand-accent">%APPDATA%\Claude\claude_desktop_config.json</code> and restart Claude.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {mcpStatus.running ? (
+                <button
+                  onClick={handleStopMcp}
+                  disabled={mcpLoading}
+                  className="flex items-center gap-2 text-xs font-bold bg-brand-danger/10 border border-brand-danger/30 hover:bg-brand-danger/20 text-brand-danger px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Square size={14} fill="currentColor" />
+                  {mcpLoading ? 'Stopping...' : 'Stop MCP Server'}
+                </button>
+              ) : (
+                <button
+                  onClick={handleStartMcp}
+                  disabled={mcpLoading || !config?.cartridgeRoot}
+                  className="flex items-center gap-2 text-xs font-bold bg-brand-success/10 border border-brand-success/30 hover:bg-brand-success/20 text-brand-success px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Play size={14} fill="currentColor" />
+                  {mcpLoading ? 'Starting...' : 'Start MCP Server'}
+                </button>
+              )}
+              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
+                mcpStatus.running 
+                  ? 'bg-brand-success/10 border-brand-success/30 text-brand-success'
+                  : 'bg-brand-surface border-brand-border text-brand-muted'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${ mcpStatus.running ? 'bg-brand-success animate-pulse' : 'bg-brand-muted'}`} />
+                {mcpStatus.running ? `Live · PID ${mcpStatus.pid || '?'}` : 'Offline'}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-0 divide-y xl:divide-y-0 xl:divide-x divide-brand-border">
+
+            {/* Left: Config generator */}
+            <div className="p-6 flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-brand-muted uppercase">Permissions for this session</span>
+              </div>
+              <div className="flex flex-wrap gap-4">
+                {[
+                  { key: 'allowWrite', label: 'Allow Write', desc: 'Let Claude submit memory receipts' },
+                  { key: 'allowMutate', label: 'Allow Mutate', desc: 'Let Claude apply intake proposals directly' },
+                  { key: 'allowPrivate', label: 'Allow Private', desc: 'Include private memories in context packs' },
+                ].map(opt => (
+                  <label key={opt.key} className="flex items-start gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={mcpOptions[opt.key]}
+                      onChange={e => setMcpOptions(prev => ({ ...prev, [opt.key]: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 text-brand-accent bg-brand-surface border-brand-border rounded focus:ring-brand-accent"
+                    />
+                    <div>
+                      <div className="text-sm font-semibold text-brand-text group-hover:text-brand-accent transition-colors">{opt.label}</div>
+                      <div className="text-xs text-brand-muted">{opt.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="relative">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-brand-muted uppercase">Claude Desktop Config JSON</span>
+                  <button
+                    onClick={handleCopyConfig}
+                    className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${
+                      copied
+                        ? 'bg-brand-success/10 border-brand-success/30 text-brand-success'
+                        : 'bg-brand-surface border-brand-border text-brand-muted hover:text-brand-accent hover:border-brand-accent'
+                    }`}
+                  >
+                    {copied ? <ClipboardCheck size={13} /> : <Copy size={13} />}
+                    {copied ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+                <pre className="bg-[#0D0D0D] border border-brand-border rounded-xl p-4 text-xs font-mono text-brand-accent overflow-x-auto whitespace-pre leading-relaxed">
+                  {getMcpConfigJson()}
+                </pre>
+              </div>
+
+              <div className="bg-brand-surface border border-brand-border rounded-xl p-4 text-xs text-brand-muted leading-relaxed">
+                <strong className="text-brand-text block mb-1">📋 Steps to install:</strong>
+                1. Copy the config above.<br />
+                2. Open <code className="text-brand-accent">%APPDATA%\Claude\claude_desktop_config.json</code> in any text editor.<br />
+                3. Merge the <code className="text-brand-accent">mcpServers</code> block into the file (or create the file if it doesn't exist).<br />
+                4. Restart Claude Desktop. The <strong className="text-brand-text">llm-kosh</strong> tool will appear in Claude's tool list.
+              </div>
+            </div>
+
+            {/* Right: Live log stream */}
+            <div className="p-6 flex flex-col">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-brand-muted uppercase flex items-center gap-2">
+                  <TerminalSquare size={14} /> Live MCP Log
+                </span>
+                <button onClick={() => setMcpLogs([])} className="text-xs text-brand-muted hover:text-brand-accent transition-colors">Clear</button>
+              </div>
+              <div className="flex-1 min-h-[280px] bg-[#0D0D0D] border border-brand-border rounded-xl p-4 font-mono text-xs overflow-y-auto">
+                {mcpLogs.length === 0 ? (
+                  <span className="text-brand-muted italic opacity-60">
+                    {mcpStatus.running ? 'Waiting for MCP activity...' : 'Start the MCP server to see live logs here.'}
+                  </span>
+                ) : (
+                  mcpLogs.map((entry, i) => (
+                    <div key={i} className={`mb-1 leading-relaxed ${
+                      entry.type === 'stderr' ? 'text-brand-danger' :
+                      entry.type === 'system' ? 'text-blue-400' :
+                      'text-brand-accent'
+                    }`}>
+                      <span className="text-brand-muted mr-2 opacity-50">[{new Date(entry.timestamp).toLocaleTimeString()}]</span>
+                      {entry.message.trim()}
+                    </div>
+                  ))
+                )}
+                <div ref={mcpLogEndRef} />
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

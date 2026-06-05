@@ -34,6 +34,25 @@ function App() {
     init();
   }, []);
 
+  // Quick Capture mode: opened by global hotkey with ?quick=1
+  // Render only the Intake overlay — no chrome, no sidebar, no onboarding
+  const isQuickMode = new URLSearchParams(window.location.search).get('quick') === '1';
+
+  // Punch the body and root backgrounds transparent so the frameless
+  // Electron window shows through cleanly (index.css sets bg-brand-bg on body)
+  useEffect(() => {
+    if (isQuickMode) {
+      document.documentElement.style.background = 'transparent';
+      document.body.style.background = 'transparent';
+      const root = document.getElementById('root');
+      if (root) root.style.background = 'transparent';
+    }
+  }, [isQuickMode]);
+
+  if (isQuickMode) {
+    return <Intake config={config} setStatusMessage={() => {}} />;
+  }
+
   if (needsOnboarding) {
     return (
       <div className="flex flex-col h-screen overflow-hidden bg-brand-bg text-brand-text font-sans">

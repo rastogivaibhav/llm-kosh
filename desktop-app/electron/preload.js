@@ -49,5 +49,6 @@ contextBridge.exposeInMainWorld('llmKosh', {
   testCli: () => ipcRenderer.invoke('test-cli'),
   getLogs: () => ipcRenderer.invoke('get-logs'),
   runSmokeTest: () => ipcRenderer.invoke('run-smoke-test'),
-  runKoshCommand: (rootPath, command, args) => ipcRenderer.invoke('run-kosh-command', rootPath, command, args)
+  runKoshCommand: (rootPath, command, args) => ipcRenderer.invoke('run-kosh-command', rootPath, command, args),
+  closeQuickCapture: () => ipcRenderer.send('close-quick-capture'),
 });

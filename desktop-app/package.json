@@ -9,7 +9,7 @@
   "private": true,
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on tcp:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev": "concurrently \"vite\" \"wait-on tcp:48512 && cross-env NODE_ENV=development electron .\"",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

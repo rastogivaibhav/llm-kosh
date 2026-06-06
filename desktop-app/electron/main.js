@@ -127,7 +127,7 @@ function createWindow() {
   });
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.loadURL('http://localhost:48512');
     // mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
@@ -173,7 +173,7 @@ function createQuickCaptureWindow() {
   });
 
   if (isDev) {
-    quickCaptureWindow.loadURL('http://localhost:5173/?quick=1');
+    quickCaptureWindow.loadURL('http://localhost:48512/?quick=1');
   } else {
     quickCaptureWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
       query: { quick: '1' }

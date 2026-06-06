@@ -122,6 +122,84 @@
         }
         .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); border-color: #fdba74; }
         .card h3 { color: #111827; margin-bottom: 1rem; font-size: 1.5rem; }
+
+        .download-section {
+            padding: 5rem 5%;
+            text-align: center;
+            max-width: 1000px;
+            margin: 4rem auto 0 auto;
+            border-top: 1px solid var(--border);
+        }
+        .download-section h2 {
+            font-size: 2.5rem;
+            letter-spacing: -1px;
+            margin-bottom: 0.75rem;
+            color: #111827;
+        }
+        .download-subtitle {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            margin-bottom: 3rem;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+        }
+        .download-card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 2.5rem 2rem;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            min-height: 320px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+            transition: all 0.2s;
+        }
+        .download-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+        .primary-download {
+            border-color: #fdba74;
+            background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%);
+        }
+        .primary-download:hover {
+            border-color: var(--accent-start);
+        }
+        .disabled-download {
+            opacity: 0.7;
+        }
+        .os-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        .download-card h3 {
+            font-size: 1.5rem;
+            color: #111827;
+            margin-bottom: 0.5rem;
+        }
+        .download-card p {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+        }
+        .download-btn {
+            width: 100%;
+            text-align: center;
+            padding: 0.85rem 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .download-meta {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
     </style>
 </head>
 <body>
@@ -134,7 +212,8 @@
         <div class="nav-links">
             <a href="docs.html">Documentation</a>
             <a href="docs.html#receipts">Memory Receipts</a>
-            <a href="https://github.com/yourusername/llm-kosh">GitHub</a>
+            <a href="#download">Download</a>
+            <a href="https://github.com/rastogivaibhav/llm-kosh">GitHub</a>
         </div>
     </nav>
 
@@ -152,6 +231,32 @@
             <code>✓ Packed 14 files (12,400 tokens)</code>
             <code>✓ Scanned for secrets (Safe)</code>
             <code>✓ Ready for ChatGPT</code>
+        </div>
+    </section>
+
+    <section id="download" class="download-section">
+        <h2>Download llm-kosh Desktop</h2>
+        <p class="download-subtitle">Get the local desktop app with interactive UI, automatic sidecar daemon, and system tray management.</p>
+        <div class="download-grid">
+            <div class="download-card primary-download">
+                <div class="os-icon">🪟</div>
+                <h3>Windows</h3>
+                <p>Windows 10 / 11 (64-bit)</p>
+                <a href="https://github.com/rastogivaibhav/llm-kosh/releases/download/v0.2.0-desktop/llm-kosh-Setup-0.2.0.exe" id="download-win-btn" class="btn btn-primary download-btn">Download Installer (.exe)</a>
+                <span class="download-meta">v0.2.0 | Standard Installer</span>
+            </div>
+            <div class="download-card disabled-download">
+                <div class="os-icon">🍎</div>
+                <h3>macOS</h3>
+                <p>Apple Silicon / Intel (Coming Soon)</p>
+                <button class="btn btn-secondary download-btn" disabled>Coming Soon</button>
+            </div>
+            <div class="download-card disabled-download">
+                <div class="os-icon">🐧</div>
+                <h3>Linux</h3>
+                <p>Ubuntu / Debian / AppImage (Coming Soon)</p>
+                <button class="btn btn-secondary download-btn" disabled>Coming Soon</button>
+            </div>
         </div>
     </section>
 

@@ -131,6 +131,23 @@ def submit_memory_receipt(receipt_content: str):
     intake_scan(WORKSPACE_PATH)
     return f"Receipt submitted to inbox as {file_id}. Awaiting review/application."
 
+@mcp.tool()
+@require_capability("write")
+def intake_convert_file(file_path: str, project: str = ""):
+    """
+    Converts a local file (e.g. PDF, DOCX, XLSX, PPTX, PNG, WAV) to structured markdown 
+    using the MarkItDown converter and ingests it into the cartridge.
+    """
+    from llm_kosh.engine.intake import intake_file_or_dir
+    try:
+        path = Path(file_path).expanduser().resolve()
+        if not path.exists():
+            return f"Error: File not found at path {file_path}"
+        res = intake_file_or_dir(WORKSPACE_PATH, path, project=project, visibility="private")
+        return f"Ingestion completed: added {res['added']} memory items, failed {res['failed']}"
+    except Exception as e:
+        return f"Failed to ingest and convert file: {e}"
+
 
 # --- MUTATE OPERATIONS ---
 

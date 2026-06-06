@@ -241,3 +241,51 @@ def processor_apply(root: Path, batch_id: str) -> dict:
     rebuild_index(root, force=True)
     append_ledger(root, "processor.batch_applied", {"batch_id": batch_id})
     return {"added": added, "superseded": superseded}
+
+def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: str = "private") -> dict:
+    from llm_kosh.intake.converters import MarkItDownAdapter
+    from llm_kosh.core.memory import add_memory
+    from llm_kosh.engine.search import rebuild_index
+    
+    ensure_root(root)
+    if not path.exists():
+        raise FileNotFoundError(f"Path not found: {path}")
+        
+    adapter = MarkItDownAdapter(root_dir=root)
+    
+    if path.is_file():
+        targets = [path]
+    else:
+        targets = [p for p in path.rglob("*") if p.is_file()]
+        
+    totals = {"added": 0, "failed": 0, "files_seen": len(targets)}
+    
+    for p in targets:
+        try:
+            mem = adapter.convert_to_memory(p)
+            add_memory(
+                root=root,
+                kind=mem.kind,
+                title=mem.title,
+                body=mem.body,
+                project=project,
+                visibility=visibility,
+                extra_meta=mem.extra_meta,
+                reindex=False,
+                quiet=True
+            )
+            totals["added"] += 1
+            print(f"Ingested and converted: {p.name} -> source/intake/")
+        except Exception as e:
+            totals["failed"] += 1
+            if path.is_file():
+                raise e
+            else:
+                print(f"Failed to ingest {p.name}: {e}")
+                
+    if totals["added"] > 0:
+        rebuild_index(root, force=True)
+        append_ledger(root, "intake.markitdown_completed", {"path": str(path), **totals})
+        
+    return totals
+

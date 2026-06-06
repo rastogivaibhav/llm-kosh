@@ -13,7 +13,7 @@ def init_cartridge(root: Path, owner: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
     for rel in [
         "source/identity", "source/preferences", "source/projects", "source/decisions",
-        "source/prompts", "source/notes", "source/generated-files", "source/conversations",
+        "source/prompts", "source/notes", "source/generated-files", "source/intake", "source/conversations",
         "source/receipts", "source/corrections", "source/gaps", "source/suggestions",
         "ledger", "indexes", "exports", "quarantine", "reports", "attachments/imports",
     ]:

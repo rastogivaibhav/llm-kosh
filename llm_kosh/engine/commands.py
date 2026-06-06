@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple, Set
 
 FOLDER_TO_KIND = {
     "projects": "project", "decisions": "decision", "prompts": "prompt",
-    "notes": "note", "generated-files": "file", "conversations": "conversation",
+    "notes": "note", "generated-files": "file", "intake": "file", "conversations": "conversation",
     "receipts": "receipt", "corrections": "correction", "gaps": "gap",
     "suggestions": "suggestion",
 }

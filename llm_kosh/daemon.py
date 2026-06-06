@@ -46,6 +46,7 @@ def _get_enabled_jobs(root: Path) -> list:
     daemon_cfg = pol.get("daemon", {})
     return daemon_cfg.get("enabled_jobs", [
         "scan_intake", 
+        "process_intake_folder",
         "process_safe_receipts", 
         "rebuild_stale_index", 
         "regenerate_memory_map"
@@ -58,6 +59,40 @@ def job_scan_intake(root: Path):
     if new_records:
         log_daemon_event(root, "scan_intake", {"new_records": len(new_records)})
     return True, f"Scanned {len(new_records)} new intake records."
+
+def job_process_intake_folder(root: Path):
+    from llm_kosh.engine.intake import intake_file_or_dir
+    intake_dir = root / "intake"
+    processed_dir = intake_dir / "processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    
+    processed = 0
+    failed = 0
+    for path in intake_dir.glob("*"):
+        if not path.is_file():
+            continue
+        if path.name.startswith(".") or path.name.endswith(".tmp"):
+            continue
+            
+        try:
+            res = intake_file_or_dir(root, path)
+            if res["added"] > 0:
+                dest = processed_dir / path.name
+                if dest.exists():
+                    dest = processed_dir / f"{path.stem}_{int(time.time())}{path.suffix}"
+                shutil.move(str(path), str(dest))
+                processed += 1
+                log_daemon_event(root, "intake_converted", {"file": path.name})
+            else:
+                failed += 1
+                log_daemon_event(root, "intake_conversion_skipped", {"file": path.name})
+        except Exception as e:
+            failed += 1
+            log_daemon_event(root, "intake_conversion_error", {"file": path.name, "error": str(e)})
+            
+    if processed or failed:
+        return True, f"Converted {processed} files, failed {failed}."
+    return True, "No new files in intake/ folder."
 
 def job_process_safe_receipts(root: Path):
     from llm_kosh.engine.receipt_trust import review_receipt, trust_receipt, ensure_review_dir
@@ -133,6 +168,7 @@ def job_quarantine_risky_items(root: Path):
 
 JOBS = {
     "scan_intake": job_scan_intake,
+    "process_intake_folder": job_process_intake_folder,
     "process_safe_receipts": job_process_safe_receipts,
     "rebuild_stale_index": job_rebuild_stale_index,
     "rebuild_vector_if_stale": job_rebuild_vector_if_stale,
@@ -208,6 +244,21 @@ def daemon_start(root: Path, mode: str):
                     if not event.is_directory and event.src_path.endswith(".md"):
                         if "MEMORY_RECEIPT" in Path(event.src_path).name and "processed" not in Path(event.src_path).parts:
                             daemon_once(root)
+
+            class IntakeFolderHandler(FileSystemEventHandler):
+                def on_created(self, event):
+                    self._handle(event)
+                def on_modified(self, event):
+                    self._handle(event)
+                def _handle(self, event):
+                    if event.is_directory:
+                        return
+                    src = Path(event.src_path)
+                    if src.name.startswith(".") or "processed" in src.parts:
+                        return
+                    if src.parent != intake_dir:
+                        return
+                    daemon_run_job(root, "process_intake_folder")
                             
             class ExternalFolderHandler(FileSystemEventHandler):
                 def on_created(self, event):
@@ -231,6 +282,11 @@ def daemon_start(root: Path, mode: str):
             receipts_dir.mkdir(exist_ok=True)
             observer.schedule(ReceiptHandler(), str(receipts_dir), recursive=False)
             print(f"Watchdog active on {receipts_dir}")
+            
+            intake_dir = root / "intake"
+            intake_dir.mkdir(parents=True, exist_ok=True)
+            observer.schedule(IntakeFolderHandler(), str(intake_dir), recursive=False)
+            print(f"Watchdog active on {intake_dir}")
             
             watched_dirs = pol.get("daemon", {}).get("watched_directories", [])
             for d in watched_dirs:

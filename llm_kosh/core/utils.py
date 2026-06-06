@@ -107,7 +107,7 @@ def parse_frontmatter(text: str) -> Tuple[dict, str]:
 def source_dir_for_kind(root: Path, kind: str) -> Path:
     mapping = {
         "project": "projects", "decision": "decisions", "prompt": "prompts",
-        "note": "notes", "file": "generated-files", "conversation": "conversations",
+        "note": "notes", "file": "intake", "conversation": "conversations",
         "receipt": "receipts", "correction": "corrections", "gap": "gaps",
         "suggestion": "suggestions",
     }

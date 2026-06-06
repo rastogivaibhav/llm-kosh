@@ -203,9 +203,11 @@ def main() -> None:
     p = sub.add_parser("mcp-tools", help="Print the MCP tool schema")
     p = sub.add_parser("mcp-test", help="Test the local MCP server stub")
 
-    p = sub.add_parser("intake", help="Manage the intake control plane")
-    p.add_argument("action", choices=["scan", "list", "show", "validate", "review", "apply", "reject", "quarantine", "status"])
-    p.add_argument("id", nargs="?", default="")
+    p = sub.add_parser("intake", help="Manage intake control plane or convert/ingest files")
+    p.add_argument("action", help="Action (scan, list, show, validate, review, apply, reject, quarantine, status) or file/directory path to ingest")
+    p.add_argument("id", nargs="?", default="", help="Intake ID or argument")
+    p.add_argument("--project", default="")
+    p.add_argument("--visibility", default="private", choices=VISIBILITIES)
 
     p = sub.add_parser("processor", help="Declarative intake processors")
     p.add_argument("action", choices=["list", "show", "suggest", "run", "apply", "test"])
@@ -480,7 +482,7 @@ def main() -> None:
     elif args.cmd == "intake":
         from llm_kosh.engine.intake import (
             intake_scan, intake_list, intake_show, intake_validate, intake_review,
-            intake_apply, intake_reject, intake_quarantine, intake_status
+            intake_apply, intake_reject, intake_quarantine, intake_status, intake_file_or_dir
         )
         import json
         if args.action == "scan":
@@ -508,6 +510,13 @@ def main() -> None:
         elif args.action == "quarantine":
             intake_quarantine(root, args.id)
             print("Quarantined.")
+        else:
+            path = Path(args.action).expanduser()
+            if path.exists():
+                res = intake_file_or_dir(root, path, project=args.project, visibility=args.visibility)
+                print(f"Intake completed: added {res['added']}, failed {res['failed']}")
+            else:
+                print(f"Error: Unknown action or path not found: {args.action}")
     elif args.cmd == "processor":
         from llm_kosh.processors.core import get_all_processors, get_processor_by_name, write_proposal
         from llm_kosh.engine.intake import _find_record

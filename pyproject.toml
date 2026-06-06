@@ -44,8 +44,11 @@ server = [
     "uvicorn>=0.23.0",
     "mcp>=1.0.0"
 ]
+ingest = [
+    "markitdown"
+]
 all = [
-    "llm-kosh[watch,semantic,server]"
+    "llm-kosh[watch,semantic,server,ingest]"
 ]
 
 [project.scripts]

@@ -55,4 +55,4 @@ all = [
 llm-kosh = "llm_kosh.cli:main"
 
 [tool.setuptools]
-packages = ["llm_kosh"]
+packages = ["llm_kosh", "llm_kosh.intake"]

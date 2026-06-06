@@ -1,6 +1,9 @@
 # llm-kosh
 
+<!-- mcp-name: io.github.rastogivaibhav/llm-kosh -->
+
 **Give your local LLMs a permanent, air-gapped memory cartridge.**
+
 
 `llm-kosh` is a lightning-fast, SQLite-backed memory system that gives AI assistants (like Claude and Cursor) permanent recall across sessions. Stop copy-pasting the same 15 architectural decisions and database schemas into every new chat. 
 

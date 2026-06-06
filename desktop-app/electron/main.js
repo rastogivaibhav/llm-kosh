@@ -118,6 +118,7 @@ function createWindow() {
     width: 1024,
     height: 768,
     title: 'llm-kosh',
+    icon: path.join(__dirname, '../build/icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

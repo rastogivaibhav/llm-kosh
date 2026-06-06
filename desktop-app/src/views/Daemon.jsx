@@ -137,7 +137,7 @@ export default function Daemon({ config }) {
                     log.type === 'error' || log.type === 'stderr' ? 'text-red-400' :
                     log.type === 'system' ? 'text-blue-400' : 'text-gray-300'
                   }>
-                    {log.message.trim()}
+                    {log.message?.trim() || ''}
                   </span>
                 </div>
               ))

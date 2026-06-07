@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import math
 from collections import Counter
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 # Re-use existing tokenizer (no new dependency)
 from llm_kosh.engine.search import tokenize
@@ -50,17 +51,19 @@ def resonance_profile(
     tf = Counter(tokens)
     total = len(tokens)
 
-    if idf:
-        scored = [(t, (cnt / total) * idf.get(t, 1.0)) for t, cnt in tf.items()]
-    else:
-        scored = [(t, cnt / total) for t, cnt in tf.items()]
+    # Hash-bucket projection: map each token to a deterministic bucket so that
+    # token identity (not just weight distribution) influences the DCT input.
+    # This prevents texts with different tokens but identical tf distributions
+    # from producing the same resonance profile.
+    # Uses hashlib (stable across runs; Python's built-in hash() is randomized).
+    freq_vector = [0.0] * n_components
+    for token, cnt in tf.items():
+        weight = (cnt / total) * idf.get(token, 1.0) if idf else cnt / total
+        digest = int(hashlib.md5(token.encode(), usedforsecurity=False).hexdigest(), 16)
+        bucket = digest % n_components
+        freq_vector[bucket] += weight
 
-    scored.sort(key=lambda x: -x[1])
-    top_weights = [w for _, w in scored[:n_components]]
-    # Pad to exactly n_components
-    top_weights += [0.0] * (n_components - len(top_weights))
-
-    coeffs = _dct(top_weights)
+    coeffs = _dct(freq_vector)
 
     band = n_components // 3
     return {
@@ -97,3 +100,97 @@ def harmonic_match(
             score += w * (dot / (norm_a * norm_b))
 
     return min(1.0, max(0.0, score))
+
+
+from llm_kosh.engine.reasoning.causal_dag import CausalDAG, TemporalFact, CausalEdge
+
+
+class CausalRetrieval:
+    """
+    Resonance-based retrieval over the CausalDAG.
+    Returns (TemporalFact, causal_distance, score) tuples.
+    """
+
+    def __init__(self, dag: CausalDAG, idf: Optional[Dict[str, float]] = None) -> None:
+        self.dag = dag
+        self.idf = idf  # TF-IDF weights for richer resonance (optional)
+        self._build_resonance_index()
+
+    def _build_resonance_index(self) -> None:
+        """Build resonance profiles for all facts currently in the DAG."""
+        self._resonance_index: Dict[str, Dict[str, List[float]]] = {}
+        for fid, fact in self.dag.nodes.items():
+            if fact.resonance_profile:
+                self._resonance_index[fid] = fact.resonance_profile
+            else:
+                self._resonance_index[fid] = resonance_profile(fact.content, self.idf)
+
+    def retrieve(
+        self,
+        query: str,
+        query_time: float,
+        depth: int = 3,
+        top_anchors: int = 5,
+    ) -> List[Tuple[TemporalFact, int, float]]:
+        """
+        Full retrieval pipeline.
+
+        1. Build query resonance profile.
+        2. Harmonic-match against all facts valid at query_time.
+        3. Select top-anchor facts.
+        4. BFS-traverse causal edges up to depth hops.
+        5. Score each candidate.
+
+        Returns list of (fact, causal_distance, score) sorted by score descending.
+        """
+        if query_time <= 0:
+            return []
+
+        query_prof = resonance_profile(query, self.idf)
+        valid_ids = set(self.dag.interval_tree.query_valid_at(query_time))
+
+        if not valid_ids:
+            return []
+
+        # Step 1: harmonic match -> anchor scores
+        anchor_scores: Dict[str, float] = {}
+        for fid in valid_ids:
+            prof = self._resonance_index.get(fid)
+            if prof is None:
+                fact = self.dag.nodes.get(fid)
+                if fact:
+                    prof = resonance_profile(fact.content, self.idf)
+                    self._resonance_index[fid] = prof
+            if prof:
+                anchor_scores[fid] = harmonic_match(query_prof, prof)
+
+        # Step 2: pick top anchors
+        top = sorted(anchor_scores, key=lambda x: -anchor_scores[x])[:top_anchors]
+
+        # Step 3: BFS from anchors
+        visited: Dict[str, int] = {fid: 0 for fid in top}
+        queue = list(top)
+        for _ in range(depth):
+            next_q: List[str] = []
+            for fid in queue:
+                for edge in self.dag.get_outgoing_edges(fid, query_time):
+                    if edge.target_id not in visited and edge.target_id in valid_ids:
+                        visited[edge.target_id] = visited[fid] + 1
+                        next_q.append(edge.target_id)
+            queue = next_q
+            if not queue:
+                break
+
+        # Step 4: score
+        results: List[Tuple[TemporalFact, int, float]] = []
+        for fid, dist in visited.items():
+            fact = self.dag.nodes.get(fid)
+            if not fact:
+                continue
+            resonance = anchor_scores.get(fid, 0.0)
+            causal_bonus = 1.0 / (dist + 1)
+            score = 0.6 * resonance + 0.3 * causal_bonus + 0.1 * fact.confidence
+            results.append((fact, dist, round(score, 4)))
+
+        results.sort(key=lambda x: -x[2])
+        return results

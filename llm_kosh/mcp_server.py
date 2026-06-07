@@ -164,6 +164,153 @@ def apply_intake_proposal(batch_id: str):
         return f"Failed to apply batch: {e}"
 
 
+# --- REASONING TOOLS ---
+
+@mcp.tool()
+def reasoning_ingest(
+    content: str,
+    documented_at: str,
+    valid_from: str,
+    valid_until: str = "",
+    confidence: float = 0.8,
+    causal_edges: str = "[]",
+):
+    """
+    Add a new fact to the Temporal Causal Reasoning Graph.
+    documented_at and valid_from are ISO 8601 datetime strings.
+    causal_edges: JSON array of {"target_id": str, "edge_type": str, "confidence": float}.
+    Returns the new fact_id.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+    from llm_kosh.engine.reasoning import ReasoningEngine
+
+    def _parse(s: str) -> datetime:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+    engine = ReasoningEngine(WORKSPACE_PATH)
+    try:
+        edges = _json.loads(causal_edges) if causal_edges else []
+    except Exception:
+        edges = []
+
+    fact_id = engine.ingest(
+        content=content,
+        documented_at=_parse(documented_at),
+        valid_from=_parse(valid_from),
+        valid_until=_parse(valid_until) if valid_until else None,
+        confidence=confidence,
+        causal_edges=edges,
+    )
+    return _json.dumps({"fact_id": fact_id, "status": "ingested"})
+
+
+@mcp.tool()
+def reasoning_query(
+    query: str,
+    temporal_context: str = "",
+    depth: int = 3,
+):
+    """
+    Query the Temporal Causal Reasoning Graph.
+    Returns a fiber bundle with stability score, escape metadata, and all causal paths.
+    temporal_context: ISO 8601 datetime or Unix timestamp string (omit for now).
+    """
+    import json as _json
+    from llm_kosh.engine.reasoning import ReasoningEngine
+
+    engine = ReasoningEngine(WORKSPACE_PATH)
+    result = engine.query(query, temporal_context=temporal_context or None, depth=depth)
+
+    bundle_out = {}
+    for fid, fiber in result.bundle.fibers.items():
+        if fid == "__deep_instability__":
+            continue
+        bundle_out[fid] = {
+            "fact": {
+                "id": fiber.fact.id if fiber.fact else fid,
+                "content": fiber.fact.content if fiber.fact else "",
+                "valid_from": fiber.fact.valid_from.isoformat() if fiber.fact else "",
+                "valid_until": fiber.fact.valid_until.isoformat() if (fiber.fact and fiber.fact.valid_until) else None,
+                "confidence": fiber.fact.confidence if fiber.fact else 0.0,
+            },
+            "paths": [
+                {
+                    "edge_count": len(p.edges),
+                    "confidence_product": p.confidence_product,
+                    "temporal_consistency": p.temporal_consistency,
+                }
+                for p in fiber.paths
+            ],
+            "degeneracy": fiber.degeneracy,
+            "max_confidence": fiber.max_confidence,
+        }
+
+    return _json.dumps({
+        "anchors": result.anchors,
+        "bundle": bundle_out,
+        "stability": {
+            "score": result.stability.score,
+            "status": result.stability.status,
+            "dimensions": result.stability.dimensions,
+            "escape_triggered": result.escape_triggered,
+            "escape_surfaced": result.escape_surfaced,
+        },
+    })
+
+
+@mcp.tool()
+def reasoning_critique(fact_ids: List[str]):
+    """
+    Run the Lyapunov critic on a specific list of fact IDs.
+    Returns stability score, status, and per-dimension breakdown.
+    """
+    import json as _json
+    from llm_kosh.engine.reasoning import ReasoningEngine
+
+    engine = ReasoningEngine(WORKSPACE_PATH)
+    result = engine.critique(fact_ids)
+    return _json.dumps({
+        "score": result.score,
+        "status": result.status,
+        "dimensions": result.dimensions,
+        "implicated_facts": result.implicated_facts,
+    })
+
+
+@mcp.tool()
+def reasoning_explore(from_fact_id: str, to_fact_id: str, max_hops: int = 5):
+    """
+    Enumerate all causal paths between two known facts.
+    Returns the fiber bundle for that specific pair.
+    """
+    import json as _json
+    from llm_kosh.engine.reasoning import ReasoningEngine
+
+    engine = ReasoningEngine(WORKSPACE_PATH)
+    bundle = engine.explore(from_fact_id, to_fact_id, max_hops=max_hops)
+
+    fibers_out = {}
+    for fid, fiber in bundle.fibers.items():
+        fibers_out[fid] = {
+            "paths": [
+                {
+                    "edges": [
+                        {"source": e.source_id, "target": e.target_id,
+                         "type": e.edge_type.value, "confidence": e.confidence}
+                        for e in p.edges
+                    ],
+                    "confidence_product": p.confidence_product,
+                    "temporal_consistency": p.temporal_consistency,
+                }
+                for p in fiber.paths
+            ],
+            "degeneracy": fiber.degeneracy,
+            "max_confidence": fiber.max_confidence,
+        }
+    return _json.dumps({"fibers": fibers_out})
+
+
 # --- SERVER STARTUP ---
 
 def start_server(root: Path, stdio: bool = True, http: bool = False, port: int = 8000, 

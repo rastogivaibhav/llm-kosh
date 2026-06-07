@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict
 
 from llm_kosh.engine.reasoning.causal_dag import (
-    CausalDAG, CausalEdge, EdgeType, TrajectoryState, _ts
+    CausalDAG, TrajectoryState, _ts
 )
 from llm_kosh.engine.reasoning.fiber_bundle import (
     CausalPath, Fiber, FiberBundle, _enumerate_paths

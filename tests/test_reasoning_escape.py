@@ -55,7 +55,7 @@ def test_escape_low_diversity_adds_paths(sparse_dag):
         implicated_facts=[])
     new_bundle = escape.escape(bundle, diagnosis, trajectory, time.time(), {}, depth=2)
     # fb should now appear in the escaped bundle (via low-confidence edge traversal)
-    assert fb in new_bundle.fibers or fa in new_bundle.fibers
+    assert fb in new_bundle.fibers
 
 
 def test_deep_instability_flag(sparse_dag):

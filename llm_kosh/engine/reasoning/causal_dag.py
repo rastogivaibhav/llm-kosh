@@ -334,3 +334,70 @@ class CausalDAG:
             if edge.target_id == fact_id_a and edge.edge_type == EdgeType.CONTRADICTS:
                 return True
         return False
+
+    def import_existing_memories(self) -> int:
+        """
+        One-time import of existing llm-kosh SQLite memories as TemporalFacts.
+        Skips facts already present (by checking if their 'lkosh:<id>' synthetic ID exists).
+        Returns count of newly imported facts.
+        """
+        try:
+            from llm_kosh.engine.search import get_db, rebuild_index
+        except ImportError:
+            return 0
+
+        rebuild_index(self.root)
+        conn = get_db(self.root)
+        rows = conn.execute(
+            "SELECT id, title, body, created, status, superseded_by FROM documents"
+        ).fetchall()
+        conn.close()
+
+        imported = 0
+        for row in rows:
+            mem_id, title, body, created_str, status, superseded_by = row
+            synthetic_id = f"lkosh:{mem_id}"
+            if synthetic_id in self.nodes:
+                continue
+
+            content = f"{title or ''}\n{body or ''}".strip()
+            try:
+                if created_str:
+                    created_dt = datetime.fromisoformat(
+                        created_str.replace("Z", "+00:00")
+                    )
+                else:
+                    created_dt = datetime.now(timezone.utc)
+            except Exception:
+                created_dt = datetime.now(timezone.utc)
+
+            fact = TemporalFact(
+                id=synthetic_id,
+                content=content,
+                ingested_at=created_dt,
+                documented_at=created_dt,
+                valid_from=created_dt,
+                valid_until=None,
+                confidence=1.0 if status == "active" else 0.5,
+                resonance_profile={},
+                source="import",
+            )
+            self._register_fact(fact)
+
+            if superseded_by:
+                target_synthetic = f"lkosh:{superseded_by}"
+                edge_id = "edge." + uuid.uuid4().hex[:12]
+                edge = CausalEdge(
+                    id=edge_id,
+                    source_id=synthetic_id,
+                    target_id=target_synthetic,
+                    edge_type=EdgeType.SUPERSEDES,
+                    confidence=1.0,
+                    valid_from=created_dt,
+                    valid_until=None,
+                    established_by="import",
+                )
+                self.edges.setdefault(synthetic_id, []).append(edge)
+
+            imported += 1
+        return imported

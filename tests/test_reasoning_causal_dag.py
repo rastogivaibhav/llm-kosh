@@ -143,3 +143,53 @@ def test_causal_dag_rebuild_from_log(cartridge):
     dag2 = CausalDAG(cartridge)
     assert fid in dag2.nodes
     assert dag2.nodes[fid].content == "Persistent fact"
+
+
+# ---------------------------------------------------------------------------
+# Task 3 tests: import_existing_memories
+# ---------------------------------------------------------------------------
+
+from llm_kosh.engine.search import rebuild_index
+from llm_kosh.core.utils import now_iso
+import sqlite3
+
+
+def _write_test_memory(root, title="Test Memory", body="A test fact", kind="note"):
+    """Write a minimal memory markdown file and rebuild the index."""
+    import uuid
+    from pathlib import Path
+    src = root / "source" / "notes"
+    src.mkdir(parents=True, exist_ok=True)
+    mem_id = "test." + uuid.uuid4().hex[:8]
+    content = f"""---
+id: {mem_id}
+type: {kind}
+title: {title}
+project: test-project
+status: active
+visibility: private
+created: {now_iso()}
+---
+
+{body}
+"""
+    (src / f"{mem_id}.md").write_text(content, encoding="utf-8")
+    rebuild_index(root)
+    return mem_id
+
+
+def test_import_existing_memories(cartridge):
+    mem_id = _write_test_memory(cartridge, "Gravity Note", "Objects fall at 9.8 m/s²")
+    dag = CausalDAG(cartridge)
+    dag.import_existing_memories()
+    found = any(f.content and "9.8" in f.content for f in dag.nodes.values())
+    assert found, "Expected imported memory in CausalDAG nodes"
+
+
+def test_import_does_not_duplicate(cartridge):
+    _write_test_memory(cartridge, "Unique Note", "Only once")
+    dag = CausalDAG(cartridge)
+    dag.import_existing_memories()
+    count_before = len(dag.nodes)
+    dag.import_existing_memories()
+    assert len(dag.nodes) == count_before

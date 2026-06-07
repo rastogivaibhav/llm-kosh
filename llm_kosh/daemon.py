@@ -47,6 +47,7 @@ def _get_enabled_jobs(root: Path) -> list:
     return daemon_cfg.get("enabled_jobs", [
         "scan_intake", 
         "process_intake_folder",
+        "poll_watched_folders",
         "process_safe_receipts", 
         "rebuild_stale_index", 
         "regenerate_memory_map"
@@ -166,9 +167,73 @@ def job_backup_snapshot(root: Path):
 def job_quarantine_risky_items(root: Path):
     return True, "No risky items detected."
 
+def job_poll_watched_folders(root: Path):
+    from llm_kosh.engine.intake import intake_file_or_dir
+    pol = load_policy(root)
+    watched_dirs = pol.get("daemon", {}).get("watched_directories", [])
+    if not watched_dirs:
+        return True, "No external folders configured to watch."
+        
+    ledger_path = root / "reports" / "daemon" / "watched_files_ledger.json"
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Load existing ledger
+    ledger = read_json(ledger_path, {})
+    
+    processed = 0
+    failed = 0
+    updated_ledger = {}
+    
+    # Supported file extensions (or just scan all files except skipped ones)
+    skipped_extensions = {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}
+    
+    for d in watched_dirs:
+        dir_path = Path(d)
+        if not dir_path.exists() or not dir_path.is_dir():
+            continue
+            
+        for file_path in dir_path.rglob("*"):
+            if not file_path.is_file():
+                continue
+            if file_path.name.startswith(".") or file_path.suffix.lower() in skipped_extensions:
+                continue
+            # Also skip anything inside the cartridge root itself to avoid loops
+            try:
+                if root in file_path.parents or file_path == root:
+                    continue
+            except Exception:
+                pass
+                
+            try:
+                mtime = file_path.stat().st_mtime
+                key = str(file_path.resolve())
+                
+                # Check if file has changed or is new
+                last_seen_mtime = ledger.get(key)
+                if last_seen_mtime is None or mtime > last_seen_mtime:
+                    res = intake_file_or_dir(root, file_path)
+                    if res.get("added", 0) > 0:
+                        processed += 1
+                        log_daemon_event(root, "watched_file_ingested", {"file": str(file_path)})
+                    else:
+                        failed += 1
+                        log_daemon_event(root, "watched_file_skipped", {"file": str(file_path)})
+                
+                updated_ledger[key] = mtime
+            except Exception as e:
+                failed += 1
+                log_daemon_event(root, "watched_file_error", {"file": str(file_path), "error": str(e)})
+                
+    write_json(ledger_path, updated_ledger)
+    
+    if processed or failed:
+        return True, f"Watched Folders: Ingested {processed} files, failed/skipped {failed}."
+    return True, "Watched Folders: No updates found."
+
 JOBS = {
     "scan_intake": job_scan_intake,
     "process_intake_folder": job_process_intake_folder,
+    "poll_watched_folders": job_poll_watched_folders,
     "process_safe_receipts": job_process_safe_receipts,
     "rebuild_stale_index": job_rebuild_stale_index,
     "rebuild_vector_if_stale": job_rebuild_vector_if_stale,
@@ -266,16 +331,18 @@ def daemon_start(root: Path, mode: str):
                 def on_modified(self, event):
                     self._handle(event)
                 def _handle(self, event):
-                    if not event.is_directory and (event.src_path.endswith(".md") or event.src_path.endswith(".txt")):
-                        src = Path(event.src_path)
-                        if src.name.startswith("."): return
-                        try:
-                            dest = root / "inbox" / f"{src.stem}_{int(time.time())}{src.suffix}"
-                            dest.parent.mkdir(exist_ok=True)
-                            shutil.copy2(src, dest)
-                            daemon_once(root)
-                        except Exception as e:
-                            print(f"Error copying external file {src}: {e}")
+                    if event.is_directory:
+                        return
+                    src = Path(event.src_path)
+                    if src.name.startswith("."): return
+                    if src.suffix.lower() in {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}:
+                        return
+                    try:
+                        from llm_kosh.engine.intake import intake_file_or_dir
+                        intake_file_or_dir(root, src)
+                        daemon_once(root)
+                    except Exception as e:
+                        print(f"Error processing external file {src}: {e}")
                             
             observer = Observer()
             receipts_dir = root / "receipts"

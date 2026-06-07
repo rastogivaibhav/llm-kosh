@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('llmKosh', {
   listWatchedFolders: () => ipcRenderer.invoke('list-watched-folders'),
   addWatchedFolder: () => ipcRenderer.invoke('add-watched-folder'),
   removeWatchedFolder: (path) => ipcRenderer.invoke('remove-watched-folder', path),
+  readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
   testCli: () => ipcRenderer.invoke('test-cli'),
   getLogs: () => ipcRenderer.invoke('get-logs'),
   runSmokeTest: () => ipcRenderer.invoke('run-smoke-test'),

@@ -1,3 +1,4 @@
+LICENSE
 README.md
 pyproject.toml
 llm_kosh/__init__.py
@@ -11,6 +12,8 @@ llm_kosh.egg-info/dependency_links.txt
 llm_kosh.egg-info/entry_points.txt
 llm_kosh.egg-info/requires.txt
 llm_kosh.egg-info/top_level.txt
+llm_kosh/intake/__init__.py
+llm_kosh/intake/converters.py
 tests/test_brute.py
 tests/test_cli_core.py
 tests/test_cli_healing.py

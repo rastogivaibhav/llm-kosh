@@ -1,6 +1,9 @@
 
 [all]
-llm-kosh[semantic,server,watch]
+llm-kosh[ingest,semantic,server,watch]
+
+[ingest]
+markitdown
 
 [semantic]
 sentence-transformers>=2.2.0

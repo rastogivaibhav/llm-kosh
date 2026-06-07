@@ -10,4 +10,5 @@ export const api = {
 
   testCli: async () => window.llmKosh.testCli(),
   closeQuickCapture: () => window.llmKosh.closeQuickCapture?.(),
+  readDirectory: async (dirPath) => window.llmKosh.readDirectory(dirPath),
 };

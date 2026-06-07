@@ -60,3 +60,277 @@ class TrajectoryState:
     steps: List[dict] = field(default_factory=list)
     stability: float = 1.0
     escape_count: int = 0
+
+
+class IntervalTree:
+    """Pure-Python bisect-based interval index for fast valid-at-T queries."""
+
+    def __init__(self) -> None:
+        self._starts: List[tuple] = []          # sorted (valid_from_ts, fact_id)
+        self._entries: Dict[str, tuple] = {}    # fact_id -> (valid_from_ts, valid_until_ts|None)
+
+    def add(self, fact_id: str, valid_from: float, valid_until: Optional[float]) -> None:
+        self._entries[fact_id] = (valid_from, valid_until)
+        bisect.insort(self._starts, (valid_from, fact_id))
+
+    def remove(self, fact_id: str) -> None:
+        if fact_id not in self._entries:
+            return
+        vf, _ = self._entries.pop(fact_id)
+        idx = bisect.bisect_left(self._starts, (vf, fact_id))
+        if idx < len(self._starts) and self._starts[idx] == (vf, fact_id):
+            self._starts.pop(idx)
+
+    def query_valid_at(self, t: float) -> List[str]:
+        """Return all fact IDs whose validity window contains t."""
+        idx = bisect.bisect_right(self._starts, (t, "\xff"))
+        result = []
+        for _, fid in self._starts[:idx]:
+            _, valid_until = self._entries[fid]
+            if valid_until is None or valid_until > t:
+                result.append(fid)
+        return result
+
+
+def _ts(dt_obj: Optional[datetime]) -> Optional[float]:
+    """Convert datetime to Unix timestamp, or None."""
+    return dt_obj.timestamp() if dt_obj is not None else None
+
+
+def _parse_dt(s: str) -> datetime:
+    return datetime.fromisoformat(s)
+
+
+class CausalDAG:
+    """
+    Temporal Causal Hypergraph manager.
+    Owns the reasoning event log. All other components read through this.
+    """
+
+    LOG_DIR = "reasoning"
+    LOG_FILE = "reasoning/events.jsonl"
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.nodes: Dict[str, TemporalFact] = {}
+        self.edges: Dict[str, List[CausalEdge]] = {}   # source_id -> edges
+        self.hyperedges: List[HyperEdge] = []
+        self.interval_tree = IntervalTree()
+        self._ensure_dirs()
+        self._load_from_log()
+
+    # ------------------------------------------------------------------ dirs
+
+    def _ensure_dirs(self) -> None:
+        (self.root / self.LOG_DIR).mkdir(parents=True, exist_ok=True)
+
+    @property
+    def _log_path(self) -> Path:
+        return self.root / self.LOG_FILE
+
+    # ------------------------------------------------------------------ log
+
+    def _append_event(self, event: str, payload: dict) -> None:
+        entry = json.dumps({"event": event, "payload": payload}, default=str)
+        with self._log_path.open("a", encoding="utf-8") as f:
+            f.write(entry + "\n")
+
+    # ------------------------------------------------------------------ load
+
+    def _load_from_log(self) -> None:
+        if not self._log_path.exists():
+            return
+        for line in self._log_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                self._apply_event(entry["event"], entry["payload"])
+            except Exception:
+                pass
+
+    def _apply_event(self, event: str, payload: dict) -> None:
+        if event == "fact.added":
+            fact = TemporalFact(
+                id=payload["id"],
+                content=payload["content"],
+                ingested_at=_parse_dt(payload["ingested_at"]),
+                documented_at=_parse_dt(payload["documented_at"]),
+                valid_from=_parse_dt(payload["valid_from"]),
+                valid_until=_parse_dt(payload["valid_until"]) if payload.get("valid_until") else None,
+                confidence=float(payload["confidence"]),
+                resonance_profile=payload.get("resonance_profile", {}),
+                source=payload.get("source", "user"),
+            )
+            self._register_fact(fact)
+        elif event == "causal_edge.added":
+            edge = CausalEdge(
+                id=payload["id"],
+                source_id=payload["source_id"],
+                target_id=payload["target_id"],
+                edge_type=EdgeType(payload["edge_type"]),
+                confidence=float(payload["confidence"]),
+                valid_from=_parse_dt(payload["valid_from"]),
+                valid_until=_parse_dt(payload["valid_until"]) if payload.get("valid_until") else None,
+                established_by=payload.get("established_by", ""),
+            )
+            self.edges.setdefault(edge.source_id, []).append(edge)
+        elif event == "hyperedge.added":
+            he = HyperEdge(
+                id=payload["id"],
+                source_ids=set(payload["source_ids"]),
+                target_id=payload["target_id"],
+                edge_type=EdgeType(payload["edge_type"]),
+                confidence=float(payload["confidence"]),
+                valid_from=_parse_dt(payload["valid_from"]),
+                valid_until=_parse_dt(payload["valid_until"]) if payload.get("valid_until") else None,
+            )
+            self.hyperedges.append(he)
+        elif event == "validity.updated":
+            fid = payload["fact_id"]
+            if fid in self.nodes:
+                new_until = _parse_dt(payload["new_valid_until"]) if payload.get("new_valid_until") else None
+                old_fact = self.nodes[fid]
+                self.interval_tree.remove(fid)
+                self.nodes[fid] = TemporalFact(
+                    **{**old_fact.__dict__, "valid_until": new_until}
+                )
+                self.interval_tree.add(fid, _ts(self.nodes[fid].valid_from), _ts(new_until))
+
+    def _register_fact(self, fact: TemporalFact) -> None:
+        self.nodes[fact.id] = fact
+        self.interval_tree.add(fact.id, _ts(fact.valid_from), _ts(fact.valid_until))
+
+    # ------------------------------------------------------------------ write API
+
+    def add_fact(
+        self,
+        content: str,
+        ingested_at: datetime,
+        documented_at: datetime,
+        valid_from: datetime,
+        valid_until: Optional[datetime],
+        confidence: float,
+        source: str,
+        resonance_profile: Optional[dict] = None,
+    ) -> str:
+        fact_id = "fact." + uuid.uuid4().hex[:12]
+        fact = TemporalFact(
+            id=fact_id,
+            content=content,
+            ingested_at=ingested_at,
+            documented_at=documented_at,
+            valid_from=valid_from,
+            valid_until=valid_until,
+            confidence=confidence,
+            resonance_profile=resonance_profile or {},
+            source=source,
+        )
+        self._register_fact(fact)
+        self._append_event("fact.added", {
+            "id": fact_id,
+            "content": content,
+            "ingested_at": ingested_at.isoformat(),
+            "documented_at": documented_at.isoformat(),
+            "valid_from": valid_from.isoformat(),
+            "valid_until": valid_until.isoformat() if valid_until else None,
+            "confidence": confidence,
+            "resonance_profile": resonance_profile or {},
+            "source": source,
+        })
+        return fact_id
+
+    def add_edge(
+        self,
+        source_id: str,
+        target_id: str,
+        edge_type: EdgeType,
+        confidence: float,
+        valid_from: datetime,
+        valid_until: Optional[datetime],
+        established_by: str,
+    ) -> str:
+        edge_id = "edge." + uuid.uuid4().hex[:12]
+        edge = CausalEdge(
+            id=edge_id,
+            source_id=source_id,
+            target_id=target_id,
+            edge_type=edge_type,
+            confidence=confidence,
+            valid_from=valid_from,
+            valid_until=valid_until,
+            established_by=established_by,
+        )
+        self.edges.setdefault(source_id, []).append(edge)
+        self._append_event("causal_edge.added", {
+            "id": edge_id,
+            "source_id": source_id,
+            "target_id": target_id,
+            "edge_type": edge_type.value,
+            "confidence": confidence,
+            "valid_from": valid_from.isoformat(),
+            "valid_until": valid_until.isoformat() if valid_until else None,
+            "established_by": established_by,
+        })
+        return edge_id
+
+    def add_hyperedge(
+        self,
+        source_ids: Set[str],
+        target_id: str,
+        edge_type: EdgeType,
+        confidence: float,
+        valid_from: datetime,
+        valid_until: Optional[datetime],
+    ) -> str:
+        he_id = "he." + uuid.uuid4().hex[:12]
+        he = HyperEdge(
+            id=he_id,
+            source_ids=source_ids,
+            target_id=target_id,
+            edge_type=edge_type,
+            confidence=confidence,
+            valid_from=valid_from,
+            valid_until=valid_until,
+        )
+        self.hyperedges.append(he)
+        self._append_event("hyperedge.added", {
+            "id": he_id,
+            "source_ids": list(source_ids),
+            "target_id": target_id,
+            "edge_type": edge_type.value,
+            "confidence": confidence,
+            "valid_from": valid_from.isoformat(),
+            "valid_until": valid_until.isoformat() if valid_until else None,
+        })
+        return he_id
+
+    # ------------------------------------------------------------------ read API
+
+    def get_fact(self, fact_id: str) -> Optional[TemporalFact]:
+        return self.nodes.get(fact_id)
+
+    def get_outgoing_edges(self, fact_id: str, query_time: float) -> List[CausalEdge]:
+        """Return edges active at query_time from fact_id."""
+        result = []
+        for edge in self.edges.get(fact_id, []):
+            vf = _ts(edge.valid_from) or 0.0
+            vu = _ts(edge.valid_until)
+            if vf <= query_time and (vu is None or vu > query_time):
+                result.append(edge)
+        return result
+
+    def get_valid_facts_at(self, t: float) -> List[TemporalFact]:
+        """Return all facts valid at Unix timestamp t."""
+        return [self.nodes[fid] for fid in self.interval_tree.query_valid_at(t) if fid in self.nodes]
+
+    def has_contradiction(self, fact_id_a: str, fact_id_b: str) -> bool:
+        """True if there is an active CONTRADICTS edge between a and b (either direction)."""
+        for edge in self.edges.get(fact_id_a, []):
+            if edge.target_id == fact_id_b and edge.edge_type == EdgeType.CONTRADICTS:
+                return True
+        for edge in self.edges.get(fact_id_b, []):
+            if edge.target_id == fact_id_a and edge.edge_type == EdgeType.CONTRADICTS:
+                return True
+        return False

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from llm_kosh.engine.reasoning.causal_dag import CausalDAG, EdgeType, _ts
+from llm_kosh.engine.reasoning.causal_dag import CausalDAG, _ts
 from llm_kosh.engine.reasoning.fiber_bundle import FiberBundle
 
 

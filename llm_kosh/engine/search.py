@@ -280,6 +280,52 @@ def make_snippet(body: str, query: str, width: int = 200) -> str:
     return f"{prefix}{body[start:end]}{suffix}"
 
 
+def _parse_time(iso_str: str) -> float:
+    if not iso_str:
+        return 0.0
+    try:
+        from datetime import datetime
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        return dt.timestamp()
+    except Exception:
+        return 0.0
+
+def _load_candidate_embeddings(root: Path, item_ids: List[str]) -> dict:
+    vdb = root / VECTOR_DB
+    if not vdb.exists():
+        return {}
+    conn = sqlite3.connect(str(vdb))
+    try:
+        res = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_docs'").fetchone()
+        if res:
+            rows = conn.execute(
+                """SELECT v.id, d.embedding FROM vec_docs d
+                   JOIN vectors v ON v.rowid = d.rowid
+                   WHERE v.id IN (""" + ",".join("?" for _ in item_ids) + ")",
+                item_ids
+            ).fetchall()
+            import struct
+            embeddings = {}
+            for row in rows:
+                k, v = row[0], row[1]
+                if isinstance(v, bytes):
+                    dim = len(v) // 4
+                    embeddings[k] = list(struct.unpack(f"{dim}f", v))
+                else:
+                    embeddings[k] = v
+            return embeddings
+        else:
+            rows = conn.execute(
+                "SELECT id, vec FROM vectors WHERE id IN (" + ",".join("?" for _ in item_ids) + ")",
+                item_ids
+            ).fetchall()
+            import json
+            return {r[0]: json.loads(r[1]) if r[1] else None for r in rows}
+    except Exception:
+        return {}
+    finally:
+        conn.close()
+
 def query_memory(
     root: Path, query: str, limit: int = 10, include_private: bool = True,
     active_only: bool = False, kinds: Optional[List[str]] = None,
@@ -306,8 +352,7 @@ def query_memory(
     where_extra = (" AND " + " AND ".join(clauses)) if clauses else ""
 
     cols = ("d.id,d.kind,d.title,d.project,d.visibility,d.status,d.path,d.body,"
-            "d.supersedes,d.superseded_by,d.source_receipt")
-    # Recall: pull a wider candidate pool from FTS, then re-rank for precision.
+            "d.supersedes,d.superseded_by,d.source_receipt,d.created")
     pool = max(limit * 5, 25)
     fts = _fts_query(query)
     rows: List[tuple] = []
@@ -334,27 +379,88 @@ def query_memory(
                 f"""SELECT {cols} FROM documents d WHERE 1=1 {where_extra} LIMIT ?""",
                 (*params, pool),
             ).fetchall()
+            
+    proj_rows = conn.execute("SELECT project, count(*) FROM documents GROUP BY project").fetchall()
+    project_counts = {row[0].lower() if row[0] else "": row[1] for row in proj_rows}
     conn.close()
 
     items = [{
         "id": r[0], "kind": r[1], "title": r[2], "project": r[3], "visibility": r[4],
         "status": r[5], "path": r[6], "body": r[7], "snippet": make_snippet(r[7] or "", query),
-        "supersedes": r[8], "superseded_by": r[9], "source_receipt": r[10],
+        "supersedes": r[8], "superseded_by": r[9], "source_receipt": r[10], "created": r[11],
+        "t": _parse_time(r[11])
     } for r in rows]
 
     if rerank and items and query.strip():
-        corpus = [tokenize(_doc_text(it)) for it in items]
-        idf = _build_idf(corpus + [tokenize(query)])
-        qv = _vec(tokenize(query), idf)
-        for it, toks in zip(items, corpus):
-            it["score"] = round(_cosine(qv, _vec(toks, idf)), 4)
-        items.sort(key=lambda x: x["score"], reverse=True)
+        meta = _vmeta(root)
+        embeddings = {}
+        qv = None
+        if meta:
+            try:
+                if meta["backend"] == "tfidf":
+                    emb = TfidfEmbedder()
+                    emb.idf = json.loads(meta["idf"] or "{}")
+                    qv = emb.embed(query)
+                else:
+                    emb = get_embedder("st", meta["model"] or "all-MiniLM-L6-v2")
+                    qv = emb.embed(query)
+                embeddings = _load_candidate_embeddings(root, [it["id"] for it in items])
+            except Exception:
+                qv = None
+        
+        if qv is None:
+            corpus = [tokenize(_doc_text(it)) for it in items]
+            idf = _build_idf(corpus + [tokenize(query)])
+            vocab = sorted(idf.keys())
+            
+            def to_dense(sparse_dict, vocabulary):
+                return [float(sparse_dict.get(term, 0.0)) for term in vocabulary]
+                
+            qv_sparse = _vec(tokenize(query), idf)
+            qv = to_dense(qv_sparse, vocab)
+            for it, toks in zip(items, corpus):
+                it["embedding"] = to_dense(_vec(toks, idf), vocab)
+        else:
+            for it in items:
+                val = embeddings.get(it["id"])
+                if isinstance(val, dict):
+                    try:
+                        vocab = sorted(json.loads(meta.get("idf", "{}")).keys())
+                        val = [float(val.get(term, 0.0)) for term in vocab]
+                    except Exception:
+                        val = [0.0] * len(qv)
+                if not val:
+                    val = [0.0] * len(qv)
+                it["embedding"] = val
+
+        from llm_kosh.engine.receipt_dag import ReceiptDAG
+        from llm_kosh.engine.tensor_fusion import retrieve_memory_tensor
+        import time
+        
+        dag = ReceiptDAG(root)
+        task_context = {
+            "beta_sem": 0.7,
+            "beta_proc": 0.3,
+            "alpha": 0.02,
+            "gamma": 0.5,
+            "tau": 0.5
+        }
+        
+        items = retrieve_memory_tensor(
+            query_vector=qv,
+            query_time=time.time(),
+            candidates=items,
+            task_context=task_context,
+            dag=dag,
+            project_counts=project_counts
+        )
     else:
         for it in items:
             it["score"] = None
 
     for it in items:
-        it.pop("body", None)  # keep body out of the returned/printed payload
+        it.pop("body", None)
+        it.pop("embedding", None)
     return items[:limit]
 
 

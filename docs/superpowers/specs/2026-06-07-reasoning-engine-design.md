@@ -400,3 +400,38 @@ Architectural decisions made to preserve the path to larger scale:
 - Critic takes a scope parameter (session scope now, global scope later)
 
 AGI-scale requires: distributed sharded hypergraph, partitioned event streams, federated multi-agent graph, continuous online graph restructuring, hierarchical abstraction layers. Out of scope for this version — but the architecture does not close those doors.
+
+---
+
+## 13. Versioned Roadmap
+
+This spec covers **v0.1 only**. The versioned roadmap:
+
+### v0.1 — Temporal Causal Reasoning Engine (this spec)
+CausalDAG + CausalRetrieval + FiberBundle + LyapunovCritic + EscapeMechanism + MCP tools.
+Better memory and reasoning. Agents stop locking into wrong paths. Temporal provenance preserved. Multiple valid paths returned. Reactive escape from coherence traps.
+
+### v0.2 — Discovery Layer (separate spec)
+Three new components alongside v0.1:
+
+**CuriosityEngine** — proactive exploration. Fires even when reasoning is stable, when a high-value unexplored region of the causal graph exists near the current reasoning context. Mathematically: maximizes expected information gain from unexplored edges, not just minimizes Lyapunov instability. This is the difference between defensive reasoning and generative reasoning.
+
+**AnalogyEngine** — structural correspondence beyond causality. Adds a second class of edges to the hypergraph:
+- `RESEMBLES` — surface-level similarity across domains
+- `MAPS_TO` — formal structural isomorphism
+- `STRUCTURALLY_SIMILAR` — same pattern, different instantiation
+- `INVERSE_OF` — dual/complement relationship
+- `METAPHORICALLY_RELATED` — conceptual bridge, not formal correspondence
+
+Transforms the hypergraph from a causal knowledge graph into a relational knowledge manifold capable of cross-domain bridging. Discovery lives in cross-domain structural correspondences, not within-domain causal chains.
+
+**AbstractionEngine** — pattern-to-abstraction. Detects patterns across many facts and proposes new abstraction nodes:
+```
+{fact_1, ..., fact_n} → pattern detection → abstraction_node_A
+abstraction_node_A → linked via ABSTRACTS_FROM edges to source facts
+abstraction_node_A → linked via PREDICTS edges to testable new facts
+```
+Transforms the system from a reasoning graph into a discovery system.
+
+### v0.3 — Model Formation (separate spec)
+The system proposes, tests, and refines new models from patterns discovered autonomously. Scientific hypothesis generation. The system initiates new understanding rather than retrieving or reasoning over existing understanding.

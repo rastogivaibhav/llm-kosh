@@ -19,6 +19,22 @@ except ImportError:
 
 if build_ext:
     class SafeBuildExt(build_ext):
+        def build_extensions(self):
+            if self.compiler.compiler_type == "mingw32":
+                for ext in self.extensions:
+                    # Strip MSVC-specific flags (flags starting with /)
+                    new_args = []
+                    for arg in ext.extra_compile_args:
+                        if not arg.startswith('/') and not arg.startswith('-std:c++'):
+                            new_args.append(arg)
+                    # Add GCC-compatible standards flag
+                    new_args.append("-std=c++14")
+                    ext.extra_compile_args = new_args
+                    
+                    # Clean up link arguments as well
+                    ext.extra_link_args = [arg for arg in ext.extra_link_args if not arg.startswith('/')]
+            super().build_extensions()
+
         def run(self):
             try:
                 super().run()
@@ -27,7 +43,6 @@ if build_ext:
                 print("WARNING: C++ math extension compilation failed. Falling back to pure Python implementation.")
                 print(f"Reason: {e}")
                 print("="*80 + "\n")
-                # Clear extensions so setuptools continues packaging pure Python files only
                 self.extensions.clear()
 
         def build_extension(self, ext):

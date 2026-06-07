@@ -438,12 +438,14 @@ def query_memory(
         import time
         
         dag = ReceiptDAG(root)
+        cfg = read_json(root / "LLM_KOSH.json", {}) or {}
+        retrieval_weights = cfg.get("retrieval_weights", {})
         task_context = {
-            "beta_sem": 0.7,
-            "beta_proc": 0.3,
-            "alpha": 0.02,
-            "gamma": 0.5,
-            "tau": 0.5
+            "beta_sem": float(retrieval_weights.get("beta_sem", 0.7)),
+            "beta_proc": float(retrieval_weights.get("beta_proc", 0.3)),
+            "alpha": float(retrieval_weights.get("alpha", 0.02)),
+            "gamma": float(retrieval_weights.get("gamma", 0.5)),
+            "tau": float(retrieval_weights.get("tau", 0.5))
         }
         
         items = retrieve_memory_tensor(

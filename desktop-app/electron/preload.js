@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('llmKosh', {
   selectExecutable: () => ipcRenderer.invoke('select-executable'),
   readConfig: () => ipcRenderer.invoke('read-config'),
   writeConfig: (config) => ipcRenderer.invoke('write-config', config),
+  readCartridgeConfig: (rootPath) => ipcRenderer.invoke('read-cartridge-config', rootPath),
+  writeCartridgeConfig: (rootPath, config) => ipcRenderer.invoke('write-cartridge-config', rootPath, config),
   revealInFolder: (path) => ipcRenderer.invoke('reveal-in-folder', path),
   selectOutputFolder: () => ipcRenderer.invoke('select-output-folder'),
   generatePack: (rootPath, options) => ipcRenderer.invoke('generate-pack', rootPath, options),

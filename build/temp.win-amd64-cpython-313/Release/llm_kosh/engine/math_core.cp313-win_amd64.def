@@ -1,0 +1,3 @@
+LIBRARY math_core.cp313-win_amd64.pyd
+EXPORTS
+PyInit_math_core

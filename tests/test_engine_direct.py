@@ -59,6 +59,42 @@ def test_engine_search_and_index(temp_workspace):
     results = query_memory(root, "search", limit=10)
     assert len(results) > 0
 
+def test_engine_retrieval_weights(temp_workspace):
+    from llm_kosh.core.memory import init_cartridge, add_memory
+    from llm_kosh.engine.search import rebuild_index, query_memory
+    from llm_kosh.core.utils import read_json, write_json
+    
+    root = Path(temp_workspace)
+    init_cartridge(root, "user")
+    add_memory(root, "note", "Test Search Note", "Body search content")
+    
+    rebuild_index(root, force=True)
+    
+    # Run query with default weights
+    results_default = query_memory(root, "search", limit=1)
+    assert len(results_default) > 0
+    score_default = results_default[0]["score"]
+    
+    # Inject zero search weights into LLM_KOSH.json
+    cfg_path = root / "LLM_KOSH.json"
+    cfg = read_json(cfg_path, {})
+    cfg["retrieval_weights"] = {
+        "beta_sem": 0.0,
+        "beta_proc": 0.0,
+        "alpha": 0.02,
+        "gamma": 0.5,
+        "tau": 0.5
+    }
+    write_json(cfg_path, cfg)
+    
+    # Run query with modified weights
+    results_decayed = query_memory(root, "search", limit=1)
+    assert len(results_decayed) > 0
+    score_decayed = results_decayed[0]["score"]
+    
+    # Score must be exactly 0.0 because semantic and procedural biases are both zeroed out
+    assert score_decayed == 0.0
+
 def test_engine_compiler(temp_workspace, tmp_path):
     from llm_kosh.core.memory import init_cartridge, add_memory
     from llm_kosh.engine.compiler import pack_context, explain_pack

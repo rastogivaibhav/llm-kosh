@@ -339,6 +339,29 @@ ipcMain.handle('write-config', (event, config) => {
   return writeConfig(config);
 });
 
+ipcMain.handle('read-cartridge-config', (event, rootPath) => {
+  try {
+    const configFilePath = path.join(rootPath, 'LLM_KOSH.json');
+    if (fs.existsSync(configFilePath)) {
+      return JSON.parse(fs.readFileSync(configFilePath, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Failed to read cartridge config', e);
+  }
+  return null;
+});
+
+ipcMain.handle('write-cartridge-config', (event, rootPath, configObj) => {
+  try {
+    const configFilePath = path.join(rootPath, 'LLM_KOSH.json');
+    fs.writeFileSync(configFilePath, JSON.stringify(configObj, null, 2));
+    return configObj;
+  } catch (e) {
+    console.error('Failed to write cartridge config', e);
+    return null;
+  }
+});
+
 ipcMain.handle('reveal-in-folder', (event, pathToReveal) => {
   shell.showItemInFolder(pathToReveal);
 });

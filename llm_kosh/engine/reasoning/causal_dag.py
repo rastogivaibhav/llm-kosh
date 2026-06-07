@@ -109,6 +109,7 @@ class CausalDAG:
 
     LOG_DIR = "reasoning"
     LOG_FILE = "reasoning/events.jsonl"
+    SNAPSHOT_FILE = "reasoning/snapshot.json"
 
     def __init__(self, root: Path) -> None:
         self.root = root
@@ -117,7 +118,8 @@ class CausalDAG:
         self.hyperedges: List[HyperEdge] = []
         self.interval_tree = IntervalTree()
         self._ensure_dirs()
-        self._load_from_log()
+        if not self._try_load_snapshot():
+            self._load_from_log()
 
     # ------------------------------------------------------------------ dirs
 
@@ -149,6 +151,84 @@ class CausalDAG:
                 self._apply_event(entry["event"], entry["payload"])
             except Exception:
                 pass
+
+    def save_snapshot(self) -> None:
+        """Serialize hot layer to snapshot.json for faster startup."""
+        import json as _json
+
+        def _dt_str(dt):
+            return dt.isoformat() if dt is not None else None
+
+        nodes_out = {}
+        for fid, fact in self.nodes.items():
+            nodes_out[fid] = {
+                "id": fact.id, "content": fact.content,
+                "ingested_at": _dt_str(fact.ingested_at),
+                "documented_at": _dt_str(fact.documented_at),
+                "valid_from": _dt_str(fact.valid_from),
+                "valid_until": _dt_str(fact.valid_until),
+                "confidence": fact.confidence,
+                "resonance_profile": fact.resonance_profile,
+                "source": fact.source,
+            }
+
+        edges_out = {}
+        for src_id, edge_list in self.edges.items():
+            edges_out[src_id] = [
+                {
+                    "id": e.id, "source_id": e.source_id, "target_id": e.target_id,
+                    "edge_type": e.edge_type.value, "confidence": e.confidence,
+                    "valid_from": _dt_str(e.valid_from),
+                    "valid_until": _dt_str(e.valid_until),
+                    "established_by": e.established_by,
+                }
+                for e in edge_list
+            ]
+
+        snap = {"nodes": nodes_out, "edges": edges_out}
+        snap_path = self.root / self.SNAPSHOT_FILE
+        snap_path.write_text(
+            _json.dumps(snap, ensure_ascii=False), encoding="utf-8"
+        )
+
+    def _try_load_snapshot(self) -> bool:
+        """Attempt to load hot layer from snapshot. Returns True on success."""
+        snap_path = self.root / self.SNAPSHOT_FILE
+        if not snap_path.exists():
+            return False
+        try:
+            import json as _json
+            snap = _json.loads(snap_path.read_text(encoding="utf-8"))
+            for fid, payload in snap.get("nodes", {}).items():
+                fact = TemporalFact(
+                    id=payload["id"], content=payload["content"],
+                    ingested_at=_parse_dt(payload["ingested_at"]),
+                    documented_at=_parse_dt(payload["documented_at"]),
+                    valid_from=_parse_dt(payload["valid_from"]),
+                    valid_until=_parse_dt(payload["valid_until"]) if payload.get("valid_until") else None,
+                    confidence=float(payload["confidence"]),
+                    resonance_profile=payload.get("resonance_profile", {}),
+                    source=payload.get("source", "user"),
+                )
+                self._register_fact(fact)
+            for src_id, edge_list in snap.get("edges", {}).items():
+                for ep in edge_list:
+                    edge = CausalEdge(
+                        id=ep["id"], source_id=ep["source_id"], target_id=ep["target_id"],
+                        edge_type=EdgeType(ep["edge_type"]), confidence=float(ep["confidence"]),
+                        valid_from=_parse_dt(ep["valid_from"]),
+                        valid_until=_parse_dt(ep["valid_until"]) if ep.get("valid_until") else None,
+                        established_by=ep.get("established_by", ""),
+                    )
+                    self.edges.setdefault(src_id, []).append(edge)
+            return True
+        except Exception:
+            # Corrupt snapshot — fall through to log replay
+            self.nodes.clear()
+            self.edges.clear()
+            self.hyperedges.clear()
+            self.interval_tree = IntervalTree()
+            return False
 
     def _apply_event(self, event: str, payload: dict) -> None:
         if event == "fact.added":

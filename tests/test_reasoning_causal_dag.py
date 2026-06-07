@@ -193,3 +193,31 @@ def test_import_does_not_duplicate(cartridge):
     count_before = len(dag.nodes)
     dag.import_existing_memories()
     assert len(dag.nodes) == count_before
+
+
+# ---------------------------------------------------------------------------
+# Task 11 tests: Snapshot — Cold Storage Tier
+# ---------------------------------------------------------------------------
+
+def test_snapshot_save_and_load(cartridge):
+    dag1 = CausalDAG(cartridge)
+    now = _now()
+    fid = dag1.add_fact("Snapshot fact", now, now, now, None, 0.9, "user")
+    dag1.save_snapshot()
+    snapshot_path = cartridge / "reasoning" / "snapshot.json"
+    assert snapshot_path.exists()
+
+    # Load from snapshot — should not need to replay log
+    dag2 = CausalDAG(cartridge)
+    assert fid in dag2.nodes
+
+def test_corrupt_snapshot_falls_back_to_log(cartridge):
+    dag1 = CausalDAG(cartridge)
+    now = _now()
+    fid = dag1.add_fact("Log-only fact", now, now, now, None, 0.9, "user")
+    dag1.save_snapshot()
+    # Corrupt the snapshot
+    (cartridge / "reasoning" / "snapshot.json").write_text("NOT JSON", encoding="utf-8")
+    # Should still load from log
+    dag2 = CausalDAG(cartridge)
+    assert fid in dag2.nodes

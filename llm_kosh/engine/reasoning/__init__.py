@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from llm_kosh.engine.reasoning.causal_dag import CausalDAG, EdgeType, TrajectoryState
 from llm_kosh.engine.reasoning.causal_retrieval import CausalRetrieval
@@ -92,7 +92,7 @@ class ReasoningEngine:
         trajectory = TrajectoryState(session_id=f"q-{int(query_time)}")
 
         candidates = self._retrieval.retrieve(query, query_time, depth=depth)
-        anchor_ids = [c[0].id for c in candidates[:5]]
+        anchor_ids = self._select_anchors(candidates)
 
         bundle = build_fiber_bundle(
             self.dag, candidates, anchor_ids=anchor_ids,
@@ -157,6 +157,45 @@ class ReasoningEngine:
         return FiberBundle(fibers=fibers)
 
     # ------------------------------------------------------------------ helpers
+
+    def _select_anchors(
+        self,
+        candidates: List[Tuple["TemporalFact", int, float]],
+        score_threshold: float = 0.25,
+    ) -> List[str]:
+        """
+        Select anchor fact IDs from retrieval candidates by score threshold.
+
+        Replaces the former hard top-5 limit. All candidates with score >=
+        score_threshold are included; if none clear the bar, the single
+        highest-scoring candidate is used as a fallback.
+
+        A simple deduplication pass removes anchors whose score is within 0.05
+        of an already-selected anchor AND whose ID shares the same 4-character
+        prefix (same synthetic project shard).
+        """
+        above = [(fact, dist, score) for fact, dist, score in candidates
+                 if score >= score_threshold]
+
+        if not above:
+            if candidates:
+                return [candidates[0][0].id]
+            return []
+
+        selected: List[str] = []
+        selected_scores: List[float] = []
+
+        for fact, _dist, score in above:
+            # Deduplicate: skip if a nearly-identical anchor already selected
+            duplicate = any(
+                fact.id[:4] == sel_id[:4] and abs(score - sel_score) < 0.05
+                for sel_id, sel_score in zip(selected, selected_scores)
+            )
+            if not duplicate:
+                selected.append(fact.id)
+                selected_scores.append(score)
+
+        return selected
 
     @staticmethod
     def _parse_temporal_context(ctx: Optional[str]) -> float:

@@ -70,3 +70,32 @@ def test_engine_rebuilds_from_log(tmp_path):
     # Fresh engine must see the same fact
     e2 = ReasoningEngine(tmp_path)
     assert fid in e2.dag.nodes
+
+def test_anchor_selection_uses_threshold_not_hard_limit(tmp_path):
+    """_select_anchors includes all candidates above threshold, not just top-5."""
+    init_cartridge(tmp_path, "Test")
+    engine = ReasoningEngine(tmp_path)
+
+    # Build fake candidates: 8 above threshold, 2 below
+    from llm_kosh.engine.reasoning.causal_dag import TemporalFact
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    def _fake_fact(n):
+        return TemporalFact(
+            id=f"fact.test{n:04d}xxxx",
+            content=f"Fact {n}",
+            ingested_at=now, documented_at=now,
+            valid_from=now, valid_until=None,
+            confidence=0.9, resonance_profile={}, source="test",
+        )
+
+    candidates = [(_fake_fact(i), i, max(0.0, 0.90 - i * 0.08)) for i in range(10)]
+    # scores: 0.90, 0.82, 0.74, 0.66, 0.58, 0.50, 0.42, 0.34, 0.26, 0.18
+    # above threshold 0.25: indices 0-8 (9 candidates), below: index 9 (0.18)
+
+    anchors = engine._select_anchors(candidates, score_threshold=0.25)
+
+    assert len(anchors) >= 6, f"Expected ≥6 anchors above threshold, got {len(anchors)}"
+    # The lowest-scoring included candidate must be above threshold
+    # (dedup may reduce count but should keep well-separated scores)

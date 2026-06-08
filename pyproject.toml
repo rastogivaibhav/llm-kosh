@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "pybind11>=2.10.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-kosh"
+version = "2.1.0"
+description = "Local-first AI memory cartridge: persistent, cross-session memory for Claude and any LLM via MCP"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [
+    { name = "Vaibhav Rastogi", email = "rastogivaibhav@gmail.com" }
+]
+keywords = ["mcp", "llm", "memory", "claude", "ai", "context", "cartridge", "sqlite", "fts5"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    # LlmKosh relies heavily on the standard library for its core
+]
+
+[project.urls]
+Homepage = "https://rastogivaibhav.github.io/llm-kosh"
+Repository = "https://github.com/rastogivaibhav/llm-kosh"
+"Bug Tracker" = "https://github.com/rastogivaibhav/llm-kosh/issues"
+
+[project.optional-dependencies]
+watch = [
+    "watchdog>=3.0.0"
+]
+semantic = [
+    "sentence-transformers>=2.2.0"
+]
+server = [
+    "fastapi>=0.116.0",
+    "uvicorn>=0.23.0",
+    "mcp>=1.26.0"
+]
+ingest = [
+    "markitdown"
+]
+all = [
+    "llm-kosh[watch,semantic,server,ingest]"
+]
+
+[project.scripts]
+llm-kosh = "llm_kosh.cli:main"
+
+[tool.setuptools.packages]
+find = {}

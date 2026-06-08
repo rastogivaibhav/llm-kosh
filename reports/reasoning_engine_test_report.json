@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-06-08T04:44:33.327750",
+  "timestamp": "2026-06-08T04:45:04.412065",
   "engine": "ReasoningEngine v0.1",
   "baseline_accuracy": 50.0,
   "new_accuracy": 70.0,
@@ -14,7 +14,7 @@
       "stability_score": 0.787,
       "stability_status": "stable",
       "escape_triggered": false,
-      "query_ms": 0.4
+      "query_ms": 0.5
     },
     {
       "id": "tmp_002",
@@ -23,7 +23,7 @@
       "stability_score": 0.636,
       "stability_status": "marginal",
       "escape_triggered": true,
-      "query_ms": 0.5
+      "query_ms": 0.7
     },
     {
       "id": "tmp_003",
@@ -32,7 +32,7 @@
       "stability_score": 0.645,
       "stability_status": "marginal",
       "escape_triggered": true,
-      "query_ms": 0.5
+      "query_ms": 0.6
     },
     {
       "id": "tmp_004",
@@ -41,7 +41,7 @@
       "stability_score": 0.85,
       "stability_status": "stable",
       "escape_triggered": true,
-      "query_ms": 0.5
+      "query_ms": 0.6
     },
     {
       "id": "tmp_005",
@@ -59,7 +59,7 @@
       "stability_score": 0.85,
       "stability_status": "stable",
       "escape_triggered": true,
-      "query_ms": 0.7
+      "query_ms": 1.0
     },
     {
       "id": "tmp_007",
@@ -68,7 +68,7 @@
       "stability_score": 0.85,
       "stability_status": "stable",
       "escape_triggered": true,
-      "query_ms": 0.7
+      "query_ms": 0.8
     },
     {
       "id": "tmp_008",
@@ -77,7 +77,7 @@
       "stability_score": 0.85,
       "stability_status": "stable",
       "escape_triggered": true,
-      "query_ms": 0.8
+      "query_ms": 1.0
     },
     {
       "id": "tmp_009",
@@ -95,7 +95,7 @@
       "stability_score": 0.85,
       "stability_status": "stable",
       "escape_triggered": true,
-      "query_ms": 0.8
+      "query_ms": 1.0
     }
   ]
 }

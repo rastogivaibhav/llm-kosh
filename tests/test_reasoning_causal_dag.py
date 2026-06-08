@@ -1,6 +1,6 @@
 import json
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from llm_kosh.engine.reasoning.causal_dag import (
     EdgeType, TemporalFact, CausalEdge, HyperEdge, TrajectoryState,
     IntervalTree, CausalDAG,
@@ -221,3 +221,31 @@ def test_corrupt_snapshot_falls_back_to_log(cartridge):
     # Should still load from log
     dag2 = CausalDAG(cartridge)
     assert fid in dag2.nodes
+
+
+# ---------------------------------------------------------------------------
+# Task 3 (Path A) tests: Discourse marker auto-edge creation
+# ---------------------------------------------------------------------------
+
+def test_auto_edge_creation_from_discourse(tmp_path):
+    """Discourse markers in new fact auto-create edges from preceding facts."""
+    init_cartridge(tmp_path, "Test")
+    dag = CausalDAG(tmp_path)
+    now = datetime.now(timezone.utc)
+
+    fact_1 = dag.add_fact(
+        "Contract with vendor signed on April 1st.",
+        now, now, now, None, 0.9, "test",
+    )
+    fact_2 = dag.add_fact(
+        "Following the contract, the first delivery arrived on April 15th.",
+        now + timedelta(minutes=1),
+        now + timedelta(minutes=1),
+        now + timedelta(minutes=1),
+        None, 0.9, "test",
+    )
+
+    outgoing = dag.edges.get(fact_1, [])
+    assert any(e.target_id == fact_2 for e in outgoing), (
+        f"Expected auto-edge {fact_1} → {fact_2}; edges: {[(e.source_id, e.target_id) for e in outgoing]}"
+    )

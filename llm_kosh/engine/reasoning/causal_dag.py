@@ -319,7 +319,47 @@ class CausalDAG:
             "resonance_profile": resonance_profile or {},
             "source": source,
         })
+
+        # Auto-detect causal edges from discourse markers in recent facts
+        self._auto_edges_from_discourse(fact_id, content)
+
         return fact_id
+
+    def _auto_edges_from_discourse(self, new_fact_id: str, new_content: str) -> None:
+        """
+        Examine the last 10 facts added before new_fact_id and auto-create
+        causal edges when discourse markers in new_content suggest ordering.
+        Only operates within the last 10 additions to avoid spurious links.
+        """
+        from llm_kosh.engine.reasoning.discourse import should_auto_create_edge
+
+        # Build ordered list of fact IDs (insertion order preserved in Python 3.7+)
+        all_ids = list(self.nodes.keys())
+        new_idx = all_ids.index(new_fact_id)
+        # Look at up to 10 preceding facts
+        preceding = all_ids[max(0, new_idx - 10): new_idx]
+
+        for prev_id in preceding:
+            prev_fact = self.nodes.get(prev_id)
+            if prev_fact is None:
+                continue
+            create, edge_type_str, confidence = should_auto_create_edge(
+                prev_fact.content, new_content
+            )
+            if not create:
+                continue
+            try:
+                self.add_edge(
+                    source_id=prev_id,
+                    target_id=new_fact_id,
+                    edge_type=EdgeType(edge_type_str),
+                    confidence=confidence,
+                    valid_from=prev_fact.valid_from,
+                    valid_until=None,
+                    established_by="discourse",
+                )
+            except Exception:
+                pass  # silently skip duplicate or invalid edges
 
     def add_edge(
         self,

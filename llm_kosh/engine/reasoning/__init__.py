@@ -186,9 +186,14 @@ class ReasoningEngine:
         selected_scores: List[float] = []
 
         for fact, _dist, score in above:
-            # Deduplicate: skip if a nearly-identical anchor already selected
+            # Deduplicate: skip if a nearly-identical anchor already selected.
+            # Use fact.id[5:9] — the first 4 chars of the hash segment after the
+            # "fact." prefix — so facts from the same synthetic shard are deduped
+            # while facts from different shards (distinct hash prefixes) are kept.
+            fact_prefix = fact.id[5:9] if len(fact.id) > 9 else fact.id
             duplicate = any(
-                fact.id[:4] == sel_id[:4] and abs(score - sel_score) < 0.05
+                fact_prefix == (sel_id[5:9] if len(sel_id) > 9 else sel_id)
+                and abs(score - sel_score) < 0.05
                 for sel_id, sel_score in zip(selected, selected_scores)
             )
             if not duplicate:

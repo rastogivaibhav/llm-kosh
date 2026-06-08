@@ -1,11 +1,13 @@
 """
-Tests for HealingAction and QueryParams dataclasses (llm_kosh/engine/reasoning/healer.py).
+Tests for HealingAction, QueryParams, and HealingExecutor
+(llm_kosh/engine/reasoning/healer.py).
 
 Covers:
 - HealingActionType has all 7 enum values
 - HealingAction construction and round-trip serialization
 - QueryParams has correct defaults
 - QueryParams round-trip serialization
+- HealingExecutor.heal() strategy mapping and accumulation
 """
 from __future__ import annotations
 
@@ -14,7 +16,13 @@ import pytest
 from llm_kosh.engine.reasoning.healer import (
     HealingActionType,
     HealingAction,
+    HealingExecutor,
     QueryParams,
+)
+from llm_kosh.engine.reasoning.critique import (
+    TraceWeakness,
+    WeaknessReport,
+    WeaknessType,
 )
 
 
@@ -373,3 +381,274 @@ class TestQueryParamsSerialization:
         assert isinstance(params.force_contradiction_surface, bool)
         assert params.demote_hypothetical is False
         assert isinstance(params.demote_hypothetical, bool)
+
+
+# ---------------------------------------------------------------------------
+# Helper factory
+# ---------------------------------------------------------------------------
+
+def _make_weakness(
+    weakness_type: WeaknessType,
+    severity: float = 0.5,
+    description: str = "",
+) -> TraceWeakness:
+    """Create a minimal TraceWeakness for test purposes."""
+    return TraceWeakness(
+        weakness_type=weakness_type,
+        severity=severity,
+        location="test",
+        description=description,
+        suggested_repair_type="",
+    )
+
+
+def _make_report(*weaknesses: TraceWeakness) -> WeaknessReport:
+    """Wrap weaknesses in a WeaknessReport (all treated as per-trace)."""
+    return WeaknessReport(
+        trace_id="test-trace",
+        per_trace_weaknesses=list(weaknesses),
+        session_weaknesses=[],
+    )
+
+
+# ---------------------------------------------------------------------------
+# HealingExecutor tests
+# ---------------------------------------------------------------------------
+
+
+class TestHealingExecutor:
+    """Tests for HealingExecutor.heal() strategy mapping and accumulation."""
+
+    def setup_method(self):
+        self.executor = HealingExecutor()
+
+    # ------------------------------------------------------------------ #
+    # Empty report → defaults
+    # ------------------------------------------------------------------ #
+
+    def test_empty_report_returns_default_params(self):
+        report = _make_report()
+        result = self.executor.heal(report)
+        defaults = QueryParams()
+        assert result.score_threshold == defaults.score_threshold
+        assert result.depth == defaults.depth
+        assert result.temporal_offset_secs == defaults.temporal_offset_secs
+        assert result.force_contradiction_surface == defaults.force_contradiction_surface
+        assert result.demote_hypothetical == defaults.demote_hypothetical
+        assert result.anchor_prefix_filter == defaults.anchor_prefix_filter
+
+    # ------------------------------------------------------------------ #
+    # Single-weakness strategy mapping
+    # ------------------------------------------------------------------ #
+
+    def test_temporal_consistency_low_increases_temporal_offset(self):
+        weakness = _make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.5)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.temporal_offset_secs == pytest.approx(86_400.0)
+
+    def test_contradiction_unresolved_sets_force_flag(self):
+        weakness = _make_weakness(WeaknessType.CONTRADICTION_UNRESOLVED, severity=0.5)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.force_contradiction_surface is True
+
+    def test_single_path_dominance_increases_depth_by_2(self):
+        weakness = _make_weakness(WeaknessType.SINGLE_PATH_DOMINANCE, severity=0.8)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.depth == 3 + 2  # default 3 + 2
+
+    def test_shallow_depth_increases_depth_by_2(self):
+        weakness = _make_weakness(WeaknessType.SHALLOW_DEPTH, severity=0.6)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.depth == 3 + 2
+
+    def test_low_evidence_diversity_decreases_score_threshold(self):
+        weakness = _make_weakness(WeaknessType.LOW_EVIDENCE_DIVERSITY, severity=0.7)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.score_threshold == pytest.approx(0.25 - 0.05)
+
+    def test_hypothetical_promoted_silently_sets_demote_flag(self):
+        weakness = _make_weakness(WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY, severity=0.8)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.demote_hypothetical is True
+
+    def test_improvement_stall_increases_depth_by_2(self):
+        weakness = _make_weakness(WeaknessType.IMPROVEMENT_STALL, severity=0.7)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.depth == 3 + 2
+
+    def test_learning_stagnation_increases_depth_by_1(self):
+        weakness = _make_weakness(WeaknessType.LEARNING_STAGNATION, severity=0.6)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        assert result.depth == 3 + 1
+
+    # ------------------------------------------------------------------ #
+    # No-action weakness types
+    # ------------------------------------------------------------------ #
+
+    def test_self_repetition_no_change(self):
+        weakness = _make_weakness(WeaknessType.SELF_REPETITION, severity=0.9)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        defaults = QueryParams()
+        assert result.depth == defaults.depth
+        assert result.score_threshold == defaults.score_threshold
+        assert result.temporal_offset_secs == defaults.temporal_offset_secs
+        assert result.force_contradiction_surface == defaults.force_contradiction_surface
+        assert result.demote_hypothetical == defaults.demote_hypothetical
+
+    def test_oscillation_no_change(self):
+        weakness = _make_weakness(WeaknessType.OSCILLATION, severity=0.4)
+        report = _make_report(weakness)
+        result = self.executor.heal(report)
+        defaults = QueryParams()
+        assert result.depth == defaults.depth
+        assert result.score_threshold == defaults.score_threshold
+
+    # ------------------------------------------------------------------ #
+    # Accumulation across multiple weaknesses
+    # ------------------------------------------------------------------ #
+
+    def test_multiple_depth_weaknesses_accumulate(self):
+        """Two SINGLE_PATH_DOMINANCE → depth += 4 (2+2)."""
+        w1 = _make_weakness(WeaknessType.SINGLE_PATH_DOMINANCE, severity=0.9)
+        w2 = _make_weakness(WeaknessType.SHALLOW_DEPTH, severity=0.6)
+        # Use session_weaknesses to get two distinct instances
+        report = WeaknessReport(
+            trace_id="test",
+            per_trace_weaknesses=[w1],
+            session_weaknesses=[w2],
+        )
+        result = self.executor.heal(report)
+        assert result.depth == 3 + 2 + 2  # = 7
+
+    def test_multiple_temporal_weaknesses_accumulate(self):
+        """Two temporal weaknesses → 2 × 86400."""
+        w1 = _make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.9)
+        w2 = _make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.5)
+        report = WeaknessReport(
+            trace_id="test",
+            per_trace_weaknesses=[w1],
+            session_weaknesses=[w2],
+        )
+        result = self.executor.heal(report)
+        assert result.temporal_offset_secs == pytest.approx(2 * 86_400.0)
+
+    def test_mixed_weaknesses_accumulate_independently(self):
+        """temporal + contradiction + depth should each apply independently."""
+        report = _make_report(
+            _make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.8),
+            _make_weakness(WeaknessType.CONTRADICTION_UNRESOLVED, severity=0.7),
+            _make_weakness(WeaknessType.SINGLE_PATH_DOMINANCE, severity=0.6),
+        )
+        result = self.executor.heal(report)
+        assert result.temporal_offset_secs == pytest.approx(86_400.0)
+        assert result.force_contradiction_surface is True
+        assert result.depth == 3 + 2
+
+    # ------------------------------------------------------------------ #
+    # Cap / floor enforcement
+    # ------------------------------------------------------------------ #
+
+    def test_depth_cap_at_8(self):
+        """Four depth+2 actions would give depth=11, but cap is 8."""
+        weaknesses = [
+            _make_weakness(WeaknessType.SINGLE_PATH_DOMINANCE, severity=0.9),
+            _make_weakness(WeaknessType.SHALLOW_DEPTH, severity=0.8),
+            _make_weakness(WeaknessType.IMPROVEMENT_STALL, severity=0.7),
+        ]
+        report = WeaknessReport(
+            trace_id="test",
+            per_trace_weaknesses=weaknesses[:2],
+            session_weaknesses=weaknesses[2:],
+        )
+        result = self.executor.heal(report)
+        assert result.depth == 8  # capped
+
+    def test_score_threshold_floor_at_005(self):
+        """Many lower_anchor_threshold actions should floor at 0.05."""
+        # 5 × (-0.05) from default 0.25 = 0.0, but floor is 0.05
+        weaknesses = [
+            _make_weakness(WeaknessType.LOW_EVIDENCE_DIVERSITY, severity=0.9 - i * 0.1)
+            for i in range(5)
+        ]
+        report = WeaknessReport(
+            trace_id="test",
+            per_trace_weaknesses=weaknesses[:3],
+            session_weaknesses=weaknesses[3:],
+        )
+        result = self.executor.heal(report)
+        assert result.score_threshold == pytest.approx(0.05)
+
+    def test_temporal_offset_cap_at_7_days(self):
+        """Eight temporal expansions capped at 7×86400."""
+        weaknesses = [
+            _make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=1.0 - i * 0.1)
+            for i in range(8)
+        ]
+        report = WeaknessReport(
+            trace_id="test",
+            per_trace_weaknesses=weaknesses[:4],
+            session_weaknesses=weaknesses[4:],
+        )
+        result = self.executor.heal(report)
+        assert result.temporal_offset_secs == pytest.approx(7 * 86_400.0)
+
+    # ------------------------------------------------------------------ #
+    # base_params respected
+    # ------------------------------------------------------------------ #
+
+    def test_base_params_used_as_starting_values(self):
+        """When base_params provided, healing accumulates on top of them."""
+        base = QueryParams(depth=5, score_threshold=0.15, temporal_offset_secs=86_400.0)
+        report = _make_report(
+            _make_weakness(WeaknessType.SINGLE_PATH_DOMINANCE, severity=0.8),
+        )
+        result = self.executor.heal(report, base_params=base)
+        assert result.depth == 5 + 2  # 7
+        assert result.score_threshold == pytest.approx(0.15)  # unchanged
+        assert result.temporal_offset_secs == pytest.approx(86_400.0)  # unchanged
+
+    def test_base_params_not_mutated(self):
+        """heal() must not modify the base_params object."""
+        base = QueryParams(depth=4)
+        report = _make_report(
+            _make_weakness(WeaknessType.SINGLE_PATH_DOMINANCE, severity=0.8),
+        )
+        self.executor.heal(report, base_params=base)
+        assert base.depth == 4  # unchanged
+
+    def test_base_params_depth_cap_respected(self):
+        """Base depth=7 + depth+2 action → capped at 8."""
+        base = QueryParams(depth=7)
+        report = _make_report(
+            _make_weakness(WeaknessType.SINGLE_PATH_DOMINANCE, severity=0.8),
+        )
+        result = self.executor.heal(report, base_params=base)
+        assert result.depth == 8
+
+    def test_base_params_score_threshold_floor_respected(self):
+        """Base threshold=0.07 - 0.05 = 0.02 → floored at 0.05."""
+        base = QueryParams(score_threshold=0.07)
+        report = _make_report(
+            _make_weakness(WeaknessType.LOW_EVIDENCE_DIVERSITY, severity=0.6),
+        )
+        result = self.executor.heal(report, base_params=base)
+        assert result.score_threshold == pytest.approx(0.05)
+
+    def test_base_params_boolean_or_accumulation(self):
+        """Boolean flags already True in base_params stay True."""
+        base = QueryParams(force_contradiction_surface=True)
+        # No CONTRADICTION_UNRESOLVED weakness this time
+        report = _make_report(
+            _make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.5),
+        )
+        result = self.executor.heal(report, base_params=base)
+        assert result.force_contradiction_surface is True  # preserved from base

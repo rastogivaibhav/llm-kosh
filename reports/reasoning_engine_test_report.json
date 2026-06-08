@@ -1,83 +1,83 @@
 {
-  "timestamp": "2026-06-08T04:45:04.412065",
+  "timestamp": "2026-06-08T05:26:28.559994",
   "engine": "ReasoningEngine v0.1",
   "baseline_accuracy": 50.0,
-  "new_accuracy": 70.0,
-  "passing": 7,
+  "new_accuracy": 100.0,
+  "passing": 10,
   "total": 10,
-  "target_achieved": false,
+  "target_achieved": true,
   "results": [
     {
       "id": "tmp_001",
-      "f1": 0.485,
+      "f1": 0.545,
       "status": "PASS",
-      "stability_score": 0.787,
+      "stability_score": 0.85,
+      "stability_status": "stable",
+      "escape_triggered": false,
+      "query_ms": 0.6
+    },
+    {
+      "id": "tmp_002",
+      "f1": 0.667,
+      "status": "PASS",
+      "stability_score": 0.85,
+      "stability_status": "stable",
+      "escape_triggered": false,
+      "query_ms": 0.6
+    },
+    {
+      "id": "tmp_003",
+      "f1": 0.667,
+      "status": "PASS",
+      "stability_score": 0.85,
+      "stability_status": "stable",
+      "escape_triggered": false,
+      "query_ms": 0.7
+    },
+    {
+      "id": "tmp_004",
+      "f1": 0.333,
+      "status": "PASS",
+      "stability_score": 0.767,
       "stability_status": "stable",
       "escape_triggered": false,
       "query_ms": 0.5
     },
     {
-      "id": "tmp_002",
-      "f1": 0.519,
-      "status": "PASS",
-      "stability_score": 0.636,
-      "stability_status": "marginal",
-      "escape_triggered": true,
-      "query_ms": 0.7
-    },
-    {
-      "id": "tmp_003",
-      "f1": 0.583,
-      "status": "PASS",
-      "stability_score": 0.645,
-      "stability_status": "marginal",
-      "escape_triggered": true,
-      "query_ms": 0.6
-    },
-    {
-      "id": "tmp_004",
-      "f1": 0.0,
-      "status": "FAIL",
-      "stability_score": 0.85,
-      "stability_status": "stable",
-      "escape_triggered": true,
-      "query_ms": 0.6
-    },
-    {
       "id": "tmp_005",
-      "f1": 0.0,
-      "status": "FAIL",
-      "stability_score": 0.85,
+      "f1": 0.667,
+      "status": "PASS",
+      "stability_score": 0.79,
       "stability_status": "stable",
-      "escape_triggered": true,
-      "query_ms": 0.7
+      "escape_triggered": false,
+      "query_ms": 3.5
     },
     {
       "id": "tmp_006",
-      "f1": 0.571,
+      "f1": 0.667,
       "status": "PASS",
-      "stability_score": 0.85,
+      "stability_score": 0.83,
       "stability_status": "stable",
-      "escape_triggered": true,
-      "query_ms": 1.0
+      "escape_triggered": false,
+      "query_ms": 2.9
     },
     {
       "id": "tmp_007",
-      "f1": 0.19,
-      "status": "FAIL",
-      "stability_score": 0.85,
+      "f1": 0.476,
+      "status": "PASS",
+      "stability_score": 0.738,
       "stability_status": "stable",
-      "escape_triggered": true,
-      "query_ms": 0.8
+      "escape_triggered": false,
+      "query_ms": 3.5
     },
     {
       "id": "tmp_008",
-      "f1": 0.5,
+      "f1": 0.583,
       "status": "PASS",
-      "stability_score": 0.85,
+      "stability_score": 0.718,
       "stability_status": "stable",
-      "escape_triggered": true,
-      "query_ms": 1.0
+      "escape_triggered": false,
+      "query_ms": 3.2
     },
     {
       "id": "tmp_009",
@@ -85,17 +85,17 @@
       "status": "PASS",
       "stability_score": 0.85,
       "stability_status": "stable",
-      "escape_triggered": true,
-      "query_ms": 0.8
+      "escape_triggered": false,
+      "query_ms": 0.9
     },
     {
       "id": "tmp_010",
       "f1": 0.444,
       "status": "PASS",
-      "stability_score": 0.85,
+      "stability_score": 0.827,
       "stability_status": "stable",
-      "escape_triggered": true,
-      "query_ms": 1.0
+      "escape_triggered": false,
+      "query_ms": 2.1
     }
   ]
 }

@@ -84,4 +84,23 @@ inline float temporal_vector_decay(const std::vector<float>& q, const std::vecto
     return static_cast<float>(std::exp(-alpha * std::sqrt(sum_sq)));
 }
 
+// Computes Mahalanobis distance: sqrt(sum w_i * (a_i - b_i)^2)
+inline float mahalanobis_distance(const std::vector<float>& a, const std::vector<float>& b, const std::vector<float>& w) {
+    if (a.size() != b.size() || a.size() != w.size()) {
+        throw std::invalid_argument("Vector and weight sizes must match");
+    }
+    double sum_sq = 0.0;
+    const size_t n = a.size();
+    const float* a_ptr = a.data();
+    const float* b_ptr = b.data();
+    const float* w_ptr = w.data();
+
+    #pragma omp simd reduction(+:sum_sq)
+    for (size_t i = 0; i < n; ++i) {
+        float diff = a_ptr[i] - b_ptr[i];
+        sum_sq += w_ptr[i] * diff * diff;
+    }
+    return static_cast<float>(std::sqrt(sum_sq));
+}
+
 } // namespace llm_kosh

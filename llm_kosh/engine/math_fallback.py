@@ -42,3 +42,12 @@ def temporal_vector_decay(q: List[float], m: List[float], w: List[float], alpha:
         diff = qi - mi
         sum_sq += wi * diff * diff
     return math.exp(-alpha * math.sqrt(sum_sq))
+
+def mahalanobis_distance(a: List[float], b: List[float], w: List[float]) -> float:
+    if len(a) != len(b) or len(a) != len(w):
+        raise ValueError("Vector and weight sizes must match")
+    sum_sq = 0.0
+    for ai, bi, wi in zip(a, b, w):
+        diff = ai - bi
+        sum_sq += wi * diff * diff
+    return math.sqrt(sum_sq)

@@ -100,7 +100,13 @@ def parse_frontmatter(text: str) -> Tuple[dict, str]:
         if not line.strip() or line.strip().startswith("#") or ":" not in line:
             continue
         k, v = line.split(":", 1)
-        meta[k.strip()] = v.strip().strip('"')
+        v = v.strip()
+        if v.startswith('"') and v.endswith('"'):
+            try:
+                v = json.loads(v)
+            except Exception:
+                v = v.strip('"')
+        meta[k.strip()] = v
     return meta, body
 
 

@@ -70,7 +70,8 @@ def rebuild_index(root: Path, force: bool = False) -> bool:
         CREATE TABLE documents (
           id TEXT PRIMARY KEY, kind TEXT, title TEXT, project TEXT,
           visibility TEXT, status TEXT, path TEXT, body TEXT, hash TEXT,
-          created TEXT, supersedes TEXT, superseded_by TEXT, source_receipt TEXT
+          created TEXT, supersedes TEXT, superseded_by TEXT, source_receipt TEXT,
+          M_sal REAL
         );
         CREATE INDEX IF NOT EXISTS idx_docs_project ON documents(project);
         CREATE INDEX IF NOT EXISTS idx_docs_kind ON documents(kind);
@@ -90,12 +91,13 @@ def rebuild_index(root: Path, force: bool = False) -> bool:
             doc_id = f"{doc_id}#dup-{uuid.uuid4().hex[:6]}"
         seen_index_ids.add(doc_id)
         conn.execute(
-            "INSERT INTO documents VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO documents VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (doc_id, meta.get("type") or "note", meta.get("title") or path.stem,
              meta.get("project", ""), meta.get("visibility", "private"),
              meta.get("status", "active"), str(path.relative_to(root)), body,
              sha256_file(path), meta.get("created", ""), meta.get("supersedes", ""),
-             meta.get("superseded_by", ""), meta.get("source_receipt", "")),
+             meta.get("superseded_by", ""), meta.get("source_receipt", ""),
+             float(meta.get("M_sal") or meta.get("salience") or 1.0)),
         )
         conn.execute(
             "INSERT INTO documents_fts(rowid, id, title, project, kind, body) "
@@ -290,39 +292,70 @@ def _parse_time(iso_str: str) -> float:
     except Exception:
         return 0.0
 
-def _load_candidate_embeddings(root: Path, item_ids: List[str]) -> dict:
+def extract_procedural_features(text: str) -> str:
+    if not text:
+        return "procedural"
+    code_blocks = re.findall(r"```[a-zA-Z0-9]*\n(.*?)```", text, re.DOTALL)
+    code_text = " ".join(code_blocks)
+    funcs = re.findall(r"(?:def|function|class|import|const|let|var)\s+([a-zA-Z0-9_]+)", text)
+    assignments = re.findall(r"([a-zA-Z0-9_]+)\s*=", text)
+    features = funcs + assignments
+    feature_text = " ".join(features)
+    combined = (code_text + " " + feature_text).strip()
+    return combined if combined else "procedural"
+
+def _load_candidate_embeddings(root: Path, item_ids: List[str]) -> Tuple[dict, dict]:
     vdb = root / VECTOR_DB
     if not vdb.exists():
-        return {}
+        return {}, {}
     conn = sqlite3.connect(str(vdb))
     try:
-        res = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_docs'").fetchone()
+        res = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_docs_sem'").fetchone()
         if res:
-            rows = conn.execute(
-                """SELECT v.id, d.embedding FROM vec_docs d
+            rows_sem = conn.execute(
+                """SELECT v.id, d.embedding FROM vec_docs_sem d
+                   JOIN vectors v ON v.rowid = d.rowid
+                   WHERE v.id IN (""" + ",".join("?" for _ in item_ids) + ")",
+                item_ids
+            ).fetchall()
+            rows_proc = conn.execute(
+                """SELECT v.id, d.embedding FROM vec_docs_proc d
                    JOIN vectors v ON v.rowid = d.rowid
                    WHERE v.id IN (""" + ",".join("?" for _ in item_ids) + ")",
                 item_ids
             ).fetchall()
             import struct
-            embeddings = {}
-            for row in rows:
+            embeddings_sem = {}
+            embeddings_proc = {}
+            for row in rows_sem:
                 k, v = row[0], row[1]
                 if isinstance(v, bytes):
                     dim = len(v) // 4
-                    embeddings[k] = list(struct.unpack(f"{dim}f", v))
+                    embeddings_sem[k] = list(struct.unpack(f"{dim}f", v))
                 else:
-                    embeddings[k] = v
-            return embeddings
+                    embeddings_sem[k] = v
+            for row in rows_proc:
+                k, v = row[0], row[1]
+                if isinstance(v, bytes):
+                    dim = len(v) // 4
+                    embeddings_proc[k] = list(struct.unpack(f"{dim}f", v))
+                else:
+                    embeddings_proc[k] = v
+            return embeddings_sem, embeddings_proc
         else:
             rows = conn.execute(
-                "SELECT id, vec FROM vectors WHERE id IN (" + ",".join("?" for _ in item_ids) + ")",
+                "SELECT id, vec_sem, vec_proc FROM vectors WHERE id IN (" + ",".join("?" for _ in item_ids) + ")",
                 item_ids
             ).fetchall()
             import json
-            return {r[0]: json.loads(r[1]) if r[1] else None for r in rows}
+            embeddings_sem = {}
+            embeddings_proc = {}
+            for r in rows:
+                embeddings_sem[r[0]] = json.loads(r[1]) if r[1] else None
+                embeddings_proc[r[0]] = json.loads(r[2]) if r[2] else None
+            return embeddings_sem, embeddings_proc
     except Exception:
-        return {}
+        return {}, {}
     finally:
         conn.close()
 
@@ -352,7 +385,7 @@ def query_memory(
     where_extra = (" AND " + " AND ".join(clauses)) if clauses else ""
 
     cols = ("d.id,d.kind,d.title,d.project,d.visibility,d.status,d.path,d.body,"
-            "d.supersedes,d.superseded_by,d.source_receipt,d.created")
+            "d.supersedes,d.superseded_by,d.source_receipt,d.created,d.M_sal")
     pool = max(limit * 5, 25)
     fts = _fts_query(query)
     rows: List[tuple] = []
@@ -388,50 +421,73 @@ def query_memory(
         "id": r[0], "kind": r[1], "title": r[2], "project": r[3], "visibility": r[4],
         "status": r[5], "path": r[6], "body": r[7], "snippet": make_snippet(r[7] or "", query),
         "supersedes": r[8], "superseded_by": r[9], "source_receipt": r[10], "created": r[11],
-        "t": _parse_time(r[11])
+        "t": _parse_time(r[11]), "M_sal": float(r[12] if r[12] is not None else 1.0)
     } for r in rows]
 
     if rerank and items and query.strip():
         meta = _vmeta(root)
-        embeddings = {}
-        qv = None
+        embeddings_sem = {}
+        embeddings_proc = {}
+        qv_sem = None
+        qv_proc = None
         if meta:
             try:
-                if meta["backend"] == "tfidf":
+                is_tfidf = (meta["backend"] == "tfidf") or (meta["backend"].startswith("plugin:") and not meta["model"])
+                if is_tfidf:
                     emb = TfidfEmbedder()
                     emb.idf = json.loads(meta["idf"] or "{}")
-                    qv = emb.embed(query)
+                    qv_sem_sparse = emb.embed(query)
+                    qv_proc_sparse = emb.embed(extract_procedural_features(query))
+                    vocab = sorted(emb.idf.keys())
+                    qv_sem = [float(qv_sem_sparse.get(term, 0.0)) for term in vocab]
+                    qv_proc = [float(qv_proc_sparse.get(term, 0.0)) for term in vocab]
                 else:
                     emb = get_embedder("st", meta["model"] or "all-MiniLM-L6-v2")
-                    qv = emb.embed(query)
-                embeddings = _load_candidate_embeddings(root, [it["id"] for it in items])
+                    qv_sem_sparse = emb.embed(query)
+                    qv_proc_sparse = emb.embed(extract_procedural_features(query))
+                    qv_sem = [float(qv_sem_sparse[str(i)]) for i in range(len(qv_sem_sparse))]
+                    qv_proc = [float(qv_proc_sparse[str(i)]) for i in range(len(qv_proc_sparse))]
+                embeddings_sem, embeddings_proc = _load_candidate_embeddings(root, [it["id"] for it in items])
             except Exception:
-                qv = None
+                qv_sem = None
+                qv_proc = None
         
-        if qv is None:
-            corpus = [tokenize(_doc_text(it)) for it in items]
-            idf = _build_idf(corpus + [tokenize(query)])
+        if qv_sem is None or qv_proc is None:
+            corpus_sem = [tokenize(_doc_text(it)) for it in items]
+            corpus_proc = [tokenize(extract_procedural_features(it["body"])) for it in items]
+            idf = _build_idf(corpus_sem + corpus_proc + [tokenize(query)])
             vocab = sorted(idf.keys())
             
             def to_dense(sparse_dict, vocabulary):
                 return [float(sparse_dict.get(term, 0.0)) for term in vocabulary]
                 
-            qv_sparse = _vec(tokenize(query), idf)
-            qv = to_dense(qv_sparse, vocab)
-            for it, toks in zip(items, corpus):
-                it["embedding"] = to_dense(_vec(toks, idf), vocab)
+            qv_sem = to_dense(_vec(tokenize(query), idf), vocab)
+            qv_proc = to_dense(_vec(tokenize(extract_procedural_features(query)), idf), vocab)
+            for it, toks_sem, toks_proc in zip(items, corpus_sem, corpus_proc):
+                it["embedding_sem"] = to_dense(_vec(toks_sem, idf), vocab)
+                it["embedding_proc"] = to_dense(_vec(toks_proc, idf), vocab)
         else:
             for it in items:
-                val = embeddings.get(it["id"])
-                if isinstance(val, dict):
+                val_sem = embeddings_sem.get(it["id"])
+                val_proc = embeddings_proc.get(it["id"])
+                if isinstance(val_sem, dict):
                     try:
                         vocab = sorted(json.loads(meta.get("idf", "{}")).keys())
-                        val = [float(val.get(term, 0.0)) for term in vocab]
+                        val_sem = [float(val_sem.get(term, 0.0)) for term in vocab]
                     except Exception:
-                        val = [0.0] * len(qv)
-                if not val:
-                    val = [0.0] * len(qv)
-                it["embedding"] = val
+                        val_sem = [0.0] * len(qv_sem)
+                if isinstance(val_proc, dict):
+                    try:
+                        vocab = sorted(json.loads(meta.get("idf", "{}")).keys())
+                        val_proc = [float(val_proc.get(term, 0.0)) for term in vocab]
+                    except Exception:
+                        val_proc = [0.0] * len(qv_proc)
+                if not val_sem:
+                    val_sem = [0.0] * len(qv_sem)
+                if not val_proc:
+                    val_proc = [0.0] * len(qv_proc)
+                it["embedding_sem"] = val_sem
+                it["embedding_proc"] = val_proc
 
         from llm_kosh.engine.receipt_dag import ReceiptDAG
         from llm_kosh.engine.tensor_fusion import retrieve_memory_tensor
@@ -445,11 +501,16 @@ def query_memory(
             "beta_proc": float(retrieval_weights.get("beta_proc", 0.3)),
             "alpha": float(retrieval_weights.get("alpha", 0.02)),
             "gamma": float(retrieval_weights.get("gamma", 0.5)),
-            "tau": float(retrieval_weights.get("tau", 0.5))
+            "tau": float(retrieval_weights.get("tau", 0.5)),
+            "radiance_threshold": float(retrieval_weights.get("radiance_threshold", 0.1)),
+            "radiance_window": float(retrieval_weights.get("radiance_window", 60.0)),
+            "radiance_fraction": float(retrieval_weights.get("radiance_fraction", 0.3)),
+            "sequence_coherence_bonus": float(retrieval_weights.get("sequence_coherence_bonus", 0.2))
         }
         
         items = retrieve_memory_tensor(
-            query_vector=qv,
+            query_vector_sem=qv_sem,
+            query_vector_proc=qv_proc,
             query_time=time.time(),
             candidates=items,
             task_context=task_context,
@@ -462,8 +523,28 @@ def query_memory(
 
     for it in items:
         it.pop("body", None)
-        it.pop("embedding", None)
-    return items[:limit]
+        it.pop("embedding_sem", None)
+        it.pop("embedding_proc", None)
+        
+    final_results = items[:limit]
+    if final_results:
+        import time
+        valid_times = [(r, float(r.get("t", 0.0) or r.get("created_t", 0.0) or 0.0)) for r in final_results]
+        valid_times = [x for x in valid_times if x[1] > 0]
+        if len(valid_times) > 1:
+            valid_times.sort(key=lambda x: x[1])  # Oldest to newest
+            
+            def format_time_diff(t_val):
+                diff = time.time() - t_val
+                if diff < 60: return f"{int(diff)} seconds ago"
+                if diff < 3600: return f"{int(diff/60)} minutes ago"
+                if diff < 86400: return f"{int(diff/3600)} hours ago"
+                return f"{int(diff/86400)} days ago"
+                
+            timeline_str = " -> ".join([f"'{x[0]['title']}' ({format_time_diff(x[1])})" for x in valid_times])
+            final_results[0]["snippet"] = f"[CHRONOLOGICAL TIMELINE: {timeline_str}] " + final_results[0].get("snippet", "")
+            
+    return final_results
 
 
 def print_query_results(results: List[dict]) -> None:
@@ -484,8 +565,25 @@ def print_query_results(results: List[dict]) -> None:
 def read_doc(root: Path, rel_path: str) -> str:
     return (root / rel_path).read_text(encoding="utf-8", errors="replace")
 
-
-
+def _any_cosine(a, b) -> float:
+    if isinstance(a, dict) and isinstance(b, dict):
+        return _cosine(a, b)
+    if isinstance(a, dict):
+        try:
+            a = [float(a[str(i)]) for i in range(len(a))]
+        except KeyError:
+            keys = sorted(a.keys())
+            a = [float(a[k]) for k in keys]
+    if isinstance(b, dict):
+        try:
+            b = [float(b[str(i)]) for i in range(len(b))]
+        except KeyError:
+            keys = sorted(b.keys())
+            b = [float(b[k]) for k in keys]
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    return dot / (na * nb) if na and nb else 0.0
 
 def build_vector_index(root: Path, backend: str = "tfidf", model: str = "all-MiniLM-L6-v2") -> dict:
     ensure_root(root)
@@ -493,14 +591,56 @@ def build_vector_index(root: Path, backend: str = "tfidf", model: str = "all-Min
     conn = get_db(root)
     rows = conn.execute("SELECT id,kind,status,title,body FROM documents").fetchall()
     conn.close()
-    texts = [_doc_text({"title": r[3], "body": r[4]}) for r in rows]
+    
+    texts_sem = [_doc_text({"title": r[3], "body": r[4]}) for r in rows]
+    texts_proc = [extract_procedural_features(r[4]) for r in rows]
+    
     emb = get_embedder(backend, model)
     idf_json = ""
     if isinstance(emb, TfidfEmbedder):
-        emb.fit(texts)
+        emb.fit(texts_sem + texts_proc)
         idf_json = json.dumps(emb.idf)
-    vecs = emb.embed_many(texts) if rows else []
-    dim = len(emb.idf) if isinstance(emb, TfidfEmbedder) else (len(vecs[0]) if vecs else 0)
+        
+    vecs_sem = emb.embed_many(texts_sem) if rows else []
+    vecs_proc = emb.embed_many(texts_proc) if rows else []
+    dim = len(emb.idf) if isinstance(emb, TfidfEmbedder) else (len(vecs_sem[0]) if vecs_sem else 0)
+
+    from llm_kosh.core.plugins import PluginManager
+    vs_plugin = PluginManager.get_vector_store_plugin(root)
+    if vs_plugin:
+        vdb = root / VECTOR_DB
+        if vdb.exists():
+            vdb.unlink()
+        vc = sqlite3.connect(str(vdb))
+        vc.executescript(
+            "CREATE TABLE vmeta(backend TEXT, model TEXT, dim INT, idf TEXT, built_at TEXT, count INT);"
+        )
+        vc.execute("INSERT INTO vmeta VALUES (?,?,?,?,?,?)",
+                   (f"plugin:{type(vs_plugin).__name__}", getattr(emb, "model_name", ""),
+                    dim, idf_json, now_iso(), len(rows)))
+        vc.commit()
+        vc.close()
+        
+        ids = [r[0] for r in rows]
+        kinds = [r[1] for r in rows]
+        statuses = [r[2] for r in rows]
+        
+        def to_list(v):
+            if isinstance(v, dict):
+                try:
+                    return [float(v[str(i)]) for i in range(len(v))]
+                except KeyError:
+                    keys = sorted(v.keys())
+                    return [float(v[k]) for k in keys]
+            return list(v)
+
+        vecs_sem_list = [to_list(v) for v in vecs_sem]
+        vecs_proc_list = [to_list(v) for v in vecs_proc]
+        
+        vs_plugin.initialize(root, dim, getattr(emb, "name", backend), getattr(emb, "model_name", ""), json.loads(idf_json) if idf_json else {})
+        vs_plugin.add_vectors(ids, kinds, statuses, vecs_sem_list, vecs_proc_list)
+        append_ledger(root, "vector_index.built", {"backend": f"plugin:{type(vs_plugin).__name__}", "dim": dim, "count": len(rows)})
+        return {"backend": f"plugin:{type(vs_plugin).__name__}", "dim": dim, "count": len(rows)}
 
     vdb = root / VECTOR_DB
     if vdb.exists():
@@ -519,23 +659,27 @@ def build_vector_index(root: Path, backend: str = "tfidf", model: str = "all-Min
             
     if use_sqlite_vec:
         vc.executescript(
-            "CREATE TABLE vectors(id TEXT PRIMARY KEY, kind TEXT, status TEXT, vec TEXT);"
-            f"CREATE VIRTUAL TABLE vec_docs USING vec0(embedding float[{dim}]);"
+            "CREATE TABLE vectors(id TEXT PRIMARY KEY, kind TEXT, status TEXT, vec_sem TEXT, vec_proc TEXT);"
+            f"CREATE VIRTUAL TABLE vec_docs_sem USING vec0(embedding float[{dim}]);"
+            f"CREATE VIRTUAL TABLE vec_docs_proc USING vec0(embedding float[{dim}]);"
             "CREATE TABLE vmeta(backend TEXT, model TEXT, dim INT, idf TEXT, built_at TEXT, count INT);"
         )
-        for r, v in zip(rows, vecs):
-            cur = vc.execute("INSERT INTO vectors (id, kind, status, vec) VALUES (?,?,?,?)", 
-                             (r[0], r[1], r[2], None))
-            vc.execute("INSERT INTO vec_docs(rowid, embedding) VALUES (?,?)",
-                       (cur.lastrowid, _serialize_vec(v)))
+        for r, v_sem, v_proc in zip(rows, vecs_sem, vecs_proc):
+            cur = vc.execute("INSERT INTO vectors (id, kind, status, vec_sem, vec_proc) VALUES (?,?,?,?,?)", 
+                             (r[0], r[1], r[2], None, None))
+            rowid = cur.lastrowid
+            vc.execute("INSERT INTO vec_docs_sem(rowid, embedding) VALUES (?,?)",
+                       (rowid, _serialize_vec(v_sem)))
+            vc.execute("INSERT INTO vec_docs_proc(rowid, embedding) VALUES (?,?)",
+                       (rowid, _serialize_vec(v_proc)))
     else:
         vc.executescript(
-            "CREATE TABLE vectors(id TEXT PRIMARY KEY, kind TEXT, status TEXT, vec TEXT);"
+            "CREATE TABLE vectors(id TEXT PRIMARY KEY, kind TEXT, status TEXT, vec_sem TEXT, vec_proc TEXT);"
             "CREATE TABLE vmeta(backend TEXT, model TEXT, dim INT, idf TEXT, built_at TEXT, count INT);"
         )
-        for r, v in zip(rows, vecs):
-            vc.execute("INSERT OR REPLACE INTO vectors VALUES (?,?,?,?)",
-                       (r[0], r[1], r[2], json.dumps(v)))
+        for r, v_sem, v_proc in zip(rows, vecs_sem, vecs_proc):
+            vc.execute("INSERT OR REPLACE INTO vectors VALUES (?,?,?,?,?)",
+                       (r[0], r[1], r[2], json.dumps(v_sem), json.dumps(v_proc)))
                        
     vc.execute("INSERT INTO vmeta VALUES (?,?,?,?,?,?)",
                (getattr(emb, "name", backend), getattr(emb, "model_name", ""),
@@ -566,66 +710,159 @@ def semantic_search(root: Path, query: str, k: int = 10, kinds: Optional[List[st
     meta = _vmeta(root)
     if not meta:
         raise SystemExit("No vector index yet. Build one:  llm_kosh_cli.py --root <root> embed")
-    if meta["backend"] == "tfidf":
+        
+    cfg = read_json(root / "LLM_KOSH.json", {}) or {}
+    retrieval_weights = cfg.get("retrieval_weights", {})
+    beta_sem = float(retrieval_weights.get("beta_sem", 0.7))
+    beta_proc = float(retrieval_weights.get("beta_proc", 0.3))
+
+    is_tfidf = (meta["backend"] == "tfidf") or (meta["backend"].startswith("plugin:") and not meta["model"])
+    if is_tfidf:
         emb = TfidfEmbedder()
         emb.idf = json.loads(meta["idf"] or "{}")
-        qv = emb.embed(query)
+        qv_sem_sparse = emb.embed(query)
+        qv_proc_sparse = emb.embed(extract_procedural_features(query))
+        vocab = sorted(emb.idf.keys())
+        qv_sem = [float(qv_sem_sparse.get(term, 0.0)) for term in vocab]
+        qv_proc = [float(qv_proc_sparse.get(term, 0.0)) for term in vocab]
     else:
-        qv = get_embedder("st", meta["model"] or "all-MiniLM-L6-v2").embed(query)
+        emb = get_embedder("st", meta["model"] or "all-MiniLM-L6-v2")
+        qv_sem_sparse = emb.embed(query)
+        qv_proc_sparse = emb.embed(extract_procedural_features(query))
+        qv_sem = [float(qv_sem_sparse[str(i)]) for i in range(len(qv_sem_sparse))]
+        qv_proc = [float(qv_proc_sparse[str(i)]) for i in range(len(qv_proc_sparse))]
 
-    vc = sqlite3.connect(str(root / VECTOR_DB))
-    
-    use_sqlite_vec = False
-    if HAS_SQLITE_VEC and meta["backend"] != "tfidf":
-        try:
-            vc.enable_load_extension(True)
-            sqlite_vec.load(vc)
-            vc.enable_load_extension(False)
-            use_sqlite_vec = True
-        except (AttributeError, sqlite3.OperationalError, Exception):
-            use_sqlite_vec = False
+    from llm_kosh.core.plugins import PluginManager
+    vs_plugin = PluginManager.get_vector_store_plugin(root)
+    if vs_plugin:
+        def to_list(v):
+            if isinstance(v, dict):
+                try:
+                    return [float(v[str(i)]) for i in range(len(v))]
+                except KeyError:
+                    keys = sorted(v.keys())
+                    return [float(v[k]) for k in keys]
+            return list(v)
             
-    if use_sqlite_vec:
-        clauses = []
-        params = []
-        if active_only:
-            clauses.append("v.status = 'active'")
-        if kinds:
-            clauses.append("v.kind IN (" + ",".join("?" for _ in kinds) + ")")
-            params.extend(kinds)
-            
-        where = " AND ".join(clauses)
-        if where:
-            where = f" AND {where}"
-            
-        query_sql = f"""
-            SELECT v.id, v.kind, v.status, 1.0 - vec_distance_cosine(d.embedding, ?) as score
-            FROM vec_docs d
-            JOIN vectors v ON v.rowid = d.rowid
-            WHERE d.embedding MATCH ? AND k = {k * 10} {where}
-            ORDER BY score DESC
-        """
-        vrows = vc.execute(query_sql, (_serialize_vec(qv), _serialize_vec(qv), *params)).fetchall()
-        vc.close()
+        qv_sem_list = to_list(qv_sem)
+        qv_proc_list = to_list(qv_proc)
         
+        plugin_res = vs_plugin.search(qv_sem_list, qv_proc_list, k, kinds=kinds, active_only=active_only)
         scored = []
-        for rid, kind, status, score in vrows:
-            if score > 0:
-                scored.append((score, rid, kind, status))
+        conn = get_db(root)
+        for s, rid in plugin_res:
+            row = conn.execute("SELECT kind, status FROM documents WHERE id=?", (rid,)).fetchone()
+            if row:
+                scored.append((s, rid, row[0], row[1]))
+        conn.close()
+        scored.sort(reverse=True)
         scored = scored[:k]
     else:
-        vrows = vc.execute("SELECT id,kind,status,vec FROM vectors").fetchall()
-        vc.close()
-        scored = []
-        for rid, kind, status, vec in vrows:
-            if active_only and status != "active":
-                continue
-            if kinds and kind not in kinds:
-                continue
-            s = _cosine(qv, json.loads(vec))
-            if s > 0:
-                scored.append((s, rid, kind, status))
-        scored.sort(reverse=True)
+        vc = sqlite3.connect(str(root / VECTOR_DB))
+        
+        use_sqlite_vec = False
+        if HAS_SQLITE_VEC and meta["backend"] != "tfidf":
+            try:
+                vc.enable_load_extension(True)
+                sqlite_vec.load(vc)
+                vc.enable_load_extension(False)
+                use_sqlite_vec = True
+            except (AttributeError, sqlite3.OperationalError, Exception):
+                use_sqlite_vec = False
+            
+        if use_sqlite_vec:
+            clauses = []
+            params = []
+            if active_only:
+                clauses.append("v.status = 'active'")
+            if kinds:
+                clauses.append("v.kind IN (" + ",".join("?" for _ in kinds) + ")")
+                params.extend(kinds)
+                
+            where = " AND ".join(clauses)
+            if where:
+                where = f" AND {where}"
+                
+            k_search = max(k * 5, 25)
+            query_sql_sem = f"""
+                SELECT v.id, v.kind, v.status, 1.0 - vec_distance_cosine(d.embedding, ?) as score
+                FROM vec_docs_sem d
+                JOIN vectors v ON v.rowid = d.rowid
+                WHERE d.embedding MATCH ? AND k = {k_search} {where}
+            """
+            query_sql_proc = f"""
+                SELECT v.id, v.kind, v.status, 1.0 - vec_distance_cosine(d.embedding, ?) as score
+                FROM vec_docs_proc d
+                JOIN vectors v ON v.rowid = d.rowid
+                WHERE d.embedding MATCH ? AND k = {k_search} {where}
+            """
+            vrows_sem = vc.execute(query_sql_sem, (_serialize_vec(qv_sem), _serialize_vec(qv_sem), *params)).fetchall()
+            vrows_proc = vc.execute(query_sql_proc, (_serialize_vec(qv_proc), _serialize_vec(qv_proc), *params)).fetchall()
+            
+            all_ids = list(set([r[0] for r in vrows_sem] + [r[0] for r in vrows_proc]))
+            vc.close()
+            
+            embeddings_sem, embeddings_proc = _load_candidate_embeddings(root, all_ids)
+            scored = []
+            
+            id_info = {}
+            for r in vrows_sem:
+                id_info[r[0]] = (r[1], r[2])
+            for r in vrows_proc:
+                id_info[r[0]] = (r[1], r[2])
+                
+            for rid in all_ids:
+                kind, status = id_info[rid]
+                val_sem = embeddings_sem.get(rid)
+                val_proc = embeddings_proc.get(rid)
+                if not val_sem:
+                    val_sem = [0.0] * len(qv_sem)
+                if not val_proc:
+                    val_proc = [0.0] * len(qv_proc)
+                    
+                cos_sem = _any_cosine(qv_sem, val_sem)
+                cos_proc = _any_cosine(qv_proc, val_proc)
+                s = beta_sem * cos_sem + beta_proc * cos_proc
+                if s > 0:
+                    scored.append((s, rid, kind, status))
+            scored.sort(reverse=True)
+            scored = scored[:k]
+        else:
+            vrows = vc.execute("SELECT id,kind,status,vec_sem,vec_proc FROM vectors").fetchall()
+            vc.close()
+            scored = []
+            for rid, kind, status, vec_sem, vec_proc in vrows:
+                if active_only and status != "active":
+                    continue
+                if kinds and kind not in kinds:
+                    continue
+                
+                val_sem = json.loads(vec_sem) if vec_sem else None
+                val_proc = json.loads(vec_proc) if vec_proc else None
+                if isinstance(val_sem, dict):
+                    try:
+                        vocab = sorted(json.loads(meta.get("idf", "{}")).keys())
+                        val_sem = {term: float(val_sem.get(term, 0.0)) for term in vocab}
+                    except Exception:
+                        val_sem = {}
+                if isinstance(val_proc, dict):
+                    try:
+                        vocab = sorted(json.loads(meta.get("idf", "{}")).keys())
+                        val_proc = {term: float(val_proc.get(term, 0.0)) for term in vocab}
+                    except Exception:
+                        val_proc = {}
+                if not val_sem:
+                    val_sem = {}
+                if not val_proc:
+                    val_proc = {}
+                    
+                cos_sem = _any_cosine(qv_sem, val_sem)
+                cos_proc = _any_cosine(qv_proc, val_proc)
+                s = beta_sem * cos_sem + beta_proc * cos_proc
+                if s > 0:
+                    scored.append((s, rid, kind, status))
+            scored.sort(reverse=True)
+            scored = scored[:k]
 
     rebuild_index(root)
     conn = get_db(root)

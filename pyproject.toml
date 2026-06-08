@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
@@ -40,9 +41,9 @@ semantic = [
     "sentence-transformers>=2.2.0"
 ]
 server = [
-    "fastapi>=0.100.0",
+    "fastapi>=0.116.0",
     "uvicorn>=0.23.0",
-    "mcp>=1.0.0"
+    "mcp>=1.26.0"
 ]
 ingest = [
     "markitdown"

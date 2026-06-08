@@ -275,6 +275,8 @@ def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: st
                 except Exception:
                     pass
 
+            extra = dict(mem.extra_meta or {})
+            extra["source_origin"] = source_origin_str
             new_path = add_memory(
                 root=root,
                 kind=mem.kind,
@@ -282,7 +284,7 @@ def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: st
                 body=mem.body,
                 project=project,
                 visibility=visibility,
-                extra_meta=mem.extra_meta,
+                extra_meta=extra,
                 reindex=False,
                 quiet=True
             )

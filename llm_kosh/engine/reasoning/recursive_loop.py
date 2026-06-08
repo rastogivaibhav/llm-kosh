@@ -8,7 +8,7 @@ around ReasoningEngine.query_with_trace().
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
 
 from llm_kosh.engine.reasoning.trace import QueryTrace
 from llm_kosh.engine.reasoning.critique import (
@@ -93,12 +93,19 @@ class RecursiveReasoningLoop:
         max_iterations: int = 5,
         stability_threshold: float = 0.8,
         depth: int = 3,
+        query_fn: Optional[Callable] = None,
     ) -> Tuple["QueryResult", LoopState]:
         """
         Run the recursive self-healing loop.
 
         Returns (result, state) from the last completed iteration.
+
+        query_fn: optional callable(query, temporal_context, depth=...) -> (result, trace).
+                  When None, uses engine.query_with_trace().
         """
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be >= 1")
+
         state = LoopState(query=query)
         current_params = QueryParams(depth=depth)
 
@@ -122,12 +129,15 @@ class RecursiveReasoningLoop:
             # ----------------------------------------------------------------
             # Step 2: Query
             # ----------------------------------------------------------------
-            result, trace = engine.query_with_trace(
-                query,
-                temporal_context=temporal_context,
-                depth=adapted_params.depth,
-                reasoning_mode="BALANCED",
-            )
+            if query_fn is not None:
+                result, trace = query_fn(query, temporal_context, depth=adapted_params.depth)
+            else:
+                result, trace = engine.query_with_trace(
+                    query,
+                    temporal_context=temporal_context,
+                    depth=adapted_params.depth,
+                    reasoning_mode="BALANCED",
+                )
             trace.iteration = iteration
             last_result = result
             last_trace = trace
@@ -168,9 +178,12 @@ class RecursiveReasoningLoop:
             iteration_discovery_results: List[DiscoveryResult] = []
             query_time = trace.query_time if trace.query_time is not None else 0.0
 
+            # Support both QueryResult (has .bundle) and DialecticResult (has .initial_result.bundle)
+            result_bundle = result.bundle if hasattr(result, "bundle") else result.initial_result.bundle
+
             for question in questions:
                 discovery_result = self._safe_discovery.execute(
-                    question, engine.dag, result.bundle, query_time
+                    question, engine.dag, result_bundle, query_time
                 )
                 iteration_discovery_results.append(discovery_result)
 
@@ -216,13 +229,11 @@ class RecursiveReasoningLoop:
             # ----------------------------------------------------------------
             # Stopping condition 3: no_discovery_gain
             # ----------------------------------------------------------------
-            if iteration > 0 and iteration_discovery_results:
-                all_low = all(
-                    dr.repair_strength < 0.05 for dr in iteration_discovery_results
-                )
-                if all_low:
-                    state.termination_reason = "no_discovery_gain"
-                    break
+            if iteration > 0 and all(
+                dr.repair_strength < 0.05 for dr in iteration_discovery_results
+            ):
+                state.termination_reason = "no_discovery_gain"
+                break
 
         else:
             # for-loop completed without break → max_iterations_reached

@@ -378,105 +378,24 @@ class ReasoningEngine:
         reopen_on_challenge: bool = True,
     ) -> Tuple["DialecticResult", "LoopState"]:
         """Run the dialectic query as the inner engine, recursive loop as outer wrapper."""
-        from llm_kosh.engine.reasoning.recursive_loop import (
-            RecursiveReasoningLoop,
-            LoopState,
-        )
-        from llm_kosh.engine.reasoning.critique import TraceCritic, CrossQueryCritic
-        from llm_kosh.engine.reasoning.healer import HealingExecutor, QueryParams
-        from llm_kosh.engine.reasoning.discovery import DiscoveryGenerator, SafeDiscovery
-        from llm_kosh.engine.reasoning.self_model import SelfModelController
-        from llm_kosh.engine.reasoning.critique import WeaknessReport
+        from llm_kosh.engine.reasoning.recursive_loop import LoopState
 
-        trace_critic = TraceCritic()
-        cross_query_critic = CrossQueryCritic()
-        healing_executor = HealingExecutor()
-        discovery_generator = DiscoveryGenerator()
-        safe_discovery = SafeDiscovery()
-        self_model_controller = SelfModelController()
-
-        state = LoopState(query=query)
-        current_params = QueryParams(depth=depth)
-
-        last_dialectic_result = None
-        last_trace = None
-
-        for iteration in range(max_iterations):
-            if state.iteration_count >= max_iterations:
-                state.termination_reason = "max_iterations_reached"
-                break
-
-            # Adapt
-            adapted_params = self_model_controller.adapt_params(
-                current_params, self._self_model
-            )
-
-            # Query (dialectic variant)
-            dialectic_result, trace = self.dialectic_query_with_trace(
-                query,
-                temporal_context=temporal_context,
-                depth=adapted_params.depth,
+        if not self._enable_recursive:
+            result = self.dialectic_query(
+                query, temporal_context=temporal_context, depth=depth,
                 reopen_on_challenge=reopen_on_challenge,
             )
-            trace.iteration = iteration
-            last_dialectic_result = dialectic_result
-            last_trace = trace
+            state = LoopState(query=query, iteration_count=1, termination_reason="recursive_disabled")
+            return result, state
 
-            # Observe
-            self._self_model.observe(trace)
-
-            # Critique
-            per_trace_weaknesses = trace_critic.analyze(trace)
-            session_weaknesses = cross_query_critic.analyze_session(state.traces)
-            weakness_report = WeaknessReport(
-                trace_id=trace.trace_id,
-                per_trace_weaknesses=per_trace_weaknesses,
-                session_weaknesses=session_weaknesses,
-            )
-
-            # Heal
-            next_params = healing_executor.heal(weakness_report, base_params=current_params)
-
-            # Discover
-            questions = discovery_generator.generate(weakness_report)
-            iteration_discovery_results = []
-            query_time = trace.query_time if trace.query_time is not None else 0.0
-            for question in questions:
-                dr = safe_discovery.execute(question, self.dag, dialectic_result.initial_result.bundle, query_time)
-                iteration_discovery_results.append(dr)
-
-            # Update state
-            state.traces.append(trace)
-            state.all_weaknesses.append(per_trace_weaknesses + session_weaknesses)
-            state.discovery_results.extend(iteration_discovery_results)
-            state.stability_progression.append(trace.stability_score)
-            gain = (
-                sum(dr.repair_strength for dr in iteration_discovery_results) / len(iteration_discovery_results)
-                if iteration_discovery_results else 0.0
-            )
-            state.discovery_gain_progression.append(gain)
-            state.iteration_count += 1
-            current_params = next_params
-
-            # Stopping conditions
-            if trace.stability_score >= stability_threshold:
-                state.termination_reason = "stability_threshold_reached"
-                break
-
-            if len(state.stability_progression) >= 3:
-                s = state.stability_progression
-                if s[-2] > s[-3] and s[-1] < s[-2] - 0.03:
-                    state.termination_reason = "oscillation_detected"
-                    break
-
-            if iteration > 0 and iteration_discovery_results:
-                if all(dr.repair_strength < 0.05 for dr in iteration_discovery_results):
-                    state.termination_reason = "no_discovery_gain"
-                    break
-        else:
-            state.termination_reason = "max_iterations_reached"
-
-        return last_dialectic_result, state
+        loop = self._make_recursive_loop()
+        query_fn = lambda q, tc, **kwargs: self.dialectic_query_with_trace(
+            q,
+            temporal_context=tc,
+            depth=kwargs.get("depth", depth),
+            reopen_on_challenge=reopen_on_challenge,
+        )
+        return loop.run(self, query, temporal_context, max_iterations, stability_threshold, depth, query_fn=query_fn)
 
     def _make_recursive_loop(self) -> "RecursiveReasoningLoop":
         """Construct the RecursiveReasoningLoop from the engine's components."""

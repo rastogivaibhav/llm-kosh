@@ -203,6 +203,12 @@ def main() -> None:
     p = sub.add_parser("mcp-tools", help="Print the MCP tool schema")
     p = sub.add_parser("mcp-test", help="Test the local MCP server stub")
 
+    p = sub.add_parser("reason", help="Causal temporal reasoning over the memory graph")
+    p.add_argument("query", help="Natural language query")
+    p.add_argument("--when", default="", help="Temporal context: ISO 8601 datetime or Unix timestamp (default: now)")
+    p.add_argument("--depth", type=int, default=3, help="Max causal hops (default 3)")
+    p.add_argument("--json", action="store_true", dest="output_json", help="Output raw JSON instead of narrative")
+
     p = sub.add_parser("intake", help="Manage intake control plane or convert/ingest files")
     p.add_argument("action", help="Action (scan, list, show, validate, review, apply, reject, quarantine, status) or file/directory path to ingest")
     p.add_argument("id", nargs="?", default="", help="Intake ID or argument")
@@ -476,6 +482,40 @@ def main() -> None:
             raise SystemExit(1)
     elif args.cmd == "mcp-test":
         print("Starting MCP Test...")
+    elif args.cmd == "reason":
+        import sys
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        from llm_kosh.engine.reasoning import ReasoningEngine
+        from llm_kosh.engine.reasoning.formatter import format_narrative
+        engine = ReasoningEngine(root)
+        result = engine.query(args.query, temporal_context=args.when or None, depth=args.depth)
+        if args.output_json:
+            import json
+            bundle_out = {}
+            for fid, fiber in result.bundle.fibers.items():
+                if fid == "__deep_instability__":
+                    continue
+                bundle_out[fid] = {
+                    "fact": {
+                        "id": fiber.fact.id if fiber.fact else fid,
+                        "content": fiber.fact.content if fiber.fact else "",
+                        "valid_from": fiber.fact.valid_from.isoformat() if fiber.fact else "",
+                        "confidence": fiber.fact.confidence if fiber.fact else 0.0,
+                    },
+                    "degeneracy": fiber.degeneracy,
+                    "max_confidence": fiber.max_confidence,
+                }
+            print(json.dumps({
+                "anchors": result.anchors,
+                "bundle": bundle_out,
+                "stability": {
+                    "score": result.stability.score,
+                    "status": result.stability.status,
+                },
+            }, indent=2))
+        else:
+            print(format_narrative(result, args.query))
     elif args.cmd == "server":
         from llm_kosh.server import start_server
         start_server(root, args.host, args.port)

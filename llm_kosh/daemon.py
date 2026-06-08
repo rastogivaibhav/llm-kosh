@@ -45,12 +45,13 @@ def _get_enabled_jobs(root: Path) -> list:
     pol = load_policy(root)
     daemon_cfg = pol.get("daemon", {})
     return daemon_cfg.get("enabled_jobs", [
-        "scan_intake", 
+        "scan_intake",
         "process_intake_folder",
         "poll_watched_folders",
-        "process_safe_receipts", 
-        "rebuild_stale_index", 
-        "regenerate_memory_map"
+        "process_safe_receipts",
+        "rebuild_stale_index",
+        "regenerate_memory_map",
+        "sync_reasoning_graph"
     ])
 
 # --- Jobs ---
@@ -167,6 +168,56 @@ def job_backup_snapshot(root: Path):
 def job_quarantine_risky_items(root: Path):
     return True, "No risky items detected."
 
+def job_sync_reasoning_graph(root: Path):
+    try:
+        from datetime import datetime as _datetime
+        from llm_kosh.engine.reasoning import ReasoningEngine
+        from llm_kosh.engine.search import query_memory
+    except Exception as e:
+        log_daemon_event(root, "reasoning_sync_error", {"error": str(e)})
+        return False, f"Reasoning sync failed: {e}"
+
+    try:
+        ledger_path = root / "reports" / "daemon" / "reasoning_sync_ledger.json"
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+        ledger = read_json(ledger_path, {})
+        already_synced = set(ledger.get("synced_ids", []))
+
+        memories = query_memory(root, "", limit=5000)
+
+        engine = ReasoningEngine(root)
+        new_count = 0
+
+        for mem in memories:
+            if mem["id"] in already_synced:
+                continue
+            content = mem.get("snippet") or mem.get("title") or ""
+            created_str = mem.get("created", "")
+            try:
+                created_dt = _datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+            except Exception:
+                from datetime import timezone as _tz
+                created_dt = _datetime.now(_tz.utc)
+            engine.ingest(
+                content=content,
+                documented_at=created_dt,
+                valid_from=created_dt,
+                valid_until=None,
+                confidence=0.80,
+                causal_edges=[],
+            )
+            already_synced.add(mem["id"])
+            new_count += 1
+
+        write_json(ledger_path, {"synced_ids": list(already_synced)})
+        log_daemon_event(root, "reasoning_sync", {"new": new_count, "total": len(already_synced)})
+        return True, f"Reasoning graph: synced {new_count} new memories ({len(already_synced)} total)."
+
+    except Exception as e:
+        log_daemon_event(root, "reasoning_sync_error", {"error": str(e)})
+        return False, f"Reasoning sync failed: {e}"
+
+
 def job_poll_watched_folders(root: Path):
     from llm_kosh.engine.intake import intake_file_or_dir
     pol = load_policy(root)
@@ -242,7 +293,8 @@ JOBS = {
     "regenerate_memory_map": job_regenerate_memory_map,
     "regenerate_workbench": job_regenerate_workbench,
     "backup_snapshot": job_backup_snapshot,
-    "quarantine_risky_items": job_quarantine_risky_items
+    "quarantine_risky_items": job_quarantine_risky_items,
+    "sync_reasoning_graph": job_sync_reasoning_graph,
 }
 
 def daemon_run_job(root: Path, job_name: str):

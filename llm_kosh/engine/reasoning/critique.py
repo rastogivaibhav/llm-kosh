@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
@@ -93,10 +94,79 @@ class TraceWeakness:
         )
 
 
+@dataclass
+class WeaknessReport:
+    """
+    Aggregated weakness report for a single trace, combining per-trace and
+    session-level weaknesses into a single auditable record.
+    """
+
+    trace_id: str
+    per_trace_weaknesses: List[TraceWeakness] = field(default_factory=list)
+    session_weaknesses: List[TraceWeakness] = field(default_factory=list)
+    total_severity: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Recompute total_severity from all weaknesses."""
+        all_w = self.per_trace_weaknesses + self.session_weaknesses
+        if all_w:
+            self.total_severity = sum(w.severity for w in all_w) / len(all_w)
+        else:
+            self.total_severity = 0.0
+
+    # ------------------------------------------------------------------ #
+    # Properties
+    # ------------------------------------------------------------------ #
+
+    @property
+    def all_weaknesses(self) -> List[TraceWeakness]:
+        """Return per_trace_weaknesses + session_weaknesses sorted by severity descending."""
+        combined = self.per_trace_weaknesses + self.session_weaknesses
+        return sorted(combined, key=lambda w: w.severity, reverse=True)
+
+    @property
+    def has_weaknesses(self) -> bool:
+        """True if any weakness (per-trace or session) exists."""
+        return bool(self.per_trace_weaknesses or self.session_weaknesses)
+
+    @property
+    def worst_weakness(self) -> Optional[TraceWeakness]:
+        """Highest severity weakness, or None if no weaknesses exist."""
+        all_w = self.all_weaknesses
+        return all_w[0] if all_w else None
+
+    # ------------------------------------------------------------------ #
+    # Serialization
+    # ------------------------------------------------------------------ #
+
+    def to_dict(self) -> dict:
+        """Return a JSON-serialisable dict representation."""
+        return {
+            "trace_id": self.trace_id,
+            "per_trace_weaknesses": [w.to_dict() for w in self.per_trace_weaknesses],
+            "session_weaknesses": [w.to_dict() for w in self.session_weaknesses],
+            "total_severity": float(self.total_severity),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> WeaknessReport:
+        """Reconstruct a WeaknessReport from a previously serialised dict."""
+        per_trace = [TraceWeakness.from_dict(d) for d in data.get("per_trace_weaknesses", [])]
+        session = [TraceWeakness.from_dict(d) for d in data.get("session_weaknesses", [])]
+        return cls(
+            trace_id=data.get("trace_id", ""),
+            per_trace_weaknesses=per_trace,
+            session_weaknesses=session,
+        )
+
+
 class TraceCritic:
     """
-    Analyzes a single QueryTrace and returns a list of TraceWeakness objects
-    describing per-trace weaknesses detected during reasoning.
+    Analyzes QueryTrace objects for weaknesses.
+
+    Provides two analysis methods:
+    - analyze(): Single-trace weaknesses (per-trace analysis)
+    - analyze_iteration(): Cross-iteration weaknesses (recursive loop context)
     """
 
     # Required lyapunov keys; if any are missing we cannot analyze.
@@ -219,6 +289,93 @@ class TraceCritic:
                 description="HYPOTHETICAL-origin edge may have propagated silently through convergence",
                 suggested_repair_type="demote_hypothetical",
             ))
+
+        # Sort by severity descending.
+        weaknesses.sort(key=lambda w: w.severity, reverse=True)
+        return weaknesses
+
+    def analyze_iteration(
+        self, trace: QueryTrace, iteration: int, prior_traces: List[QueryTrace]
+    ) -> List[TraceWeakness]:
+        """
+        Analyze *trace* for cross-iteration weaknesses in the recursive loop context.
+
+        Detects 3 weaknesses that only make sense when iteration > 0:
+        1. improvement_stall: Stability gain < 0.05
+        2. discovery_gain_zero: Discovery executed but repair_strength < 0.1
+        3. oscillation: Stability went UP then DOWN over 3 consecutive iterations
+
+        Returns a list of TraceWeakness objects sorted by severity descending.
+        Returns an empty list if iteration == 0 OR prior_traces is empty.
+        No duplicate weakness types are returned.
+        """
+        # Guard: only analyze if we have prior iterations
+        if iteration == 0 or not prior_traces:
+            return []
+
+        weaknesses: List[TraceWeakness] = []
+        seen_types: set = set()
+
+        def _add(w: TraceWeakness) -> None:
+            if w.weakness_type not in seen_types:
+                seen_types.add(w.weakness_type)
+                weaknesses.append(w)
+
+        # ------------------------------------------------------------------ #
+        # 1. improvement_stall
+        # ------------------------------------------------------------------ #
+        stability_gain = trace.stability_score - prior_traces[-1].stability_score
+        if stability_gain < 0.05:
+            _add(TraceWeakness(
+                weakness_type=WeaknessType.IMPROVEMENT_STALL,
+                severity=0.7,
+                location="recursive_loop",
+                description=(
+                    f"Stability gain from iteration {iteration - 1} to {iteration} "
+                    f"is {stability_gain:.3f}, below threshold 0.05"
+                ),
+                suggested_repair_type="increase_retrieval_depth",
+            ))
+
+        # ------------------------------------------------------------------ #
+        # 2. discovery_gain_zero
+        # ------------------------------------------------------------------ #
+        if trace.discovery_result_summary is not None:
+            repair_strength = trace.discovery_result_summary.get("repair_strength", 1.0)
+            if repair_strength < 0.1:
+                _add(TraceWeakness(
+                    weakness_type=WeaknessType.DISCOVERY_GAIN_ZERO,
+                    severity=0.8,
+                    location="discovery",
+                    description=(
+                        f"Discovery executed but repair_strength {repair_strength:.3f} "
+                        "indicates no new evidence found"
+                    ),
+                    suggested_repair_type="reset_to_low_freq_region",
+                ))
+
+        # ------------------------------------------------------------------ #
+        # 3. oscillation
+        # ------------------------------------------------------------------ #
+        if iteration >= 2 and len(prior_traces) >= 2:
+            prev_prev_stability = prior_traces[-2].stability_score
+            prev_stability = prior_traces[-1].stability_score
+            curr_stability = trace.stability_score
+
+            # Detect pattern: up then down
+            if (prev_stability > prev_prev_stability and
+                curr_stability < prev_stability - 0.03):
+                severity = abs(curr_stability - prev_stability)
+                _add(TraceWeakness(
+                    weakness_type=WeaknessType.OSCILLATION,
+                    severity=severity,
+                    location="recursive_loop",
+                    description=(
+                        f"Stability oscillated: {prev_prev_stability:.3f} → "
+                        f"{prev_stability:.3f} → {curr_stability:.3f}"
+                    ),
+                    suggested_repair_type="widen_temporal_window",
+                ))
 
         # Sort by severity descending.
         weaknesses.sort(key=lambda w: w.severity, reverse=True)

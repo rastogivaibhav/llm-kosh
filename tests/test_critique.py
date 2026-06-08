@@ -855,3 +855,407 @@ class TestTraceCritic:
         trace = _clean_trace()
         result = TraceCritic().analyze(trace)
         assert result == []
+
+
+class TestTraceCriticIteration:
+    """Tests for TraceCritic.analyze_iteration()."""
+
+    # ------------------------------------------------------------------ #
+    # Early returns
+    # ------------------------------------------------------------------ #
+
+    def test_returns_empty_list_when_iteration_zero(self):
+        """Returns [] immediately if iteration == 0."""
+        trace = QueryTrace(iteration=0, stability_score=0.8)
+        prior_traces = [
+            QueryTrace(iteration=0, stability_score=0.7),
+        ]
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=0, prior_traces=prior_traces)
+        assert result == []
+
+    def test_returns_empty_list_when_prior_traces_empty(self):
+        """Returns [] immediately if prior_traces is empty."""
+        trace = QueryTrace(iteration=1, stability_score=0.8)
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[])
+        assert result == []
+
+    def test_returns_empty_list_when_both_zero_and_empty(self):
+        """Returns [] if both iteration == 0 and prior_traces is empty."""
+        trace = QueryTrace(iteration=0, stability_score=0.8)
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=0, prior_traces=[])
+        assert result == []
+
+    # ------------------------------------------------------------------ #
+    # 1. improvement_stall
+    # ------------------------------------------------------------------ #
+
+    def test_improvement_stall_detected_when_gain_below_threshold(self):
+        """Detects improvement_stall when gain < 0.05."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.80)
+        trace = QueryTrace(iteration=1, stability_score=0.82)  # gain = 0.02 < 0.05
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.IMPROVEMENT_STALL in types
+
+    def test_improvement_stall_severity_is_0_7(self):
+        """Severity is always 0.7 for improvement_stall."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.80)
+        trace = QueryTrace(iteration=1, stability_score=0.82)
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        w = next(x for x in result if x.weakness_type == WeaknessType.IMPROVEMENT_STALL)
+        assert w.severity == 0.7
+        assert w.location == "recursive_loop"
+        assert w.suggested_repair_type == "increase_retrieval_depth"
+
+    def test_improvement_stall_description_includes_gain(self):
+        """Description includes actual gain value."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.80)
+        trace = QueryTrace(iteration=1, stability_score=0.83)  # gain = 0.03
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        w = next(x for x in result if x.weakness_type == WeaknessType.IMPROVEMENT_STALL)
+        assert "0.030" in w.description
+
+    def test_improvement_stall_not_detected_when_gain_at_threshold(self):
+        """NOT detected when gain == 0.05 (boundary)."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.80)
+        trace = QueryTrace(iteration=1, stability_score=0.85001)  # gain ≈ 0.05001, not < 0.05
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.IMPROVEMENT_STALL not in types
+
+    def test_improvement_stall_not_detected_when_gain_above_threshold(self):
+        """NOT detected when gain > 0.05."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.80)
+        trace = QueryTrace(iteration=1, stability_score=0.88)  # gain = 0.08 > 0.05
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.IMPROVEMENT_STALL not in types
+
+    def test_improvement_stall_with_negative_gain(self):
+        """Detected even when gain is negative (regression)."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.80)
+        trace = QueryTrace(iteration=1, stability_score=0.75)  # gain = -0.05 < 0.05
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.IMPROVEMENT_STALL in types
+
+    # ------------------------------------------------------------------ #
+    # 2. discovery_gain_zero
+    # ------------------------------------------------------------------ #
+
+    def test_discovery_gain_zero_detected_when_repair_strength_low(self):
+        """Detects discovery_gain_zero when repair_strength < 0.1."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.8)
+        trace = QueryTrace(
+            iteration=1,
+            stability_score=0.85,
+            discovery_result_summary={"repair_strength": 0.05},
+        )
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.DISCOVERY_GAIN_ZERO in types
+
+    def test_discovery_gain_zero_severity_is_0_8(self):
+        """Severity is always 0.8 for discovery_gain_zero."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.8)
+        trace = QueryTrace(
+            iteration=1,
+            stability_score=0.85,
+            discovery_result_summary={"repair_strength": 0.05},
+        )
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        w = next(x for x in result if x.weakness_type == WeaknessType.DISCOVERY_GAIN_ZERO)
+        assert w.severity == 0.8
+        assert w.location == "discovery"
+        assert w.suggested_repair_type == "reset_to_low_freq_region"
+
+    def test_discovery_gain_zero_description_includes_strength(self):
+        """Description includes actual repair_strength value."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.8)
+        trace = QueryTrace(
+            iteration=1,
+            stability_score=0.85,
+            discovery_result_summary={"repair_strength": 0.075},
+        )
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        w = next(x for x in result if x.weakness_type == WeaknessType.DISCOVERY_GAIN_ZERO)
+        assert "0.075" in w.description
+
+    def test_discovery_gain_zero_not_detected_when_repair_strength_at_threshold(self):
+        """NOT detected when repair_strength == 0.1 (boundary)."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.8)
+        trace = QueryTrace(
+            iteration=1,
+            stability_score=0.85,
+            discovery_result_summary={"repair_strength": 0.1},
+        )
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.DISCOVERY_GAIN_ZERO not in types
+
+    def test_discovery_gain_zero_not_detected_when_repair_strength_high(self):
+        """NOT detected when repair_strength >= 0.1."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.8)
+        trace = QueryTrace(
+            iteration=1,
+            stability_score=0.85,
+            discovery_result_summary={"repair_strength": 0.5},
+        )
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.DISCOVERY_GAIN_ZERO not in types
+
+    def test_discovery_gain_zero_not_detected_when_discovery_result_none(self):
+        """NOT detected when discovery_result_summary is None."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.8)
+        trace = QueryTrace(
+            iteration=1,
+            stability_score=0.85,
+            discovery_result_summary=None,
+        )
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.DISCOVERY_GAIN_ZERO not in types
+
+    def test_discovery_gain_zero_with_default_repair_strength(self):
+        """When repair_strength key missing, defaults to 1.0 (no weakness)."""
+        prior_trace = QueryTrace(iteration=0, stability_score=0.8)
+        trace = QueryTrace(
+            iteration=1,
+            stability_score=0.85,
+            discovery_result_summary={"some_other_key": "value"},
+        )
+        critic = TraceCritic()
+        result = critic.analyze_iteration(trace, iteration=1, prior_traces=[prior_trace])
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.DISCOVERY_GAIN_ZERO not in types
+
+    # ------------------------------------------------------------------ #
+    # 3. oscillation
+    # ------------------------------------------------------------------ #
+
+    def test_oscillation_detected_with_three_iteration_pattern(self):
+        """Detects oscillation when stability goes UP then DOWN."""
+        # iteration 0: stability = 0.70
+        # iteration 1: stability = 0.75 (up)
+        # iteration 2: stability = 0.71 (down by > 0.03)
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.75)
+        iter2_trace = QueryTrace(iteration=2, stability_score=0.71)
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace, iter1_trace]
+        )
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.OSCILLATION in types
+
+    def test_oscillation_severity_equals_drop(self):
+        """Severity = |curr - prev| (absolute drop)."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.80)
+        iter2_trace = QueryTrace(iteration=2, stability_score=0.71)
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace, iter1_trace]
+        )
+
+        w = next(x for x in result if x.weakness_type == WeaknessType.OSCILLATION)
+        expected_severity = abs(0.71 - 0.80)  # 0.09
+        assert abs(w.severity - expected_severity) < 1e-9
+        assert w.location == "recursive_loop"
+        assert w.suggested_repair_type == "widen_temporal_window"
+
+    def test_oscillation_description_includes_three_scores(self):
+        """Description includes all three stability scores."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.80)
+        iter2_trace = QueryTrace(iteration=2, stability_score=0.71)
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace, iter1_trace]
+        )
+
+        w = next(x for x in result if x.weakness_type == WeaknessType.OSCILLATION)
+        assert "0.70" in w.description or "0.700" in w.description
+        assert "0.80" in w.description or "0.800" in w.description
+        assert "0.71" in w.description or "0.710" in w.description
+
+    def test_oscillation_not_detected_when_iteration_less_than_2(self):
+        """NOT detected when iteration < 2."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.80)
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter1_trace, iteration=1, prior_traces=[iter0_trace]
+        )
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.OSCILLATION not in types
+
+    def test_oscillation_not_detected_when_prior_traces_short(self):
+        """NOT detected when len(prior_traces) < 2."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter2_trace = QueryTrace(iteration=2, stability_score=0.71)
+
+        critic = TraceCritic()
+        # Only one prior trace; need at least 2
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace]
+        )
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.OSCILLATION not in types
+
+    def test_oscillation_not_detected_when_monotonic_up(self):
+        """NOT detected when stability goes UP consistently."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.75)
+        iter2_trace = QueryTrace(iteration=2, stability_score=0.85)  # still going up
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace, iter1_trace]
+        )
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.OSCILLATION not in types
+
+    def test_oscillation_not_detected_when_first_step_down(self):
+        """NOT detected when first step (0→1) was DOWN."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.80)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.75)  # down
+        iter2_trace = QueryTrace(iteration=2, stability_score=0.70)  # down again
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace, iter1_trace]
+        )
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.OSCILLATION not in types
+
+    def test_oscillation_not_detected_when_second_drop_too_small(self):
+        """NOT detected when second drop is <= 0.03."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.80)
+        iter2_trace = QueryTrace(iteration=2, stability_score=0.770)  # drop = 0.03, not > 0.03
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace, iter1_trace]
+        )
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.OSCILLATION not in types
+
+    # ------------------------------------------------------------------ #
+    # Sorting & deduplication
+    # ------------------------------------------------------------------ #
+
+    def test_results_sorted_by_severity_descending(self):
+        """Results must be sorted by severity descending."""
+        # Create scenario that triggers both improvement_stall (0.7) and
+        # discovery_gain_zero (0.8), so discovery_gain_zero should come first.
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.80)
+        iter1_trace = QueryTrace(
+            iteration=1,
+            stability_score=0.82,  # gain = 0.02 < 0.05 → improvement_stall (sev=0.7)
+            discovery_result_summary={"repair_strength": 0.05},  # → discovery_gain_zero (sev=0.8)
+        )
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(iter1_trace, iteration=1, prior_traces=[iter0_trace])
+
+        severities = [w.severity for w in result]
+        assert severities == sorted(severities, reverse=True)
+        # First should be discovery_gain_zero (0.8), then improvement_stall (0.7)
+        assert result[0].weakness_type == WeaknessType.DISCOVERY_GAIN_ZERO
+        assert result[1].weakness_type == WeaknessType.IMPROVEMENT_STALL
+
+    def test_no_duplicate_weakness_types_in_iteration_analysis(self):
+        """Returned list must not contain duplicate weakness types."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.80)
+        iter1_trace = QueryTrace(
+            iteration=1,
+            stability_score=0.82,
+            discovery_result_summary={"repair_strength": 0.05},
+        )
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(iter1_trace, iteration=1, prior_traces=[iter0_trace])
+
+        type_list = [w.weakness_type for w in result]
+        assert len(type_list) == len(set(type_list))
+
+    def test_returns_empty_list_when_no_weaknesses_detected(self):
+        """Returns [] when no cross-iteration weaknesses are found."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(
+            iteration=1,
+            stability_score=0.80,  # gain = 0.10 >= 0.05, no improvement_stall
+            discovery_result_summary={"repair_strength": 0.5},  # >= 0.1, no discovery_gain_zero
+        )
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(iter1_trace, iteration=1, prior_traces=[iter0_trace])
+
+        assert result == []
+
+    # ------------------------------------------------------------------ #
+    # Real-world scenarios
+    # ------------------------------------------------------------------ #
+
+    def test_all_three_weaknesses_together(self):
+        """All three weaknesses can be detected simultaneously."""
+        iter0_trace = QueryTrace(iteration=0, stability_score=0.70)
+        iter1_trace = QueryTrace(iteration=1, stability_score=0.75)
+        iter2_trace = QueryTrace(
+            iteration=2,
+            stability_score=0.71,  # oscillation: 0.70 → 0.75 → 0.71
+            discovery_result_summary={"repair_strength": 0.05},  # discovery_gain_zero
+        )
+        # improvement_stall: 0.71 - 0.75 = -0.04 < 0.05
+
+        critic = TraceCritic()
+        result = critic.analyze_iteration(
+            iter2_trace, iteration=2, prior_traces=[iter0_trace, iter1_trace]
+        )
+
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.OSCILLATION in types
+        assert WeaknessType.DISCOVERY_GAIN_ZERO in types
+        assert WeaknessType.IMPROVEMENT_STALL in types
+        assert len(result) == 3

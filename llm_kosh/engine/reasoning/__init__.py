@@ -17,6 +17,7 @@ from llm_kosh.engine.reasoning.convergent import ConvergedAnswer, ConvergentEngi
 from llm_kosh.engine.reasoning.opposition import OppositionEngine, OppositionResult
 from llm_kosh.engine.reasoning.dialectic import DialecticController, DialecticResult
 from llm_kosh.engine.reasoning.model_world import ModelWorld, ModelWorldNode, ModelWorldNodeKind
+from llm_kosh.engine.reasoning.trace import TraceStore, QueryTrace
 
 
 @dataclass
@@ -42,6 +43,7 @@ class ReasoningEngine:
         self._critic = LyapunovCritic(self.dag)
         self._escape = EscapeMechanism(self.dag)
         self._dialectic = DialecticController(self)
+        self._trace_store = TraceStore(root)
 
     # ------------------------------------------------------------------ public API
 
@@ -131,6 +133,118 @@ class ReasoningEngine:
             escape_surfaced=escape_surfaced,
             reasoning_mode=mode.value,
         )
+
+    def query_with_trace(
+        self,
+        query: str,
+        temporal_context: Optional[str] = None,
+        depth: int = 3,
+        reasoning_mode: str = ReasoningMode.BALANCED.value,
+    ) -> Tuple[QueryResult, QueryTrace]:
+        """
+        Like query(), but also builds and auto-saves a QueryTrace.
+        Candidates are retrieved before query() so they can be recorded.
+        """
+        query_time = self._parse_temporal_context(temporal_context)
+        # Capture candidates before calling query() (cheap, idempotent)
+        raw_candidates = self._retrieval.retrieve(query, query_time, depth=depth)
+        candidates = [(fact.id, dist, score) for fact, dist, score in raw_candidates]
+
+        executed_at = time.time()
+        t0 = time.time()
+        result = self.query(query, temporal_context=temporal_context, depth=depth, reasoning_mode=reasoning_mode)
+        execution_time_secs = time.time() - t0
+
+        bundle = result.bundle
+        bundle_summary = {
+            "fiber_count": len(bundle.fibers),
+            "total_paths": sum(len(f.paths) for f in bundle.fibers.values()),
+            "max_degeneracy": max((f.degeneracy for f in bundle.fibers.values()), default=0),
+            "fact_ids": list(bundle.fibers.keys()),
+        }
+
+        trace = QueryTrace(
+            query=query,
+            temporal_context=temporal_context,
+            query_time=query_time,
+            executed_at=executed_at,
+            execution_time_secs=execution_time_secs,
+            reasoning_mode=result.reasoning_mode,
+            candidates=candidates,
+            anchor_ids=result.anchors,
+            bundle_summary=bundle_summary,
+            lyapunov_dimensions=result.stability.dimensions,
+            stability_score=result.stability.score,
+            stability_status=result.stability.status,
+            escape_triggered=result.escape_triggered,
+            escape_surfaced=result.escape_surfaced,
+        )
+        self._trace_store.save(trace)
+        return result, trace
+
+    def dialectic_query_with_trace(
+        self,
+        query: str,
+        temporal_context: Optional[str] = None,
+        depth: int = 3,
+        reopen_on_challenge: bool = True,
+    ) -> Tuple["DialecticResult", QueryTrace]:
+        """
+        Like dialectic_query(), but also builds and auto-saves a QueryTrace.
+        """
+        query_time = self._parse_temporal_context(temporal_context)
+        raw_candidates = self._retrieval.retrieve(query, query_time, depth=depth)
+        candidates = [(fact.id, dist, score) for fact, dist, score in raw_candidates]
+
+        executed_at = time.time()
+        t0 = time.time()
+        dialectic_result = self.dialectic_query(
+            query, temporal_context=temporal_context, depth=depth, reopen_on_challenge=reopen_on_challenge
+        )
+        execution_time_secs = time.time() - t0
+
+        initial = dialectic_result.initial_result
+        bundle = initial.bundle
+        bundle_summary = {
+            "fiber_count": len(bundle.fibers),
+            "total_paths": sum(len(f.paths) for f in bundle.fibers.values()),
+            "max_degeneracy": max((f.degeneracy for f in bundle.fibers.values()), default=0),
+            "fact_ids": list(bundle.fibers.keys()),
+        }
+
+        opposition = dialectic_result.opposition
+        opposition_challenges = (
+            len(opposition.challenges) if hasattr(opposition, "challenges")
+            else len(opposition.findings) if hasattr(opposition, "findings")
+            else 0
+        )
+        dialectic_result_summary = {
+            "converged_fact_id": dialectic_result.converged.primary_fact_id,
+            "converged_score": dialectic_result.converged.score,
+            "opposition_challenges": opposition_challenges,
+            "reopened": dialectic_result.reopened_result is not None,
+            "final_status": dialectic_result.final_status,
+        }
+
+        trace = QueryTrace(
+            query=query,
+            temporal_context=temporal_context,
+            query_time=query_time,
+            executed_at=executed_at,
+            execution_time_secs=execution_time_secs,
+            reasoning_mode=initial.reasoning_mode,
+            candidates=candidates,
+            anchor_ids=initial.anchors,
+            bundle_summary=bundle_summary,
+            lyapunov_dimensions=initial.stability.dimensions,
+            stability_score=initial.stability.score,
+            stability_status=initial.stability.status,
+            escape_triggered=initial.escape_triggered,
+            escape_surfaced=initial.escape_surfaced,
+            dialectic_result_summary=dialectic_result_summary,
+        )
+        self._trace_store.save(trace)
+        return dialectic_result, trace
 
     def add_edge_at(
         self,

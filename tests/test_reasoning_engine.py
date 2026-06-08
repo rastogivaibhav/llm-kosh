@@ -99,3 +99,102 @@ def test_anchor_selection_uses_threshold_not_hard_limit(tmp_path):
     assert len(anchors) >= 6, f"Expected ≥6 anchors above threshold, got {len(anchors)}"
     # The lowest-scoring included candidate must be above threshold
     # (dedup may reduce count but should keep well-separated scores)
+
+
+# ---------------------------------------------------------------------------
+# TestQueryWithTrace
+# ---------------------------------------------------------------------------
+
+class TestQueryWithTrace:
+    def test_returns_tuple(self, engine):
+        now = _now()
+        engine.ingest("Gravity pulls objects down", now, now, None, 0.95, [])
+        from llm_kosh.engine.reasoning import QueryResult
+        from llm_kosh.engine.reasoning.trace import QueryTrace
+        result, trace = engine.query_with_trace("gravity", depth=2)
+        assert isinstance(result, QueryResult)
+        assert isinstance(trace, QueryTrace)
+
+    def test_anchor_ids_match_result(self, engine):
+        now = _now()
+        engine.ingest("Photosynthesis converts light to energy", now, now, None, 0.9, [])
+        result, trace = engine.query_with_trace("photosynthesis", depth=2)
+        assert trace.anchor_ids == result.anchors
+
+    def test_stability_score_matches_result(self, engine):
+        now = _now()
+        engine.ingest("Water boils at 100 degrees", now, now, None, 0.9, [])
+        result, trace = engine.query_with_trace("water boiling", depth=2)
+        assert trace.stability_score == result.stability.score
+
+    def test_escape_triggered_matches_result(self, engine):
+        now = _now()
+        engine.ingest("The earth orbits the sun", now, now, None, 0.95, [])
+        result, trace = engine.query_with_trace("earth orbit", depth=2)
+        assert trace.escape_triggered == result.escape_triggered
+
+    def test_trace_is_auto_saved(self, engine):
+        now = _now()
+        engine.ingest("Atoms form molecules", now, now, None, 0.9, [])
+        before = engine._trace_store.count()
+        engine.query_with_trace("atoms molecules", depth=2)
+        after = engine._trace_store.count()
+        assert after == before + 1
+
+    def test_execution_time_recorded(self, engine):
+        now = _now()
+        engine.ingest("Light travels at 3e8 m/s", now, now, None, 0.95, [])
+        _result, trace = engine.query_with_trace("light speed", depth=2)
+        assert trace.execution_time_secs >= 0.0
+
+    def test_query_field_set(self, engine):
+        now = _now()
+        engine.ingest("DNA carries genetic information", now, now, None, 0.9, [])
+        _result, trace = engine.query_with_trace("DNA genetics", depth=2)
+        assert trace.query == "DNA genetics"
+
+
+# ---------------------------------------------------------------------------
+# TestDialecticQueryWithTrace
+# ---------------------------------------------------------------------------
+
+class TestDialecticQueryWithTrace:
+    def test_returns_tuple(self, engine):
+        now = _now()
+        engine.ingest("Evolution is driven by natural selection", now, now, None, 0.9, [])
+        from llm_kosh.engine.reasoning.dialectic import DialecticResult
+        from llm_kosh.engine.reasoning.trace import QueryTrace
+        result, trace = engine.dialectic_query_with_trace("evolution", depth=2)
+        assert isinstance(result, DialecticResult)
+        assert isinstance(trace, QueryTrace)
+
+    def test_dialectic_result_summary_not_none(self, engine):
+        now = _now()
+        engine.ingest("Stars form from nebulae", now, now, None, 0.9, [])
+        _result, trace = engine.dialectic_query_with_trace("stars nebulae", depth=2)
+        assert trace.dialectic_result_summary is not None
+
+    def test_dialectic_result_summary_keys(self, engine):
+        now = _now()
+        engine.ingest("Cells are the basic unit of life", now, now, None, 0.9, [])
+        _result, trace = engine.dialectic_query_with_trace("cells life", depth=2)
+        summary = trace.dialectic_result_summary
+        assert "converged_fact_id" in summary
+        assert "converged_score" in summary
+        assert "opposition_challenges" in summary
+        assert "reopened" in summary
+        assert "final_status" in summary
+
+    def test_trace_is_auto_saved(self, engine):
+        now = _now()
+        engine.ingest("Entropy increases in closed systems", now, now, None, 0.9, [])
+        before = engine._trace_store.count()
+        engine.dialectic_query_with_trace("entropy thermodynamics", depth=2)
+        after = engine._trace_store.count()
+        assert after == before + 1
+
+    def test_stability_score_from_initial_result(self, engine):
+        now = _now()
+        engine.ingest("Quantum entanglement links particles", now, now, None, 0.9, [])
+        result, trace = engine.dialectic_query_with_trace("quantum entanglement", depth=2)
+        assert trace.stability_score == result.initial_result.stability.score

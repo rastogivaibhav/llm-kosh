@@ -170,8 +170,10 @@ def job_quarantine_risky_items(root: Path):
 
 def job_sync_reasoning_graph(root: Path):
     try:
-        from datetime import datetime as _datetime
+        import json as _json
+        from datetime import datetime as _datetime, timezone as _tz
         from llm_kosh.engine.reasoning import ReasoningEngine
+        from llm_kosh.engine.reasoning.causal_retrieval import CausalRetrieval
         from llm_kosh.engine.search import query_memory
     except Exception as e:
         log_daemon_event(root, "reasoning_sync_error", {"error": str(e)})
@@ -180,8 +182,14 @@ def job_sync_reasoning_graph(root: Path):
     try:
         ledger_path = root / "reports" / "daemon" / "reasoning_sync_ledger.json"
         ledger_path.parent.mkdir(parents=True, exist_ok=True)
-        ledger = read_json(ledger_path, {})
-        already_synced = set(ledger.get("synced_ids", []))
+
+        # Fix 3 — guard against ledger corruption
+        try:
+            ledger = read_json(ledger_path, {})
+            already_synced = set(ledger.get("synced_ids", []))
+        except (_json.JSONDecodeError, ValueError, KeyError):
+            log_daemon_event(root, "reasoning_sync_ledger_corrupt", {"path": str(ledger_path)})
+            already_synced = set()
 
         memories = query_memory(root, "", limit=5000)
 
@@ -191,23 +199,47 @@ def job_sync_reasoning_graph(root: Path):
         for mem in memories:
             if mem["id"] in already_synced:
                 continue
+
+            # Fix 4 — prefer full body from source file over 200-char snippet
             content = mem.get("snippet") or mem.get("title") or ""
+            source_path = root / mem.get("path", "")
+            if source_path.exists():
+                try:
+                    from llm_kosh.core.utils import parse_frontmatter
+                    raw = source_path.read_text(encoding="utf-8")
+                    _, body_text = parse_frontmatter(raw)
+                    if body_text and body_text.strip():
+                        content = body_text.strip()
+                except Exception:
+                    pass  # fall back to snippet
+
             created_str = mem.get("created", "")
             try:
                 created_dt = _datetime.fromisoformat(created_str.replace("Z", "+00:00"))
             except Exception:
-                from datetime import timezone as _tz
                 created_dt = _datetime.now(_tz.utc)
-            engine.ingest(
-                content=content,
-                documented_at=created_dt,
-                valid_from=created_dt,
-                valid_until=None,
-                confidence=0.80,
-                causal_edges=[],
-            )
-            already_synced.add(mem["id"])
-            new_count += 1
+
+            # Fix 2 — per-item error isolation; Fix 1 — use add_fact directly
+            try:
+                engine.dag.add_fact(
+                    content=content,
+                    ingested_at=_datetime.now(_tz.utc),
+                    documented_at=created_dt,
+                    valid_from=created_dt,
+                    valid_until=None,
+                    confidence=0.80,
+                    source="daemon",
+                )
+                already_synced.add(mem["id"])
+                new_count += 1
+            except Exception as e:
+                log_daemon_event(root, "reasoning_sync_fact_error", {"id": mem["id"], "error": str(e)})
+                already_synced.add(mem["id"])  # skip bad record forever
+
+        # Fix 1 — single snapshot save + one CausalRetrieval rebuild after the loop
+        if new_count > 0:
+            engine.dag.save_snapshot()
+            engine._retrieval = CausalRetrieval(engine.dag)
 
         write_json(ledger_path, {"synced_ids": list(already_synced)})
         log_daemon_event(root, "reasoning_sync", {"new": new_count, "total": len(already_synced)})

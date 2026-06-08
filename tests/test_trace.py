@@ -16,7 +16,10 @@ import uuid
 
 import pytest
 
-from llm_kosh.engine.reasoning.trace import QueryTrace
+import pathlib
+import tempfile
+
+from llm_kosh.engine.reasoning.trace import QueryTrace, TraceStore
 
 
 # ---------------------------------------------------------------------------
@@ -315,3 +318,122 @@ class TestParentTraceLinkage:
         root = QueryTrace()
         assert root.parent_trace_id is None
         assert root.iteration == 0
+
+
+# ---------------------------------------------------------------------------
+# TraceStore
+# ---------------------------------------------------------------------------
+
+class TestTraceStore:
+    """Tests for TraceStore — persistence layer for QueryTrace objects."""
+
+    @pytest.fixture()
+    def store(self, tmp_path):
+        """A fresh TraceStore backed by a temp directory."""
+        return TraceStore(tmp_path)
+
+    # --- save ---------------------------------------------------------------
+
+    def test_save_writes_file_with_correct_name(self, store, tmp_path):
+        trace = QueryTrace(query="hello")
+        store.save(trace)
+        expected = tmp_path / ".traces" / f"{trace.trace_id}.json"
+        assert expected.exists(), f"Expected file {expected} not found"
+
+    def test_save_writes_valid_json(self, store, tmp_path):
+        trace = QueryTrace(query="json check")
+        store.save(trace)
+        path = tmp_path / ".traces" / f"{trace.trace_id}.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["trace_id"] == trace.trace_id
+        assert data["query"] == "json check"
+
+    def test_save_is_idempotent(self, store):
+        trace = QueryTrace(query="first")
+        store.save(trace)
+        # Mutate in-place is not possible (dataclass), so create a new object
+        # with the same trace_id to simulate overwriting.
+        trace2 = QueryTrace.__new__(QueryTrace)
+        trace2.__dict__.update(trace.__dict__)
+        trace2.query = "second"
+        store.save(trace2)
+        assert store.count() == 1
+        loaded = store.load_all()[0]
+        assert loaded.query == "second"
+
+    # --- load_recent --------------------------------------------------------
+
+    def test_load_recent_returns_most_recent(self, store):
+        older = QueryTrace(executed_at=1_000_000.0, query="older")
+        newer = QueryTrace(executed_at=2_000_000.0, query="newer")
+        store.save(older)
+        store.save(newer)
+        result = store.load_recent(1)
+        assert len(result) == 1
+        assert result[0].query == "newer"
+
+    def test_load_recent_n_greater_than_count_returns_all(self, store):
+        for i in range(3):
+            store.save(QueryTrace(executed_at=float(i), query=f"trace-{i}"))
+        result = store.load_recent(100)
+        assert len(result) == 3
+
+    def test_load_recent_empty_store_returns_empty_list(self, store):
+        assert store.load_recent() == []
+
+    # --- load_all -----------------------------------------------------------
+
+    def test_load_all_returns_all_sorted_descending(self, store):
+        timestamps = [3_000_000.0, 1_000_000.0, 2_000_000.0]
+        for ts in timestamps:
+            store.save(QueryTrace(executed_at=ts))
+        result = store.load_all()
+        assert len(result) == 3
+        executed_times = [t.executed_at for t in result]
+        assert executed_times == sorted(executed_times, reverse=True)
+
+    def test_load_all_empty_store(self, store):
+        assert store.load_all() == []
+
+    # --- corrupt file handling ----------------------------------------------
+
+    def test_corrupt_file_is_skipped(self, store, tmp_path):
+        good = QueryTrace(executed_at=5.0, query="good trace")
+        store.save(good)
+        # Write a corrupt JSON file manually
+        corrupt_path = tmp_path / ".traces" / "corrupt-id.json"
+        corrupt_path.write_text("{ not valid json !!!", encoding="utf-8")
+        result = store.load_all()
+        assert len(result) == 1
+        assert result[0].trace_id == good.trace_id
+
+    def test_multiple_corrupt_files_others_still_load(self, store, tmp_path):
+        traces_dir = tmp_path / ".traces"
+        for i in range(2):
+            (traces_dir / f"bad-{i}.json").write_text("{}", encoding="utf-8")
+        good = QueryTrace(query="survivor")
+        store.save(good)
+        result = store.load_all()
+        # The two empty-dict traces will deserialise (from_dict({}) is valid),
+        # so only truly corrupt files are skipped.  Re-test with actual bad JSON.
+        (traces_dir / "really-bad.json").write_text("???", encoding="utf-8")
+        result2 = store.load_all()
+        # At minimum the good trace must be present
+        ids = {t.trace_id for t in result2}
+        assert good.trace_id in ids
+
+    # --- count --------------------------------------------------------------
+
+    def test_count_zero_on_empty_store(self, store):
+        assert store.count() == 0
+
+    def test_count_reflects_saved_traces(self, store):
+        for _ in range(5):
+            store.save(QueryTrace())
+        assert store.count() == 5
+
+    def test_count_does_not_double_count_overwrite(self, store, tmp_path):
+        trace = QueryTrace()
+        store.save(trace)
+        store.save(trace)  # idempotent overwrite
+        assert store.count() == 1

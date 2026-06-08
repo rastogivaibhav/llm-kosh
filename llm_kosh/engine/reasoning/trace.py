@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import uuid
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
@@ -124,3 +126,63 @@ class QueryTrace:
             iteration=int(data.get("iteration", 0)),
             metadata=dict(data.get("metadata", {})),
         )
+
+
+class TraceStore:
+    """
+    Persist QueryTrace objects to disk as JSON files.
+
+    Each trace is stored as ``{root}/.traces/{trace_id}.json``.
+    No in-memory caching — the JSON files on disk are authoritative.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self._traces_dir = Path(root) / ".traces"
+        self._traces_dir.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Write
+    # ------------------------------------------------------------------
+
+    def save(self, trace: QueryTrace) -> None:
+        """Save *trace* to disk.  Idempotent — overwrites if trace_id exists."""
+        path = self._traces_dir / f"{trace.trace_id}.json"
+        path.write_text(json.dumps(trace.to_dict(), indent=2), encoding="utf-8")
+
+    # ------------------------------------------------------------------
+    # Read helpers
+    # ------------------------------------------------------------------
+
+    def _load_one(self, path: Path) -> Optional[QueryTrace]:
+        """Return a QueryTrace from *path*, or None if the file is corrupt."""
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return QueryTrace.from_dict(data)
+        except Exception:
+            return None
+
+    def _load_sorted(self) -> List[QueryTrace]:
+        """Load all valid traces, sorted by executed_at descending."""
+        traces: List[QueryTrace] = []
+        for p in self._traces_dir.glob("*.json"):
+            t = self._load_one(p)
+            if t is not None:
+                traces.append(t)
+        traces.sort(key=lambda t: t.executed_at, reverse=True)
+        return traces
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def load_recent(self, n: int = 50) -> List[QueryTrace]:
+        """Return the *n* most recently executed traces (executed_at descending)."""
+        return self._load_sorted()[:n]
+
+    def load_all(self) -> List[QueryTrace]:
+        """Return all saved traces sorted by executed_at descending."""
+        return self._load_sorted()
+
+    def count(self) -> int:
+        """Return the number of saved trace files."""
+        return sum(1 for _ in self._traces_dir.glob("*.json"))

@@ -210,18 +210,25 @@ def reasoning_query(
     query: str,
     temporal_context: str = "",
     depth: int = 3,
+    narrative: bool = True,
 ):
     """
     Query the Temporal Causal Reasoning Graph.
-    Returns a fiber bundle with stability score, escape metadata, and all causal paths.
+    By default returns a human-readable causal narrative (narrative=True).
+    Set narrative=False to get raw JSON with full fiber bundle details.
     temporal_context: ISO 8601 datetime or Unix timestamp string (omit for now).
     """
     import json as _json
     from llm_kosh.engine.reasoning import ReasoningEngine
+    from llm_kosh.engine.reasoning.formatter import format_narrative
 
     engine = ReasoningEngine(WORKSPACE_PATH)
     result = engine.query(query, temporal_context=temporal_context or None, depth=depth)
 
+    if narrative:
+        return format_narrative(result, query)
+
+    # Raw JSON fallback (narrative=False)
     bundle_out = {}
     for fid, fiber in result.bundle.fibers.items():
         if fid == "__deep_instability__":

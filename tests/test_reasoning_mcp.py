@@ -45,8 +45,14 @@ async def test_reasoning_query_tool(mcp_cartridge):
         "valid_from": now,
         "confidence": 0.9,
     })
-    res = await mcp.call_tool("reasoning_query", {"query": "gravity apples"})
-    data = json.loads(_extract_text(res))
+    # Test narrative (default)
+    res_narrative = await mcp.call_tool("reasoning_query", {"query": "gravity apples"})
+    text_narrative = _extract_text(res_narrative)
+    assert "CAUSAL TIMELINE" in text_narrative or "No causal chain found" in text_narrative
+
+    # Test JSON output (narrative=False)
+    res_json = await mcp.call_tool("reasoning_query", {"query": "gravity apples", "narrative": False})
+    data = json.loads(_extract_text(res_json))
     assert "anchors" in data
     assert "bundle" in data
     assert "stability" in data

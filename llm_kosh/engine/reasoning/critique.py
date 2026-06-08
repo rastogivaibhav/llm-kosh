@@ -380,3 +380,174 @@ class TraceCritic:
         # Sort by severity descending.
         weaknesses.sort(key=lambda w: w.severity, reverse=True)
         return weaknesses
+
+
+class CrossQueryCritic:
+    """
+    Analyzes a session (list of QueryTrace objects) for long-term, cross-query
+    weakness patterns that cannot be detected by inspecting a single trace.
+    """
+
+    def analyze_session(self, traces: List[QueryTrace]) -> List[TraceWeakness]:
+        """
+        Analyze a session of traces for 5 session-level weaknesses.
+
+        Returns a list of TraceWeakness objects sorted by severity descending.
+        Returns [] for an empty traces list.
+        No duplicate weakness types are returned.
+        """
+        if not traces:
+            return []
+
+        weaknesses: List[TraceWeakness] = []
+        seen_types: set = set()
+
+        def _add(w: TraceWeakness) -> None:
+            if w.weakness_type not in seen_types:
+                seen_types.add(w.weakness_type)
+                weaknesses.append(w)
+
+        n = len(traces)
+
+        # ------------------------------------------------------------------ #
+        # 1. novelty_deficit
+        # ------------------------------------------------------------------ #
+        if n >= 5:
+            # Gather fact_ids per trace (from bundle_summary["fact_ids"])
+            per_trace_fact_sets = [
+                set(t.bundle_summary.get("fact_ids", [])) for t in traces
+            ]
+            all_fact_ids: set = set()
+            for fs in per_trace_fact_sets:
+                all_fact_ids.update(fs)
+
+            if all_fact_ids:
+                # Count how many traces each fact_id appears in
+                fact_counts: Counter = Counter()
+                for fs in per_trace_fact_sets:
+                    for fid in fs:
+                        fact_counts[fid] += 1
+
+                threshold = 0.8 * n
+                overused = {fid for fid, cnt in fact_counts.items() if cnt >= threshold}
+                if overused:
+                    pct = threshold / n  # == 0.8
+                    count = len(overused)
+                    severity = len(overused) / len(all_fact_ids)
+                    _add(TraceWeakness(
+                        weakness_type=WeaknessType.NOVELTY_DEFICIT,
+                        severity=severity,
+                        location="session",
+                        description=(
+                            f"{count} fact(s) appear in {pct:.0%}+ of {n} recent queries; "
+                            "novelty deficit detected"
+                        ),
+                        suggested_repair_type="reset_to_low_freq_region",
+                    ))
+
+        # ------------------------------------------------------------------ #
+        # 2. coverage_bias
+        # ------------------------------------------------------------------ #
+        if n >= 5:
+            all_anchors: List[str] = []
+            for t in traces:
+                all_anchors.extend(t.anchor_ids)
+
+            if all_anchors:
+                prefix_counts: Counter = Counter(a[:4] for a in all_anchors)
+                most_common_prefix, most_common_count = prefix_counts.most_common(1)[0]
+                pct = most_common_count / len(all_anchors)
+                if pct >= 0.70:
+                    _add(TraceWeakness(
+                        weakness_type=WeaknessType.COVERAGE_BIAS,
+                        severity=0.6,
+                        location="session",
+                        description=(
+                            f"Anchor selection concentrated in DAG prefix '{most_common_prefix}' "
+                            f"({pct:.0%} of anchors); coverage bias detected"
+                        ),
+                        suggested_repair_type="rotate_anchor_prefix",
+                    ))
+
+        # ------------------------------------------------------------------ #
+        # 3. self_repetition
+        # ------------------------------------------------------------------ #
+        if n >= 3:
+            # Collect converged_fact_ids from traces that have a dialectic summary
+            converged_ids = [
+                t.dialectic_result_summary.get("converged_fact_id", "")
+                for t in traces
+                if t.dialectic_result_summary is not None
+            ]
+            # Only proceed if we have at least 2 converged answers to compare
+            if len(converged_ids) >= 2:
+                # Count fact_id frequencies
+                id_counts: Counter = Counter(converged_ids)
+                total = len(converged_ids)
+                max_count = id_counts.most_common(1)[0][1]
+                repetition_pct = max_count / total
+                if repetition_pct > 0.5:
+                    _add(TraceWeakness(
+                        weakness_type=WeaknessType.SELF_REPETITION,
+                        severity=repetition_pct,
+                        location="session",
+                        description=f"Converged answers showing {repetition_pct:.0%} cross-query repetition",
+                        suggested_repair_type="reset_to_low_freq_region",
+                    ))
+
+        # ------------------------------------------------------------------ #
+        # 4. escape_never_triggers
+        # ------------------------------------------------------------------ #
+        if n >= 10:
+            all_escaped = [t.escape_triggered for t in traces]
+            if not any(all_escaped):
+                mean_stability = sum(t.stability_score for t in traces) / n
+                if mean_stability < 0.75:
+                    _add(TraceWeakness(
+                        weakness_type=WeaknessType.ESCAPE_NEVER_TRIGGERS,
+                        severity=0.5,
+                        location="session",
+                        description=(
+                            f"Escape mechanism never triggered across {n} queries "
+                            "despite marginal stability"
+                        ),
+                        suggested_repair_type="lower_anchor_threshold",
+                    ))
+
+        # ------------------------------------------------------------------ #
+        # 5. learning_stagnation
+        # ------------------------------------------------------------------ #
+        if n >= 8:
+            def _lyapunov_weakness_count(t: QueryTrace) -> int:
+                dims = t.lyapunov_dimensions or {}
+                count = 0
+                if dims.get("temporal_consistency", 1.0) < 0.6:
+                    count += 1
+                if dims.get("contradiction_score", 0.0) > 0.3:
+                    count += 1
+                if dims.get("pattern_lock_score", 0.0) > 0.7:
+                    count += 1
+                return count
+
+            counts = [_lyapunov_weakness_count(t) for t in traces]
+            mid = n // 2
+            first_half_mean = sum(counts[:mid]) / mid
+            second_half_mean = sum(counts[mid:]) / (n - mid)
+
+            # No improvement = second half weakness count is not lower than first half
+            # (weaknesses should decrease over time; if second_half >= first_half, no learning)
+            if second_half_mean >= first_half_mean:
+                _add(TraceWeakness(
+                    weakness_type=WeaknessType.LEARNING_STAGNATION,
+                    severity=0.6,
+                    location="session",
+                    description=(
+                        f"Weakness count not decreasing over {n} traces: "
+                        f"first_half={first_half_mean:.2f}, second_half={second_half_mean:.2f}"
+                    ),
+                    suggested_repair_type="increase_retrieval_depth",
+                ))
+
+        # Sort by severity descending
+        weaknesses.sort(key=lambda w: w.severity, reverse=True)
+        return weaknesses

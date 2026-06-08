@@ -25,7 +25,7 @@ class QueryTrace:
     # --- Query context -----------------------------------------------------
     query: str = ""
     temporal_context: Optional[str] = None
-    query_time: float = field(default_factory=time.time)  # semantic "when"
+    query_time: Optional[float] = None  # semantic temporal anchor; None means current time
     executed_at: float = field(default_factory=time.time)  # wall clock
     execution_time_secs: float = 0.0
     reasoning_mode: str = "balanced"
@@ -107,7 +107,7 @@ class QueryTrace:
             parent_trace_id=data.get("parent_trace_id"),
             query=data.get("query", ""),
             temporal_context=data.get("temporal_context"),
-            query_time=float(data.get("query_time", 0.0)),
+            query_time=float(data["query_time"]) if data.get("query_time") is not None else None,
             executed_at=float(data.get("executed_at", 0.0)),
             execution_time_secs=float(data.get("execution_time_secs", 0.0)),
             reasoning_mode=data.get("reasoning_mode", "balanced"),

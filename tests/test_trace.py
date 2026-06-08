@@ -119,6 +119,7 @@ class TestDefaultConstruction:
     def test_optional_fields_default_none(self):
         t = QueryTrace()
         assert t.temporal_context is None
+        assert t.query_time is None
         assert t.dialectic_result_summary is None
         assert t.discovery_result_summary is None
 
@@ -128,11 +129,11 @@ class TestDefaultConstruction:
         after = time.time()
         assert before <= t.executed_at <= after
 
-    def test_query_time_is_recent(self):
-        before = time.time()
+    def test_query_time_defaults_none(self):
+        """query_time should default to None; it represents semantic temporal context,
+        not wall-clock execution time (which is captured by executed_at)."""
         t = QueryTrace()
-        after = time.time()
-        assert before <= t.query_time <= after
+        assert t.query_time is None
 
 
 # ---------------------------------------------------------------------------

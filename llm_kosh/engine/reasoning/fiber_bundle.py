@@ -45,6 +45,25 @@ def build_fiber_bundle(
     fibers: Dict[str, Fiber] = {}
 
     for anchor_id in anchor_ids:
+        # Self-reachability: an anchor always reaches itself in zero hops.
+        # Without this, terminal-node anchors (no outgoing edges) generate zero
+        # fibers despite being high-scoring candidates — their content would be
+        # silently dropped from the bundle.
+        if anchor_id in target_ids:
+            anchor_fact = dag.get_fact(anchor_id)
+            if anchor_fact is not None:
+                if anchor_id not in fibers:
+                    fibers[anchor_id] = Fiber(
+                        fact=anchor_fact, paths=[], degeneracy=0, max_confidence=0.0
+                    )
+                fibers[anchor_id].paths.append(
+                    CausalPath(
+                        edges=[],
+                        confidence_product=anchor_fact.confidence,
+                        temporal_consistency=1.0,
+                    )
+                )
+
         # Forward paths (anchor → candidate)
         paths_to = _enumerate_paths(dag, anchor_id, target_ids, max_hops, query_time)
         # Backward paths (candidate → anchor, reversed) — penalised 0.5x

@@ -29,4 +29,8 @@ PYBIND11_MODULE(math_core, m) {
     m.def("temporal_vector_decay", &llm_kosh::temporal_vector_decay,
           "Computes exponential temporal vector distance decay",
           py::arg("q"), py::arg("m"), py::arg("w"), py::arg("alpha"));
+
+    m.def("mahalanobis_distance", &llm_kosh::mahalanobis_distance,
+          "Computes Mahalanobis distance between two vectors using weights",
+          py::arg("a"), py::arg("b"), py::arg("w"));
 }

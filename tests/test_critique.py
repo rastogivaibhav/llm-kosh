@@ -1,5 +1,5 @@
 """
-Tests for TraceWeakness dataclass (llm_kosh/engine/reasoning/critique.py).
+Tests for TraceWeakness dataclass and TraceCritic (llm_kosh/engine/reasoning/critique.py).
 
 Covers:
 - WeaknessType enum has all 14 values
@@ -7,12 +7,14 @@ Covers:
 - to_dict() / from_dict() round-trip
 - severity is validated to be in [0.0, 1.0]
 - Invalid weakness_type raises ValueError in from_dict()
+- TraceCritic.analyze() detects each of the 6 per-trace weaknesses
 """
 from __future__ import annotations
 
 import pytest
 
-from llm_kosh.engine.reasoning.critique import TraceWeakness, WeaknessType
+from llm_kosh.engine.reasoning.critique import TraceCritic, TraceWeakness, WeaknessType
+from llm_kosh.engine.reasoning.trace import QueryTrace
 
 
 class TestWeaknessType:
@@ -350,3 +352,506 @@ class TestTraceWeaknessEdgeCases:
         weakness = TraceWeakness.from_dict(data)
         assert weakness.severity == 0.42
         assert isinstance(weakness.severity, float)
+
+
+# ---------------------------------------------------------------------------
+# Helper: build a "clean" trace with all triggers OFF
+# ---------------------------------------------------------------------------
+
+def _clean_trace(**overrides) -> QueryTrace:
+    """
+    Return a QueryTrace whose default field values do NOT trigger any weakness.
+
+    Callers can override individual fields to trigger specific weaknesses.
+    """
+    defaults = dict(
+        lyapunov_dimensions={
+            "temporal_consistency": 0.9,   # >= 0.6  → no temporal_consistency_low
+            "contradiction_score": 0.1,    # <= 0.3  → no contradiction_unresolved
+            "path_diversity": 0.8,
+            "degeneracy": 0.5,
+            "pattern_lock_score": 0.5,     # <= 0.7  → no single_path_dominance
+        },
+        bundle_summary={
+            "fiber_count": 3,
+            "total_paths": 10,             # > num_anchors → no shallow_depth
+            "max_degeneracy": 3,           # > 1      → no shallow_depth
+            "fact_ids": ["f1", "f2", "f3"],
+        },
+        anchor_ids=["a1", "a2", "a3"],     # >= 3    → no low_evidence_diversity
+        candidates=[("c1", 1, 0.9), ("c2", 2, 0.8)],  # <= 5 → no low_evidence_diversity
+        escape_triggered=False,
+        stability_status="stable",
+        dialectic_result_summary=None,
+        metadata={},
+    )
+    defaults.update(overrides)
+    return QueryTrace(**defaults)
+
+
+class TestTraceCritic:
+    """Tests for TraceCritic.analyze()."""
+
+    # ------------------------------------------------------------------ #
+    # Empty / missing lyapunov_dimensions
+    # ------------------------------------------------------------------ #
+
+    def test_empty_lyapunov_returns_empty_list(self):
+        """If lyapunov_dimensions is empty, return []."""
+        trace = QueryTrace(lyapunov_dimensions={})
+        critic = TraceCritic()
+        result = critic.analyze(trace)
+        assert result == []
+
+    def test_missing_required_key_returns_empty_list(self):
+        """If a required key is absent from lyapunov_dimensions, return []."""
+        # Only 'temporal_consistency' present — contradiction_score and
+        # pattern_lock_score missing.
+        trace = QueryTrace(lyapunov_dimensions={"temporal_consistency": 0.4})
+        critic = TraceCritic()
+        result = critic.analyze(trace)
+        assert result == []
+
+    # ------------------------------------------------------------------ #
+    # 1. temporal_consistency_low
+    # ------------------------------------------------------------------ #
+
+    def test_temporal_consistency_low_detected(self):
+        """Trigger when temporal_consistency < 0.6."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.4,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            }
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.TEMPORAL_CONSISTENCY_LOW in types
+
+    def test_temporal_consistency_low_severity(self):
+        """Severity = 1.0 - score."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.4,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            }
+        )
+        result = TraceCritic().analyze(trace)
+        w = next(x for x in result if x.weakness_type == WeaknessType.TEMPORAL_CONSISTENCY_LOW)
+        assert abs(w.severity - 0.6) < 1e-9
+        assert w.location == "lyapunov_critic"
+        assert w.suggested_repair_type == "widen_temporal_window"
+
+    def test_temporal_consistency_not_detected_at_threshold(self):
+        """NOT triggered when temporal_consistency == 0.6 (boundary, not < 0.6)."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.6,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            }
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.TEMPORAL_CONSISTENCY_LOW not in types
+
+    # ------------------------------------------------------------------ #
+    # 2. contradiction_unresolved
+    # ------------------------------------------------------------------ #
+
+    def test_contradiction_unresolved_detected(self):
+        """Trigger: contradiction_score > 0.3, escape not triggered, no dialectic opposition."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.9,
+                "contradiction_score": 0.5,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=False,
+            dialectic_result_summary=None,
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.CONTRADICTION_UNRESOLVED in types
+
+    def test_contradiction_unresolved_not_detected_when_escape_fired(self):
+        """NOT triggered when escape_triggered is True."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.9,
+                "contradiction_score": 0.5,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=True,
+            dialectic_result_summary=None,
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.CONTRADICTION_UNRESOLVED not in types
+
+    def test_contradiction_unresolved_not_detected_when_dialectic_has_opposition(self):
+        """NOT triggered when dialectic found opposition challenges."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.9,
+                "contradiction_score": 0.5,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=False,
+            dialectic_result_summary={
+                "converged_fact_id": "f1",
+                "converged_score": 0.9,
+                "opposition_challenges": 2,
+                "reopened": False,
+                "final_status": "accepted",
+            },
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.CONTRADICTION_UNRESOLVED not in types
+
+    def test_contradiction_unresolved_not_detected_when_score_low(self):
+        """NOT triggered when contradiction_score <= 0.3."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.9,
+                "contradiction_score": 0.3,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=False,
+            dialectic_result_summary=None,
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.CONTRADICTION_UNRESOLVED not in types
+
+    # ------------------------------------------------------------------ #
+    # 3. single_path_dominance
+    # ------------------------------------------------------------------ #
+
+    def test_single_path_dominance_detected(self):
+        """Trigger when pattern_lock_score > 0.7."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.9,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.85,
+            }
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SINGLE_PATH_DOMINANCE in types
+
+    def test_single_path_dominance_severity(self):
+        """Severity equals the pattern_lock_score."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.9,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.85,
+            }
+        )
+        result = TraceCritic().analyze(trace)
+        w = next(x for x in result if x.weakness_type == WeaknessType.SINGLE_PATH_DOMINANCE)
+        assert abs(w.severity - 0.85) < 1e-9
+        assert w.location == "convergence"
+        assert w.suggested_repair_type == "increase_retrieval_depth"
+
+    def test_single_path_dominance_not_detected_at_boundary(self):
+        """NOT triggered when pattern_lock_score == 0.7."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.9,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.7,
+            }
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SINGLE_PATH_DOMINANCE not in types
+
+    # ------------------------------------------------------------------ #
+    # 4. shallow_depth
+    # ------------------------------------------------------------------ #
+
+    def test_shallow_depth_detected(self):
+        """Trigger when max_degeneracy <= 1 and total_paths <= len(anchor_ids)."""
+        trace = _clean_trace(
+            bundle_summary={
+                "fiber_count": 2,
+                "total_paths": 2,   # == len(anchor_ids)
+                "max_degeneracy": 1,
+                "fact_ids": ["f1", "f2"],
+            },
+            anchor_ids=["a1", "a2"],
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SHALLOW_DEPTH in types
+
+    def test_shallow_depth_severity_is_0_6(self):
+        """Severity is always 0.6."""
+        trace = _clean_trace(
+            bundle_summary={
+                "fiber_count": 1,
+                "total_paths": 1,
+                "max_degeneracy": 0,
+                "fact_ids": ["f1"],
+            },
+            anchor_ids=["a1"],
+        )
+        result = TraceCritic().analyze(trace)
+        w = next(x for x in result if x.weakness_type == WeaknessType.SHALLOW_DEPTH)
+        assert w.severity == 0.6
+        assert w.location == "retrieval"
+        assert w.suggested_repair_type == "increase_retrieval_depth"
+
+    def test_shallow_depth_not_detected_when_paths_exceed_anchors(self):
+        """NOT triggered when total_paths > len(anchor_ids)."""
+        trace = _clean_trace(
+            bundle_summary={
+                "fiber_count": 3,
+                "total_paths": 5,
+                "max_degeneracy": 1,
+                "fact_ids": ["f1", "f2"],
+            },
+            anchor_ids=["a1", "a2"],
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SHALLOW_DEPTH not in types
+
+    def test_shallow_depth_not_detected_when_max_degeneracy_high(self):
+        """NOT triggered when max_degeneracy > 1."""
+        trace = _clean_trace(
+            bundle_summary={
+                "fiber_count": 3,
+                "total_paths": 2,
+                "max_degeneracy": 2,
+                "fact_ids": ["f1", "f2"],
+            },
+            anchor_ids=["a1", "a2"],
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SHALLOW_DEPTH not in types
+
+    # ------------------------------------------------------------------ #
+    # 5. low_evidence_diversity
+    # ------------------------------------------------------------------ #
+
+    def test_low_evidence_diversity_detected(self):
+        """Trigger when anchor_ids < 3 and candidates > 5."""
+        trace = _clean_trace(
+            anchor_ids=["a1", "a2"],
+            candidates=[("c1", 1, 0.9), ("c2", 2, 0.8), ("c3", 3, 0.7),
+                        ("c4", 4, 0.6), ("c5", 5, 0.5), ("c6", 6, 0.4)],
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.LOW_EVIDENCE_DIVERSITY in types
+
+    def test_low_evidence_diversity_severity(self):
+        """Severity = 1.0 - (num_anchors / num_candidates)."""
+        anchor_ids = ["a1"]
+        candidates = [("c%d" % i, i, 0.9) for i in range(10)]
+        trace = _clean_trace(anchor_ids=anchor_ids, candidates=candidates)
+        result = TraceCritic().analyze(trace)
+        w = next(x for x in result if x.weakness_type == WeaknessType.LOW_EVIDENCE_DIVERSITY)
+        expected_severity = 1.0 - (1 / 10)
+        assert abs(w.severity - expected_severity) < 1e-9
+        assert w.location == "retrieval"
+        assert w.suggested_repair_type == "lower_anchor_threshold"
+
+    def test_low_evidence_diversity_not_detected_when_anchors_sufficient(self):
+        """NOT triggered when anchor_ids >= 3."""
+        trace = _clean_trace(
+            anchor_ids=["a1", "a2", "a3"],
+            candidates=[("c%d" % i, i, 0.9) for i in range(10)],
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.LOW_EVIDENCE_DIVERSITY not in types
+
+    def test_low_evidence_diversity_not_detected_when_few_candidates(self):
+        """NOT triggered when candidates <= 5."""
+        trace = _clean_trace(
+            anchor_ids=["a1"],
+            candidates=[("c1", 1, 0.9), ("c2", 2, 0.8)],
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.LOW_EVIDENCE_DIVERSITY not in types
+
+    # ------------------------------------------------------------------ #
+    # 6. hypothetical_promoted_silently
+    # ------------------------------------------------------------------ #
+
+    def test_hypothetical_promoted_silently_detected(self):
+        """Trigger when escape fired, stability ok, tc >= 0.7, metadata has HYPOTHETICAL."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.8,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=True,
+            stability_status="stable",
+            metadata={"converged_edge_origins": "HYPOTHETICAL:edge42"},
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY in types
+
+    def test_hypothetical_promoted_silently_severity_and_fields(self):
+        """Severity is 0.8, location convergence, repair demote_hypothetical."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.8,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=True,
+            stability_status="marginal",
+            metadata={"some_key": "HYPOTHETICAL"},
+        )
+        result = TraceCritic().analyze(trace)
+        w = next(x for x in result if x.weakness_type == WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY)
+        assert w.severity == 0.8
+        assert w.location == "convergence"
+        assert w.suggested_repair_type == "demote_hypothetical"
+
+    def test_hypothetical_not_detected_without_metadata_marker(self):
+        """NOT triggered when metadata has no HYPOTHETICAL value."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.8,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=True,
+            stability_status="stable",
+            metadata={"converged_edge_origins": "NORMAL:edge42"},
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY not in types
+
+    def test_hypothetical_not_detected_when_escape_not_triggered(self):
+        """NOT triggered when escape_triggered is False."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.8,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=False,
+            stability_status="stable",
+            metadata={"converged_edge_origins": "HYPOTHETICAL:edge42"},
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY not in types
+
+    def test_hypothetical_not_detected_when_tc_too_low(self):
+        """NOT triggered when temporal_consistency < 0.7."""
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.65,
+                "contradiction_score": 0.1,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.5,
+            },
+            escape_triggered=True,
+            stability_status="stable",
+            metadata={"converged_edge_origins": "HYPOTHETICAL:edge42"},
+        )
+        result = TraceCritic().analyze(trace)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY not in types
+
+    # ------------------------------------------------------------------ #
+    # Sorting & deduplication
+    # ------------------------------------------------------------------ #
+
+    def test_results_sorted_by_severity_descending(self):
+        """Results must be sorted by severity descending."""
+        # Force multiple weaknesses: temporal_consistency_low (sev=0.6)
+        # + contradiction_unresolved (sev=0.5) + single_path_dominance (sev=0.85)
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.4,   # → temporal_consistency_low, sev=0.6
+                "contradiction_score": 0.5,    # → contradiction_unresolved, sev=0.5
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.85,    # → single_path_dominance, sev=0.85
+            },
+            escape_triggered=False,
+            dialectic_result_summary=None,
+        )
+        result = TraceCritic().analyze(trace)
+        severities = [w.severity for w in result]
+        assert severities == sorted(severities, reverse=True)
+
+    def test_no_duplicate_weakness_types(self):
+        """Returned list must not contain duplicate weakness types."""
+        # A trace that could trigger multiple weaknesses.
+        trace = _clean_trace(
+            lyapunov_dimensions={
+                "temporal_consistency": 0.4,
+                "contradiction_score": 0.5,
+                "path_diversity": 0.8,
+                "degeneracy": 0.5,
+                "pattern_lock_score": 0.85,
+            },
+            escape_triggered=False,
+            dialectic_result_summary=None,
+            anchor_ids=["a1"],
+            candidates=[("c%d" % i, i, 0.9) for i in range(10)],
+            bundle_summary={
+                "fiber_count": 1,
+                "total_paths": 1,
+                "max_degeneracy": 0,
+                "fact_ids": ["f1"],
+            },
+        )
+        result = TraceCritic().analyze(trace)
+        type_list = [w.weakness_type for w in result]
+        assert len(type_list) == len(set(type_list))
+
+    def test_clean_trace_returns_empty_list(self):
+        """A trace with no triggers should return an empty list."""
+        trace = _clean_trace()
+        result = TraceCritic().analyze(trace)
+        assert result == []

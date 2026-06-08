@@ -401,6 +401,21 @@ class CausalDAG:
                 result.append(edge)
         return result
 
+    def get_incoming_edges(self, fact_id: str, query_time: float) -> List[CausalEdge]:
+        """
+        Get all edges pointing TO fact_id (incoming edges).
+        Reverse lookup: fact_id is the target.
+        """
+        result = []
+        for source_id, edges in self.edges.items():
+            for edge in edges:
+                if edge.target_id == fact_id:
+                    edge_valid_from = _ts(edge.valid_from) or 0.0
+                    edge_valid_until = _ts(edge.valid_until) if edge.valid_until else float('inf')
+                    if edge_valid_from <= query_time <= edge_valid_until:
+                        result.append(edge)
+        return result
+
     def get_valid_facts_at(self, t: float) -> List[TemporalFact]:
         """Return all facts valid at Unix timestamp t."""
         return [self.nodes[fid] for fid in self.interval_tree.query_valid_at(t) if fid in self.nodes]

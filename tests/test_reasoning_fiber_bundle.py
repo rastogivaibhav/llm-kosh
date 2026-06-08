@@ -1,9 +1,12 @@
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from llm_kosh.core.memory import init_cartridge
 from llm_kosh.engine.reasoning.causal_dag import CausalDAG, EdgeType
 from llm_kosh.engine.reasoning.causal_retrieval import CausalRetrieval
-from llm_kosh.engine.reasoning.fiber_bundle import CausalPath, Fiber, FiberBundle, build_fiber_bundle
+from llm_kosh.engine.reasoning.fiber_bundle import (
+    CausalPath, Fiber, FiberBundle, build_fiber_bundle,
+    _enumerate_paths, _enumerate_paths_backward,
+)
 
 def _now():
     return datetime.now(timezone.utc)
@@ -63,3 +66,35 @@ def test_fiber_bundle_never_collapses(graph):
     # Bundle must carry paths, not a single ranked list
     for fid, fiber in bundle.fibers.items():
         assert isinstance(fiber.paths, list)
+
+
+def test_bidirectional_path_enumeration(tmp_path):
+    """Backward paths find ancestor facts in a temporal chain."""
+    init_cartridge(tmp_path, "Test")
+    dag = CausalDAG(tmp_path)
+    now = datetime.now(timezone.utc)
+
+    # Forward chain: A → B → C → D
+    fa = dag.add_fact("Event A", now, now, now, None, 0.9, "test")
+    fb = dag.add_fact("Event B", now + timedelta(days=1), now + timedelta(days=1), now + timedelta(days=1), None, 0.9, "test")
+    fc = dag.add_fact("Event C", now + timedelta(days=2), now + timedelta(days=2), now + timedelta(days=2), None, 0.9, "test")
+    fd = dag.add_fact("Event D", now + timedelta(days=3), now + timedelta(days=3), now + timedelta(days=3), None, 0.9, "test")
+
+    dag.add_edge(fa, fb, EdgeType.ENABLES, 0.9, now, None, "test")
+    dag.add_edge(fb, fc, EdgeType.ENABLES, 0.9, now, None, "test")
+    dag.add_edge(fc, fd, EdgeType.ENABLES, 0.9, now, None, "test")
+
+    qt = (now + timedelta(days=5)).timestamp()
+
+    # Forward from A: finds B, C, D
+    fwd = _enumerate_paths(dag, fa, {fb, fc, fd}, 4, qt)
+    assert set(fwd.keys()) == {fb, fc, fd}
+
+    # Backward from D: finds C, B, A
+    bwd = _enumerate_paths_backward(dag, fd, {fa, fb, fc}, 4, qt)
+    assert set(bwd.keys()) == {fa, fb, fc}
+
+    # bundle with D as anchor should now include A, B, C via backward
+    candidates = [(dag.get_fact(x), 0, 0.8) for x in [fa, fb, fc, fd]]
+    bundle = build_fiber_bundle(dag, candidates, [fd], qt, max_hops=4)
+    assert len(bundle.fibers) >= 3, f"Expected ≥3 fibers, got {len(bundle.fibers)}"

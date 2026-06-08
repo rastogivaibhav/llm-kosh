@@ -410,9 +410,9 @@ class CausalDAG:
         for source_id, edges in self.edges.items():
             for edge in edges:
                 if edge.target_id == fact_id:
-                    edge_valid_from = _ts(edge.valid_from) or 0.0
-                    edge_valid_until = _ts(edge.valid_until) if edge.valid_until else float('inf')
-                    if edge_valid_from <= query_time <= edge_valid_until:
+                    vf = _ts(edge.valid_from) or 0.0
+                    vu = _ts(edge.valid_until)
+                    if vf <= query_time and (vu is None or vu > query_time):
                         result.append(edge)
         return result
 

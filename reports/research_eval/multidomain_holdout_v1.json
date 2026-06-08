@@ -1,0 +1,167 @@
+{
+  "benchmark": "thehypokosh_multidomain_holdout_v1",
+  "notes": [
+    "Controlled held-out synthetic benchmark with private ground-truth file.",
+    "Baseline implementations are deterministic proxy baselines inspired by published RAG, GraphRAG, Self-RAG, ReAct, and agent-memory patterns, not official authors' code."
+  ],
+  "tasks": 60,
+  "domains": 9,
+  "average_scores": {
+    "TheHypoKosh": 0.961,
+    "AgentMemory_proxy": 0.76,
+    "SelfRAG_proxy": 0.76,
+    "TemporalRAG_proxy": 0.76,
+    "GraphRAG_proxy": 0.7281,
+    "KeywordRAG_proxy": 0.7267,
+    "ReAct_proxy": 0.7017
+  },
+  "by_capability": {
+    "temporal_supersession": {
+      "KeywordRAG_proxy": 0.75,
+      "TemporalRAG_proxy": 0.875,
+      "AgentMemory_proxy": 0.875,
+      "GraphRAG_proxy": 0.7812,
+      "SelfRAG_proxy": 0.875,
+      "ReAct_proxy": 0.6562,
+      "TheHypoKosh": 0.875
+    },
+    "causal_chain": {
+      "KeywordRAG_proxy": 1.0,
+      "TemporalRAG_proxy": 1.0,
+      "AgentMemory_proxy": 1.0,
+      "GraphRAG_proxy": 0.9688,
+      "SelfRAG_proxy": 1.0,
+      "ReAct_proxy": 1.0,
+      "TheHypoKosh": 1.0
+    },
+    "contradiction_preservation": {
+      "KeywordRAG_proxy": 0.65,
+      "TemporalRAG_proxy": 0.65,
+      "AgentMemory_proxy": 0.65,
+      "GraphRAG_proxy": 0.65,
+      "SelfRAG_proxy": 0.65,
+      "ReAct_proxy": 0.65,
+      "TheHypoKosh": 1.0
+    },
+    "alternative_hypothesis": {
+      "KeywordRAG_proxy": 1.0,
+      "TemporalRAG_proxy": 1.0,
+      "AgentMemory_proxy": 1.0,
+      "GraphRAG_proxy": 1.0,
+      "SelfRAG_proxy": 1.0,
+      "ReAct_proxy": 1.0,
+      "TheHypoKosh": 1.0
+    },
+    "inferred_vs_discovered": {
+      "KeywordRAG_proxy": 0.65,
+      "TemporalRAG_proxy": 0.65,
+      "AgentMemory_proxy": 0.65,
+      "GraphRAG_proxy": 0.6297,
+      "SelfRAG_proxy": 0.65,
+      "ReAct_proxy": 0.65,
+      "TheHypoKosh": 0.9578
+    },
+    "joint_causality_hyperedge": {
+      "KeywordRAG_proxy": 0.65,
+      "TemporalRAG_proxy": 0.65,
+      "AgentMemory_proxy": 0.65,
+      "GraphRAG_proxy": 0.65,
+      "SelfRAG_proxy": 0.65,
+      "ReAct_proxy": 0.65,
+      "TheHypoKosh": 1.0
+    },
+    "no_evidence_abstention": {
+      "KeywordRAG_proxy": 0.0,
+      "TemporalRAG_proxy": 0.0,
+      "AgentMemory_proxy": 0.0,
+      "GraphRAG_proxy": 0.0,
+      "SelfRAG_proxy": 0.0,
+      "ReAct_proxy": 0.0,
+      "TheHypoKosh": 1.0
+    }
+  },
+  "by_domain": {
+    "education": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.7071,
+      "AgentMemory_proxy": 0.7071,
+      "GraphRAG_proxy": 0.7071,
+      "SelfRAG_proxy": 0.7071,
+      "ReAct_proxy": 0.6714,
+      "TheHypoKosh": 0.8571
+    },
+    "finance_regulatory": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.85,
+      "AgentMemory_proxy": 0.85,
+      "GraphRAG_proxy": 0.8143,
+      "SelfRAG_proxy": 0.85,
+      "ReAct_proxy": 0.7786,
+      "TheHypoKosh": 1.0
+    },
+    "incident": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.85,
+      "AgentMemory_proxy": 0.85,
+      "GraphRAG_proxy": 0.8143,
+      "SelfRAG_proxy": 0.85,
+      "ReAct_proxy": 0.7786,
+      "TheHypoKosh": 1.0
+    },
+    "legal_compliance": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.85,
+      "AgentMemory_proxy": 0.85,
+      "GraphRAG_proxy": 0.8143,
+      "SelfRAG_proxy": 0.85,
+      "ReAct_proxy": 0.7786,
+      "TheHypoKosh": 1.0
+    },
+    "medical_guideline": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.7071,
+      "AgentMemory_proxy": 0.7071,
+      "GraphRAG_proxy": 0.7071,
+      "SelfRAG_proxy": 0.7071,
+      "ReAct_proxy": 0.6714,
+      "TheHypoKosh": 0.8571
+    },
+    "out_of_corpus": {
+      "KeywordRAG_proxy": 0.0,
+      "TemporalRAG_proxy": 0.0,
+      "AgentMemory_proxy": 0.0,
+      "GraphRAG_proxy": 0.0,
+      "SelfRAG_proxy": 0.0,
+      "ReAct_proxy": 0.0,
+      "TheHypoKosh": 1.0
+    },
+    "policy": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.85,
+      "AgentMemory_proxy": 0.85,
+      "GraphRAG_proxy": 0.7554,
+      "SelfRAG_proxy": 0.85,
+      "ReAct_proxy": 0.7786,
+      "TheHypoKosh": 0.9518
+    },
+    "science": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.85,
+      "AgentMemory_proxy": 0.85,
+      "GraphRAG_proxy": 0.8143,
+      "SelfRAG_proxy": 0.85,
+      "ReAct_proxy": 0.7786,
+      "TheHypoKosh": 1.0
+    },
+    "software_architecture": {
+      "KeywordRAG_proxy": 0.7786,
+      "TemporalRAG_proxy": 0.85,
+      "AgentMemory_proxy": 0.85,
+      "GraphRAG_proxy": 0.8143,
+      "SelfRAG_proxy": 0.85,
+      "ReAct_proxy": 0.7786,
+      "TheHypoKosh": 1.0
+    }
+  },
+  "details": []
+}

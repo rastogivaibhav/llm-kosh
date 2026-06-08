@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LlmKosh Pack Source Map",
+  "type": "object",
+  "required": ["llm_kosh_id", "llm_kosh_version", "query", "matches"],
+  "properties": {
+    "llm_kosh_id": {
+      "type": "string"
+    },
+    "llm_kosh_version": {
+      "type": "string"
+    },
+    "query": {
+      "type": "string"
+    },
+    "matches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "title", "source_path", "pack_file", "included", "reason"],
+        "properties": {
+          "id": { "type": "string" },
+          "kind": { "type": "string" },
+          "title": { "type": "string" },
+          "project": { "type": "string" },
+          "visibility": { "type": "string" },
+          "status": { "type": "string" },
+          "source_path": { "type": "string" },
+          "pack_file": { "type": "string" },
+          "included": { "type": "boolean" },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

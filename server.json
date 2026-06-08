@@ -1,0 +1,29 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.rastogivaibhav/llm-kosh",
+  "description": "Local-first AI memory cartridge with persistent MCP memory for Claude via SQLite FTS5.",
+  "repository": {
+    "url": "https://github.com/rastogivaibhav/llm-kosh",
+    "source": "github"
+  },
+  "version": "2.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "llm-kosh",
+      "version": "2.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "CARTRIDGE_WORKSPACE",
+          "description": "Path to the local folder llm-kosh should use as its memory cartridge root.",
+          "isRequired": true,
+          "format": "filepath",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

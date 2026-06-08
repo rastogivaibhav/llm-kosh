@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LlmKosh Pack Manifest",
+  "type": "object",
+  "required": ["target", "query", "created_at", "redacted", "match_count", "llm_kosh_id", "llm_kosh_version"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "enum": ["ai-memory-context-pack.v1"]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "target": {
+      "type": "string",
+      "enum": ["chatgpt", "claude", "gemini", "deepseek", "codex", "human"]
+    },
+    "query": {
+      "type": "string"
+    },
+    "llm_kosh_id": {
+      "type": "string"
+    },
+    "llm_kosh_version": {
+      "type": "string"
+    },
+    "app_version": {
+      "type": "string"
+    },
+    "include_private": {
+      "type": "boolean"
+    },
+    "include_superseded": {
+      "type": "boolean"
+    },
+    "redacted": {
+      "type": "boolean"
+    },
+    "match_count": {
+      "type": "integer"
+    },
+    "docs_selected": {
+      "type": "integer"
+    },
+    "docs_omitted_for_budget": {
+      "type": "integer"
+    },
+    "budget": {
+      "type": "string"
+    },
+    "policy_enforced": {
+      "type": "boolean"
+    },
+    "allow_blocked": {
+      "type": "boolean"
+    },
+    "withheld_by_policy": {
+      "type": "integer"
+    },
+    "max_docs": {
+      "type": "integer"
+    },
+    "chars_budget": {
+      "type": "integer"
+    },
+    "chars_used": {
+      "type": "integer"
+    },
+    "read_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "instructions": {
+      "type": "string"
+    }
+  }
+}

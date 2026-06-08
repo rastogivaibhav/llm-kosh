@@ -13,7 +13,13 @@ from __future__ import annotations
 
 import pytest
 
-from llm_kosh.engine.reasoning.critique import TraceCritic, TraceWeakness, WeaknessType
+from llm_kosh.engine.reasoning.critique import (
+    CrossQueryCritic,
+    TraceCritic,
+    TraceWeakness,
+    WeaknessReport,
+    WeaknessType,
+)
 from llm_kosh.engine.reasoning.trace import QueryTrace
 
 
@@ -1259,3 +1265,570 @@ class TestTraceCriticIteration:
         assert WeaknessType.DISCOVERY_GAIN_ZERO in types
         assert WeaknessType.IMPROVEMENT_STALL in types
         assert len(result) == 3
+
+
+# ---------------------------------------------------------------------------
+# Helper: build a session of "clean" traces for CrossQueryCritic tests
+# ---------------------------------------------------------------------------
+
+def _make_trace(
+    fact_ids=None,
+    anchor_ids=None,
+    escape_triggered=False,
+    stability_score=0.9,
+    lyapunov_dims=None,
+    dialectic_summary=None,
+) -> QueryTrace:
+    """Return a QueryTrace suitable for session-level analysis."""
+    if fact_ids is None:
+        fact_ids = ["f1", "f2", "f3"]
+    if anchor_ids is None:
+        anchor_ids = ["anch1", "anch2"]
+    if lyapunov_dims is None:
+        lyapunov_dims = {
+            "temporal_consistency": 0.9,
+            "contradiction_score": 0.1,
+            "pattern_lock_score": 0.3,
+        }
+    return QueryTrace(
+        bundle_summary={"fact_ids": fact_ids},
+        anchor_ids=anchor_ids,
+        escape_triggered=escape_triggered,
+        stability_score=stability_score,
+        lyapunov_dimensions=lyapunov_dims,
+        dialectic_result_summary=dialectic_summary,
+    )
+
+
+# ---------------------------------------------------------------------------
+# TestWeaknessReport
+# ---------------------------------------------------------------------------
+
+class TestWeaknessReport:
+    """Tests for WeaknessReport dataclass."""
+
+    def _make_weakness(self, wtype=WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.5):
+        return TraceWeakness(
+            weakness_type=wtype,
+            severity=severity,
+            location="test",
+            description="test",
+            suggested_repair_type="test",
+        )
+
+    # ------------------------------------------------------------------ #
+    # Construction
+    # ------------------------------------------------------------------ #
+
+    def test_empty_report(self):
+        """WeaknessReport with no weaknesses has total_severity=0.0."""
+        report = WeaknessReport(trace_id="t1")
+        assert report.trace_id == "t1"
+        assert report.per_trace_weaknesses == []
+        assert report.session_weaknesses == []
+        assert report.total_severity == 0.0
+
+    def test_total_severity_computed_from_all_weaknesses(self):
+        """total_severity is mean of all severities."""
+        w1 = self._make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.8)
+        w2 = self._make_weakness(WeaknessType.NOVELTY_DEFICIT, severity=0.4)
+        report = WeaknessReport(
+            trace_id="t1",
+            per_trace_weaknesses=[w1],
+            session_weaknesses=[w2],
+        )
+        assert abs(report.total_severity - 0.6) < 1e-9
+
+    def test_total_severity_only_per_trace(self):
+        """total_severity works with only per_trace_weaknesses."""
+        w1 = self._make_weakness(severity=1.0)
+        w2 = self._make_weakness(WeaknessType.CONTRADICTION_UNRESOLVED, severity=0.5)
+        report = WeaknessReport(trace_id="t1", per_trace_weaknesses=[w1, w2])
+        assert abs(report.total_severity - 0.75) < 1e-9
+
+    def test_total_severity_only_session(self):
+        """total_severity works with only session_weaknesses."""
+        w = self._make_weakness(severity=0.6)
+        report = WeaknessReport(trace_id="t1", session_weaknesses=[w])
+        assert abs(report.total_severity - 0.6) < 1e-9
+
+    # ------------------------------------------------------------------ #
+    # all_weaknesses property
+    # ------------------------------------------------------------------ #
+
+    def test_all_weaknesses_combined_and_sorted(self):
+        """all_weaknesses = per_trace + session, sorted by severity descending."""
+        w1 = self._make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.3)
+        w2 = self._make_weakness(WeaknessType.NOVELTY_DEFICIT, severity=0.9)
+        w3 = self._make_weakness(WeaknessType.COVERAGE_BIAS, severity=0.6)
+        report = WeaknessReport(
+            trace_id="t1",
+            per_trace_weaknesses=[w1, w3],
+            session_weaknesses=[w2],
+        )
+        all_w = report.all_weaknesses
+        assert len(all_w) == 3
+        severities = [w.severity for w in all_w]
+        assert severities == sorted(severities, reverse=True)
+
+    def test_all_weaknesses_empty(self):
+        """all_weaknesses returns [] when no weaknesses exist."""
+        report = WeaknessReport(trace_id="t1")
+        assert report.all_weaknesses == []
+
+    # ------------------------------------------------------------------ #
+    # has_weaknesses property
+    # ------------------------------------------------------------------ #
+
+    def test_has_weaknesses_false_when_empty(self):
+        """has_weaknesses is False when no weaknesses."""
+        report = WeaknessReport(trace_id="t1")
+        assert report.has_weaknesses is False
+
+    def test_has_weaknesses_true_with_per_trace(self):
+        """has_weaknesses is True when per_trace_weaknesses exist."""
+        w = self._make_weakness()
+        report = WeaknessReport(trace_id="t1", per_trace_weaknesses=[w])
+        assert report.has_weaknesses is True
+
+    def test_has_weaknesses_true_with_session(self):
+        """has_weaknesses is True when session_weaknesses exist."""
+        w = self._make_weakness()
+        report = WeaknessReport(trace_id="t1", session_weaknesses=[w])
+        assert report.has_weaknesses is True
+
+    # ------------------------------------------------------------------ #
+    # worst_weakness property
+    # ------------------------------------------------------------------ #
+
+    def test_worst_weakness_none_when_empty(self):
+        """worst_weakness is None when no weaknesses exist."""
+        report = WeaknessReport(trace_id="t1")
+        assert report.worst_weakness is None
+
+    def test_worst_weakness_highest_severity(self):
+        """worst_weakness returns the highest-severity weakness."""
+        w1 = self._make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.3)
+        w2 = self._make_weakness(WeaknessType.NOVELTY_DEFICIT, severity=0.9)
+        w3 = self._make_weakness(WeaknessType.COVERAGE_BIAS, severity=0.6)
+        report = WeaknessReport(
+            trace_id="t1",
+            per_trace_weaknesses=[w1, w3],
+            session_weaknesses=[w2],
+        )
+        worst = report.worst_weakness
+        assert worst is not None
+        assert worst.weakness_type == WeaknessType.NOVELTY_DEFICIT
+        assert worst.severity == 0.9
+
+    # ------------------------------------------------------------------ #
+    # Serialization round-trip
+    # ------------------------------------------------------------------ #
+
+    def test_to_dict_contains_expected_keys(self):
+        """to_dict() contains trace_id, per_trace_weaknesses, session_weaknesses, total_severity."""
+        report = WeaknessReport(trace_id="t1")
+        d = report.to_dict()
+        assert "trace_id" in d
+        assert "per_trace_weaknesses" in d
+        assert "session_weaknesses" in d
+        assert "total_severity" in d
+
+    def test_roundtrip_empty(self):
+        """Empty WeaknessReport survives to_dict/from_dict round-trip."""
+        original = WeaknessReport(trace_id="abc-123")
+        restored = WeaknessReport.from_dict(original.to_dict())
+        assert restored.trace_id == "abc-123"
+        assert restored.per_trace_weaknesses == []
+        assert restored.session_weaknesses == []
+        assert restored.total_severity == 0.0
+
+    def test_roundtrip_with_weaknesses(self):
+        """WeaknessReport with weaknesses survives round-trip."""
+        w1 = self._make_weakness(WeaknessType.TEMPORAL_CONSISTENCY_LOW, severity=0.7)
+        w2 = self._make_weakness(WeaknessType.NOVELTY_DEFICIT, severity=0.5)
+        original = WeaknessReport(
+            trace_id="xyz",
+            per_trace_weaknesses=[w1],
+            session_weaknesses=[w2],
+        )
+        restored = WeaknessReport.from_dict(original.to_dict())
+        assert restored.trace_id == "xyz"
+        assert len(restored.per_trace_weaknesses) == 1
+        assert len(restored.session_weaknesses) == 1
+        assert restored.per_trace_weaknesses[0].weakness_type == WeaknessType.TEMPORAL_CONSISTENCY_LOW
+        assert restored.session_weaknesses[0].weakness_type == WeaknessType.NOVELTY_DEFICIT
+        assert abs(restored.total_severity - original.total_severity) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# TestCrossQueryCritic
+# ---------------------------------------------------------------------------
+
+class TestCrossQueryCritic:
+    """Tests for CrossQueryCritic.analyze_session()."""
+
+    # ------------------------------------------------------------------ #
+    # Edge cases
+    # ------------------------------------------------------------------ #
+
+    def test_empty_traces_returns_empty_list(self):
+        """analyze_session([]) returns []."""
+        critic = CrossQueryCritic()
+        assert critic.analyze_session([]) == []
+
+    def test_too_few_traces_returns_empty_list(self):
+        """analyze_session with 4 traces returns [] (minimum is 5 for any check)."""
+        traces = [_make_trace() for _ in range(4)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        # novelty_deficit and coverage_bias require >= 5
+        # self_repetition requires >= 3 but also needs dialectic summaries
+        # escape_never_triggers requires >= 10
+        # learning_stagnation requires >= 8
+        # With 4 traces and no dialectic, should be empty
+        assert result == []
+
+    # ------------------------------------------------------------------ #
+    # 1. novelty_deficit
+    # ------------------------------------------------------------------ #
+
+    def test_novelty_deficit_detected(self):
+        """Trigger: >=5 traces, same fact_ids appear in 80%+ of traces."""
+        # 5 traces all sharing fact "shared_f" plus some unique ones
+        traces = [
+            _make_trace(fact_ids=["shared_f", f"unique_{i}"]) for i in range(5)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.NOVELTY_DEFICIT in types
+
+    def test_novelty_deficit_severity(self):
+        """Severity = overused_count / all_unique_fact_ids."""
+        # 5 traces, all have "shared_f" (appears in 100% > 80%), each has a unique fact
+        traces = [
+            _make_trace(fact_ids=["shared_f", f"u{i}"]) for i in range(5)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.NOVELTY_DEFICIT)
+        # 1 overused (shared_f) out of 6 unique facts total
+        assert abs(w.severity - 1 / 6) < 1e-9
+        assert w.location == "session"
+        assert w.suggested_repair_type == "reset_to_low_freq_region"
+
+    def test_novelty_deficit_not_detected_below_threshold(self):
+        """NOT triggered when no fact appears in >= 80% of traces."""
+        # 5 traces, each with completely different fact_ids
+        traces = [
+            _make_trace(fact_ids=[f"f{i}_a", f"f{i}_b"]) for i in range(5)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.NOVELTY_DEFICIT not in types
+
+    def test_novelty_deficit_not_detected_with_fewer_than_5_traces(self):
+        """NOT triggered with fewer than 5 traces."""
+        traces = [_make_trace(fact_ids=["shared_f"]) for _ in range(4)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.NOVELTY_DEFICIT not in types
+
+    def test_novelty_deficit_description_format(self):
+        """Description includes count, pct, and trace count."""
+        traces = [_make_trace(fact_ids=["shared_f"]) for _ in range(5)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.NOVELTY_DEFICIT)
+        assert "80%" in w.description
+        assert "5" in w.description
+
+    # ------------------------------------------------------------------ #
+    # 2. coverage_bias
+    # ------------------------------------------------------------------ #
+
+    def test_coverage_bias_detected(self):
+        """Trigger: >=5 traces, >=70% of anchor_ids share same 4-char prefix."""
+        # All anchors start with "ABCD"
+        traces = [
+            _make_trace(anchor_ids=["ABCD1", "ABCD2", "ABCD3"]) for _ in range(5)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.COVERAGE_BIAS in types
+
+    def test_coverage_bias_severity_is_0_6(self):
+        """Severity is always 0.6."""
+        traces = [_make_trace(anchor_ids=["ABCD1", "ABCD2"]) for _ in range(5)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.COVERAGE_BIAS)
+        assert w.severity == 0.6
+        assert w.location == "session"
+        assert w.suggested_repair_type == "rotate_anchor_prefix"
+
+    def test_coverage_bias_not_detected_below_threshold(self):
+        """NOT triggered when diversity is sufficient (< 70% same prefix)."""
+        # 5 traces, each 3 anchors: 1 with prefix ABCD, 2 with different
+        traces = [
+            _make_trace(anchor_ids=["ABCD1", "WXYZ1", "LMNO1"]) for _ in range(5)
+        ]
+        # 5 * 1/3 = 33% with ABCD prefix → not triggered
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.COVERAGE_BIAS not in types
+
+    def test_coverage_bias_not_detected_with_fewer_than_5_traces(self):
+        """NOT triggered with fewer than 5 traces."""
+        traces = [_make_trace(anchor_ids=["ABCD1", "ABCD2"]) for _ in range(4)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.COVERAGE_BIAS not in types
+
+    def test_coverage_bias_description_includes_prefix(self):
+        """Description includes the dominant prefix."""
+        traces = [_make_trace(anchor_ids=["PREF1", "PREF2"]) for _ in range(5)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.COVERAGE_BIAS)
+        assert "PREF" in w.description
+
+    # ------------------------------------------------------------------ #
+    # 3. self_repetition
+    # ------------------------------------------------------------------ #
+
+    def test_self_repetition_detected(self):
+        """Trigger: >=3 traces, same converged_fact_id in > 50% of dialectic summaries."""
+        # 4 traces, 3 of 4 converge on same fact → 75% > 50%
+        traces = [
+            _make_trace(dialectic_summary={"converged_fact_id": "repeated_f", "opposition_challenges": 1})
+            for _ in range(3)
+        ] + [
+            _make_trace(dialectic_summary={"converged_fact_id": "other_f", "opposition_challenges": 1})
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SELF_REPETITION in types
+
+    def test_self_repetition_severity(self):
+        """Severity = fraction of converged answers that repeat the dominant fact."""
+        traces = [
+            _make_trace(dialectic_summary={"converged_fact_id": "rep_f"})
+            for _ in range(4)
+        ]  # 100% repetition
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.SELF_REPETITION)
+        assert abs(w.severity - 1.0) < 1e-9
+        assert w.location == "session"
+        assert w.suggested_repair_type == "reset_to_low_freq_region"
+
+    def test_self_repetition_not_detected_when_varied(self):
+        """NOT triggered when no single converged fact dominates > 50%."""
+        # 4 traces, each converges on a different fact → each 25%
+        traces = [
+            _make_trace(dialectic_summary={"converged_fact_id": f"fact_{i}"})
+            for i in range(4)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SELF_REPETITION not in types
+
+    def test_self_repetition_skipped_without_dialectic_summaries(self):
+        """NOT triggered when no traces have dialectic_result_summary."""
+        traces = [_make_trace(dialectic_summary=None) for _ in range(5)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SELF_REPETITION not in types
+
+    def test_self_repetition_not_detected_with_fewer_than_3_traces(self):
+        """NOT triggered with fewer than 3 traces."""
+        traces = [
+            _make_trace(dialectic_summary={"converged_fact_id": "rep_f"})
+            for _ in range(2)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.SELF_REPETITION not in types
+
+    # ------------------------------------------------------------------ #
+    # 4. escape_never_triggers
+    # ------------------------------------------------------------------ #
+
+    def test_escape_never_triggers_detected(self):
+        """Trigger: >=10 traces, escape never fired, mean stability < 0.75."""
+        traces = [
+            _make_trace(escape_triggered=False, stability_score=0.6)
+            for _ in range(10)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.ESCAPE_NEVER_TRIGGERS in types
+
+    def test_escape_never_triggers_severity_is_0_5(self):
+        """Severity is always 0.5."""
+        traces = [_make_trace(escape_triggered=False, stability_score=0.5) for _ in range(10)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.ESCAPE_NEVER_TRIGGERS)
+        assert w.severity == 0.5
+        assert w.location == "session"
+        assert w.suggested_repair_type == "lower_anchor_threshold"
+
+    def test_escape_never_triggers_not_detected_when_escape_fires(self):
+        """NOT triggered when at least one trace has escape_triggered=True."""
+        traces = [
+            _make_trace(escape_triggered=False, stability_score=0.6)
+            for _ in range(9)
+        ] + [_make_trace(escape_triggered=True, stability_score=0.6)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.ESCAPE_NEVER_TRIGGERS not in types
+
+    def test_escape_never_triggers_not_detected_when_stability_high(self):
+        """NOT triggered when mean stability >= 0.75 (escape correctly not needed)."""
+        traces = [_make_trace(escape_triggered=False, stability_score=0.9) for _ in range(10)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.ESCAPE_NEVER_TRIGGERS not in types
+
+    def test_escape_never_triggers_not_detected_with_fewer_than_10_traces(self):
+        """NOT triggered with fewer than 10 traces."""
+        traces = [_make_trace(escape_triggered=False, stability_score=0.5) for _ in range(9)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.ESCAPE_NEVER_TRIGGERS not in types
+
+    def test_escape_never_triggers_description_includes_trace_count(self):
+        """Description includes the number of traces."""
+        traces = [_make_trace(escape_triggered=False, stability_score=0.5) for _ in range(12)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.ESCAPE_NEVER_TRIGGERS)
+        assert "12" in w.description
+
+    # ------------------------------------------------------------------ #
+    # 5. learning_stagnation
+    # ------------------------------------------------------------------ #
+
+    def _make_trace_with_dims(self, tc=0.9, cs=0.1, pls=0.3, **kwargs):
+        """Shorthand for a trace with specific lyapunov dims."""
+        return _make_trace(
+            lyapunov_dims={
+                "temporal_consistency": tc,
+                "contradiction_score": cs,
+                "pattern_lock_score": pls,
+            },
+            **kwargs,
+        )
+
+    def test_learning_stagnation_detected(self):
+        """Trigger: >=8 traces, first half weakness count >= second half."""
+        # First 4 traces: all have 3 weaknesses (tc<0.6, cs>0.3, pls>0.7)
+        # Second 4 traces: also have 3 weaknesses → no improvement
+        bad_dims = dict(tc=0.4, cs=0.5, pls=0.8)
+        traces = [self._make_trace_with_dims(**bad_dims) for _ in range(8)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.LEARNING_STAGNATION in types
+
+    def test_learning_stagnation_severity_is_0_6(self):
+        """Severity is always 0.6."""
+        bad_dims = dict(tc=0.4, cs=0.5, pls=0.8)
+        traces = [self._make_trace_with_dims(**bad_dims) for _ in range(8)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.LEARNING_STAGNATION)
+        assert w.severity == 0.6
+        assert w.location == "session"
+        assert w.suggested_repair_type == "increase_retrieval_depth"
+
+    def test_learning_stagnation_not_detected_when_improving(self):
+        """NOT triggered when second half has fewer weaknesses than first half."""
+        # First 4 traces: 3 weaknesses each (tc<0.6, cs>0.3, pls>0.7)
+        # Second 4 traces: 0 weaknesses each
+        bad_dims = dict(tc=0.4, cs=0.5, pls=0.8)
+        good_dims = dict(tc=0.9, cs=0.1, pls=0.3)
+        traces = (
+            [self._make_trace_with_dims(**bad_dims) for _ in range(4)]
+            + [self._make_trace_with_dims(**good_dims) for _ in range(4)]
+        )
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.LEARNING_STAGNATION not in types
+
+    def test_learning_stagnation_not_detected_with_fewer_than_8_traces(self):
+        """NOT triggered with fewer than 8 traces."""
+        bad_dims = dict(tc=0.4, cs=0.5, pls=0.8)
+        traces = [self._make_trace_with_dims(**bad_dims) for _ in range(7)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        types = [w.weakness_type for w in result]
+        assert WeaknessType.LEARNING_STAGNATION not in types
+
+    def test_learning_stagnation_description_includes_halves(self):
+        """Description includes first_half and second_half mean values."""
+        bad_dims = dict(tc=0.4, cs=0.5, pls=0.8)
+        traces = [self._make_trace_with_dims(**bad_dims) for _ in range(8)]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        w = next(x for x in result if x.weakness_type == WeaknessType.LEARNING_STAGNATION)
+        assert "first_half=" in w.description
+        assert "second_half=" in w.description
+
+    # ------------------------------------------------------------------ #
+    # General properties
+    # ------------------------------------------------------------------ #
+
+    def test_results_sorted_by_severity_descending(self):
+        """Results are sorted by severity descending."""
+        # Build a session that triggers multiple weaknesses
+        # novelty_deficit (severity = fraction of overused)
+        # coverage_bias (severity = 0.6)
+        # escape_never_triggers (severity = 0.5)
+        # 10 traces with same fact_ids (novelty), same anchor prefix (coverage), no escape
+        traces = [
+            _make_trace(
+                fact_ids=["shared_f"],
+                anchor_ids=["ABCD1", "ABCD2"],
+                escape_triggered=False,
+                stability_score=0.5,
+            )
+            for _ in range(10)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        severities = [w.severity for w in result]
+        assert severities == sorted(severities, reverse=True)
+
+    def test_no_duplicate_weakness_types(self):
+        """No duplicate weakness types in results."""
+        traces = [
+            _make_trace(
+                fact_ids=["shared_f"],
+                anchor_ids=["ABCD1"],
+                escape_triggered=False,
+                stability_score=0.5,
+            )
+            for _ in range(10)
+        ]
+        critic = CrossQueryCritic()
+        result = critic.analyze_session(traces)
+        type_list = [w.weakness_type for w in result]
+        assert len(type_list) == len(set(type_list))

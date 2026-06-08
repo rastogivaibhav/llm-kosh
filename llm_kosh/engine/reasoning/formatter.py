@@ -8,8 +8,16 @@ if TYPE_CHECKING:
     from llm_kosh.engine.reasoning.fiber_bundle import Fiber
     from llm_kosh.engine.reasoning.causal_dag import CausalEdge
 
-_WIDE  = "━" * 49   # ━━━━━ (49 chars)
-_THIN  = "─" * 49   # ───── (49 chars)
+_WIDE  = "=" * 49   # ================================================= (49 chars)
+_THIN  = "-" * 49   # ------------------------------------------------- (49 chars)
+
+
+def _to_ts(dt: "datetime") -> float:
+    """Convert datetime to UTC timestamp, handling both aware and naive."""
+    from datetime import timezone as _tz
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=_tz.utc).timestamp()
+    return dt.timestamp()
 
 
 def _extract_title(content: str) -> str:
@@ -79,8 +87,8 @@ def format_narrative(result: "QueryResult", query: str = "") -> str:
     if not valid_fibers:
         return "No causal chain found for this query."
 
-    # Sort by valid_from ascending
-    valid_fibers.sort(key=lambda f: f.fact.valid_from)
+    # Sort by valid_from ascending (using _to_ts to handle timezone-aware vs naive)
+    valid_fibers.sort(key=lambda f: _to_ts(f.fact.valid_from))
 
     stability = result.stability
     status_label = stability.status.upper()
@@ -90,13 +98,13 @@ def format_narrative(result: "QueryResult", query: str = "") -> str:
 
     lines = []
     lines.append(_WIDE)
-    lines.append(f" CAUSAL TIMELINE  •  stability: {status_label} ({score_str})")
+    lines.append(f" CAUSAL TIMELINE  |  stability: {status_label} ({score_str})")
     lines.append(_WIDE)
 
     if query:
         lines.append(f" Query: \"{query}\"")
 
-    lines.append(f" Chain: {fact_count} facts  •  {anchor_count} anchors")
+    lines.append(f" Chain: {fact_count} facts  |  {anchor_count} anchors")
     lines.append(_THIN)
 
     for i, fiber in enumerate(valid_fibers):
@@ -104,7 +112,7 @@ def format_narrative(result: "QueryResult", query: str = "") -> str:
         idx = i + 1
 
         # Date string
-        if fact.valid_from.year <= 1971:
+        if _to_ts(fact.valid_from) < 86400 * 365 * 2:  # before 1972-01-02 UTC
             date_str = "(unknown)"
         else:
             date_str = fact.valid_from.strftime("%Y-%m-%d")
@@ -127,14 +135,14 @@ def format_narrative(result: "QueryResult", query: str = "") -> str:
             if edge is not None:
                 edge_label = edge.edge_type.value
                 edge_conf = f"{edge.confidence:.2f}"
-                lines.append(f"      ↓ {edge_label} ({edge_conf})")
+                lines.append(f"      v {edge_label} ({edge_conf})")
             else:
-                lines.append(f"      ↓ ──")
+                lines.append(f"      v --")
 
     lines.append(_THIN)
 
     if result.escape_triggered:
-        lines.append(" ⚠  Escape mechanism triggered — contradictions surfaced")
+        lines.append(" [!]  Escape mechanism triggered -- contradictions surfaced")
         lines.append(_WIDE)
 
     return "\n".join(lines)

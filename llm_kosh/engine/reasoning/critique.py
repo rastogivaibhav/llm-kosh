@@ -211,12 +211,7 @@ class TraceCritic:
         # ------------------------------------------------------------------ #
         # 6. hypothetical_promoted_silently
         # ------------------------------------------------------------------ #
-        if (
-            trace.escape_triggered is True
-            and trace.stability_status in ("stable", "marginal")
-            and dims.get("temporal_consistency", 1.0) >= 0.7
-            and any("HYPOTHETICAL" in str(v) for v in trace.metadata.values())
-        ):
+        if any("HYPOTHETICAL" in str(v) for v in trace.metadata.values()):
             _add(TraceWeakness(
                 weakness_type=WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY,
                 severity=0.8,

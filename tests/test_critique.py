@@ -765,8 +765,8 @@ class TestTraceCritic:
         types = [w.weakness_type for w in result]
         assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY not in types
 
-    def test_hypothetical_not_detected_when_escape_not_triggered(self):
-        """NOT triggered when escape_triggered is False."""
+    def test_hypothetical_detected_even_without_escape_triggered(self):
+        """Triggered when metadata has HYPOTHETICAL, regardless of escape_triggered."""
         trace = _clean_trace(
             lyapunov_dimensions={
                 "temporal_consistency": 0.8,
@@ -781,10 +781,10 @@ class TestTraceCritic:
         )
         result = TraceCritic().analyze(trace)
         types = [w.weakness_type for w in result]
-        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY not in types
+        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY in types
 
-    def test_hypothetical_not_detected_when_tc_too_low(self):
-        """NOT triggered when temporal_consistency < 0.7."""
+    def test_hypothetical_detected_with_low_temporal_consistency(self):
+        """Triggered when metadata has HYPOTHETICAL, regardless of temporal_consistency."""
         trace = _clean_trace(
             lyapunov_dimensions={
                 "temporal_consistency": 0.65,
@@ -799,7 +799,7 @@ class TestTraceCritic:
         )
         result = TraceCritic().analyze(trace)
         types = [w.weakness_type for w in result]
-        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY not in types
+        assert WeaknessType.HYPOTHETICAL_PROMOTED_SILENTLY in types
 
     # ------------------------------------------------------------------ #
     # Sorting & deduplication

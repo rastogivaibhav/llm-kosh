@@ -41,6 +41,7 @@ class ReasoningEngine:
         self._enable_recursive = enable_recursive
         self.dag = CausalDAG(root)
         self._retrieval = CausalRetrieval(self.dag)
+        self._retrieval_dirty = False  # set True by ingest(); rebuilt lazily before first query
         self._critic = LyapunovCritic(self.dag)
         self._escape = EscapeMechanism(self.dag)
         self._dialectic = DialecticController(self)
@@ -87,8 +88,8 @@ class ReasoningEngine:
                 )
             except (KeyError, ValueError):
                 pass
-        # Refresh retrieval index
-        self._retrieval = CausalRetrieval(self.dag)
+        # Mark retrieval index stale; rebuilt lazily on first query (avoids O(n²) during bulk ingest)
+        self._retrieval_dirty = True
         return fact_id
 
     def query(
@@ -102,6 +103,7 @@ class ReasoningEngine:
         Full pipeline: retrieve -> bundle -> critique -> escape if needed -> return.
         temporal_context: ISO 8601 datetime string, Unix timestamp str, or None (uses now).
         """
+        self._ensure_retrieval()
         query_time = self._parse_temporal_context(temporal_context)
         trajectory = TrajectoryState(session_id=f"q-{int(query_time)}")
 
@@ -148,6 +150,7 @@ class ReasoningEngine:
         Like query(), but also builds and auto-saves a QueryTrace.
         Candidates are retrieved before query() so they can be recorded.
         """
+        self._ensure_retrieval()
         query_time = self._parse_temporal_context(temporal_context)
         # Capture candidates before calling query() (cheap, idempotent)
         raw_candidates = self._retrieval.retrieve(query, query_time, depth=depth)
@@ -195,6 +198,7 @@ class ReasoningEngine:
         """
         Like dialectic_query(), but also builds and auto-saves a QueryTrace.
         """
+        self._ensure_retrieval()
         query_time = self._parse_temporal_context(temporal_context)
         raw_candidates = self._retrieval.retrieve(query, query_time, depth=depth)
         candidates = [(fact.id, dist, score) for fact, dist, score in raw_candidates]
@@ -415,6 +419,12 @@ class ReasoningEngine:
         )
 
     # ------------------------------------------------------------------ helpers
+
+    def _ensure_retrieval(self) -> None:
+        """Rebuild the TF-IDF retrieval index if it was invalidated by ingest()."""
+        if self._retrieval_dirty:
+            self._retrieval = CausalRetrieval(self.dag)
+            self._retrieval_dirty = False
 
     def _apply_reasoning_mode(self, bundle: FiberBundle, mode: ReasoningMode) -> FiberBundle:
         """Apply lightweight empirical/theoretical/balanced path policy."""

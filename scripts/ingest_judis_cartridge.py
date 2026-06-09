@@ -565,7 +565,7 @@ def print_stats(
 ) -> None:
     precise = sum(1 for d in docs if d.is_precise_date)
     dates = [d.judgment_date.year for d in docs if d.judgment_date]
-    date_range = f"{min(dates)} → {max(dates)}" if dates else "unknown"
+    date_range = f"{min(dates)} -> {max(dates)}" if dates else "unknown"
 
     judge_counter: Counter = Counter()
     for doc in docs:

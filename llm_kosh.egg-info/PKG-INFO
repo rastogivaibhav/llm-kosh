@@ -28,6 +28,7 @@ Provides-Extra: server
 Requires-Dist: fastapi>=0.116.0; extra == "server"
 Requires-Dist: uvicorn>=0.23.0; extra == "server"
 Requires-Dist: mcp>=1.26.0; extra == "server"
+Requires-Dist: tomli>=2.0.0; python_version < "3.11" and extra == "server"
 Provides-Extra: ingest
 Requires-Dist: markitdown; extra == "ingest"
 Provides-Extra: all

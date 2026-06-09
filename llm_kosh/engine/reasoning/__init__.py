@@ -517,3 +517,14 @@ from llm_kosh.engine.reasoning.temporal_evidence import (  # noqa: E402,F401
     TemporalSource,
     TemporalStatus,
 )
+
+# v1.1 Recursive Self-Healing Loop
+try:
+    from llm_kosh.engine.reasoning.v1_1_tracer import QueryTrace, QueryTracer
+    from llm_kosh.engine.reasoning.v1_1_critic import TraceCritic, TraceWeakness
+    from llm_kosh.engine.reasoning.v1_1_generator import DiscoveryGenerator, DiscoveryQuestion
+    from llm_kosh.engine.reasoning.v1_1_executor import SafeDiscoveryExecutor, DiscoveryResult
+    from llm_kosh.engine.reasoning.v1_1_self_model import SelfModel, LearnedPattern
+    from llm_kosh.engine.reasoning.v1_1_loop import RecursiveLoopEngine, LoopIteration
+except ImportError:
+    pass

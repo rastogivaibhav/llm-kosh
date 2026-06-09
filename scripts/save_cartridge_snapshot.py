@@ -24,12 +24,14 @@ def main() -> None:
     events = CARTRIDGE_DIR / "reasoning" / "events.jsonl"
     dag_file = CARTRIDGE_DIR / "dag.json"
 
+    snapshot_file = CARTRIDGE_DIR / "reasoning" / "snapshot.json"
+
     if not events.exists():
         print(f"ERROR: no events.jsonl found at {events}")
         sys.exit(1)
 
-    if dag_file.exists():
-        print(f"dag.json already exists at {dag_file} — nothing to do.")
+    if snapshot_file.exists():
+        print(f"snapshot.json already exists at {snapshot_file} — nothing to do.")
         print("Delete it first if you want to force a rebuild.")
         sys.exit(0)
 
@@ -57,8 +59,8 @@ def main() -> None:
     t1 = time.time()
     engine.dag.save_snapshot()
     snap_time = time.time() - t1
-    print(f"Snapshot saved to {dag_file} in {snap_time:.1f}s")
-    print(f"Size: {dag_file.stat().st_size / 1024:.0f} KB")
+    print(f"Snapshot saved to {snapshot_file} in {snap_time:.1f}s")
+    print(f"Size: {snapshot_file.stat().st_size / 1024:.0f} KB")
     print()
     print("Done. Subsequent loads will read dag.json directly (no log replay).")
 

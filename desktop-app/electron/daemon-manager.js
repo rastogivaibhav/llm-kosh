@@ -1,4 +1,5 @@
 const { spawn } = require('child_process');
+const http = require('http');
 const { app, Notification } = require('electron');
 const { buildCommandArgs } = require('./command-builder');
 const { resolveLlmKoshExecutable } = require('./cli-resolver');
@@ -127,11 +128,29 @@ class DaemonManager {
     return { ok: false, stderr: 'No active daemon.' };
   }
 
-  getStatus() {
+  async healthCheck() {
+    return new Promise((resolve) => {
+      const req = http.get('http://127.0.0.1:5556/health', { timeout: 500 }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try { resolve({ running: true, ...JSON.parse(data) }); }
+          catch { resolve({ running: true }); }
+        });
+      });
+      req.on('error', () => resolve({ running: false }));
+      req.on('timeout', () => { req.destroy(); resolve({ running: false }); });
+    });
+  }
+
+  async getStatus() {
+    const health = await this.healthCheck();
     return {
-      running: !!this.activeDaemon,
-      pid: this.activeDaemon ? this.activeDaemon.pid : null,
+      running: !!this.activeDaemon || health.running,
+      pid: this.activeDaemon ? this.activeDaemon.pid : (health.pid || null),
       uptimeMs: this.uptimeStart ? (Date.now() - this.uptimeStart) : 0,
+      uptimeS: health.uptime_s || null,
+      healthStatus: health.status || null,
       lastEvent: this.lastEvent,
       lastError: this.lastError,
       logs: this.logs.slice(0, 50)

@@ -10,9 +10,15 @@ from llm_kosh.engine.healing import absorb_receipt, resolve
 # We will import the rest from llm_kosh.engine.commands
 from llm_kosh.engine.commands import *
 
+try:
+    from llm_kosh.global_config import get_default_cartridge_root as _get_default_cartridge_root
+    _DEFAULT_ROOT = str(_get_default_cartridge_root())
+except Exception:
+    _DEFAULT_ROOT = str(Path.cwd() / DEFAULT_ROOT_NAME)
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=f"LlmKosh v{APP_VERSION}")
-    parser.add_argument("--root", default=str(Path.cwd() / DEFAULT_ROOT_NAME), help="Cartridge root folder")
+    parser.add_argument("--root", default=_DEFAULT_ROOT, help="Cartridge root folder")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("init", help="Create a new cartridge")
@@ -232,8 +238,25 @@ def main() -> None:
     p.add_argument("action", choices=["pack", "receipt", "cartridge", "generate-sample", "report"])
     p.add_argument("target", nargs="?")
 
+    # service subcommand
+    p_service = sub.add_parser("service", help="Manage the llm-kosh background service")
+    p_service.add_argument("action", choices=["start", "stop", "restart", "status", "run"])
+
+    # install subcommand
+    p_install = sub.add_parser("install", help="One-click setup: service + MCP auto-start")
+    p_install.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
+
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
+
+    # Auto-spawn daemon for commands that touch the cartridge
+    _NO_SPAWN_CMDS = {"init", "install", "service", "daemon", "mcp-server", "mcp-tools", "mcp-test", "version"}
+    if getattr(args, 'cmd', None) not in _NO_SPAWN_CMDS:
+        try:
+            from llm_kosh.service import maybe_spawn
+            maybe_spawn()
+        except Exception:
+            pass  # never break the CLI due to spawn failure
 
     if args.cmd == "init":
         init_cartridge(root, args.owner)
@@ -631,6 +654,14 @@ def main() -> None:
             from llm_kosh.engine.intake import processor_apply
             res = processor_apply(root, args.name)
             print(f"Applied proposal: {res}")
+    elif args.cmd == "service":
+        from llm_kosh.service import main as service_main
+        import sys as _sys
+        _sys.argv = [_sys.argv[0]] + ([args.action] if hasattr(args, 'action') else [])
+        service_main()
+    elif args.cmd == "install":
+        from llm_kosh.install import run_install
+        run_install(yes=getattr(args, 'yes', False))
 
 if __name__ == "__main__":
     main()

@@ -672,6 +672,11 @@ def main() -> None:
     log.info("Building CONTRADICTS edges (party flip)...")
     contradicts = build_contradicts_edges(engine, selected)
 
+    # Persist snapshot so subsequent loads read dag.json (fast) not events.jsonl (slow)
+    log.info("Saving DAG snapshot...")
+    engine.dag.save_snapshot()
+    log.info("Snapshot saved.")
+
     print_stats(selected, infers, causes, similar, contradicts, engine)
 
 

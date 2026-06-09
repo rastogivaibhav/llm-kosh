@@ -471,40 +471,89 @@ class CausalDAG:
 
     def add_fact(
         self,
-        content: str,
-        ingested_at: datetime,
-        documented_at: datetime,
-        valid_from: datetime,
-        valid_until: Optional[datetime],
-        confidence: float,
-        source: str,
+        content_or_fact,
+        ingested_at: Optional[datetime] = None,
+        documented_at: Optional[datetime] = None,
+        valid_from: Optional[datetime] = None,
+        valid_until: Optional[datetime] = None,
+        confidence: Optional[float] = None,
+        source: Optional[str] = None,
         resonance_profile: Optional[dict] = None,
     ) -> str:
-        self._validate_confidence(confidence)
-        self._validate_window(valid_from, valid_until)
-        fact_id = "fact." + uuid.uuid4().hex[:12]
+        """
+        Add a temporal fact to the causal DAG.
+
+        Accepts either:
+        1. A TemporalFact object: add_fact(temporal_fact_obj)
+        2. Unpacked arguments: add_fact(content, ingested_at, documented_at, ...)
+
+        Args:
+            content_or_fact: Either a TemporalFact object or the fact content string
+            ingested_at: When the fact was ingested (required if content_or_fact is str)
+            documented_at: When the fact was documented (required if content_or_fact is str)
+            valid_from: Start of validity window (required if content_or_fact is str)
+            valid_until: End of validity window (optional)
+            confidence: Confidence score 0-1 (required if content_or_fact is str)
+            source: Source of the fact (required if content_or_fact is str)
+            resonance_profile: Optional metadata dict
+
+        Returns:
+            Fact ID (auto-generated)
+        """
+        # Handle TemporalFact object form
+        if isinstance(content_or_fact, TemporalFact):
+            fact = content_or_fact
+            fact_id = fact.id if fact.id else "fact." + uuid.uuid4().hex[:12]
+            content = fact.content
+            ingested_at_val = fact.ingested_at
+            documented_at_val = fact.documented_at
+            valid_from_val = fact.valid_from
+            valid_until_val = fact.valid_until
+            confidence_val = fact.confidence
+            source_val = fact.source
+            resonance_profile_val = fact.resonance_profile or {}
+        else:
+            # Handle unpacked arguments form
+            if any(x is None for x in [ingested_at, documented_at, valid_from, confidence, source]):
+                raise ValueError(
+                    "When not using TemporalFact object, all arguments "
+                    "(content, ingested_at, documented_at, valid_from, confidence, source) are required"
+                )
+            fact_id = "fact." + uuid.uuid4().hex[:12]
+            content = content_or_fact
+            ingested_at_val = ingested_at
+            documented_at_val = documented_at
+            valid_from_val = valid_from
+            valid_until_val = valid_until
+            confidence_val = confidence
+            source_val = source
+            resonance_profile_val = resonance_profile or {}
+
+        self._validate_confidence(confidence_val)
+        self._validate_window(valid_from_val, valid_until_val)
+
         fact = TemporalFact(
             id=fact_id,
             content=content,
-            ingested_at=ingested_at,
-            documented_at=documented_at,
-            valid_from=valid_from,
-            valid_until=valid_until,
-            confidence=confidence,
-            resonance_profile=resonance_profile or {},
-            source=source,
+            ingested_at=ingested_at_val,
+            documented_at=documented_at_val,
+            valid_from=valid_from_val,
+            valid_until=valid_until_val,
+            confidence=confidence_val,
+            resonance_profile=resonance_profile_val,
+            source=source_val,
         )
         self._register_fact(fact)
         self._append_event("fact.added", {
             "id": fact_id,
             "content": content,
-            "ingested_at": ingested_at.isoformat(),
-            "documented_at": documented_at.isoformat(),
-            "valid_from": valid_from.isoformat(),
-            "valid_until": valid_until.isoformat() if valid_until else None,
-            "confidence": confidence,
-            "resonance_profile": resonance_profile or {},
-            "source": source,
+            "ingested_at": ingested_at_val.isoformat(),
+            "documented_at": documented_at_val.isoformat(),
+            "valid_from": valid_from_val.isoformat(),
+            "valid_until": valid_until_val.isoformat() if valid_until_val else None,
+            "confidence": confidence_val,
+            "resonance_profile": resonance_profile_val,
+            "source": source_val,
         })
 
         # Auto-detect causal edges from discourse markers in recent facts

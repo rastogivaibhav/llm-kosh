@@ -15,6 +15,7 @@ class StabilityResult:
     implicated_facts: List[str]
     abstain: bool = False
     reason: Optional[str] = None
+    escape_triggered: bool = False
 
 
 class LyapunovCritic:
@@ -63,6 +64,7 @@ class LyapunovCritic:
                 implicated_facts=[],
                 abstain=True,
                 reason="No valid memory evidence was retrieved for this query/time.",
+                escape_triggered=False,
             )
 
         temporal_consistency = self._temporal_consistency(bundle)
@@ -101,6 +103,7 @@ class LyapunovCritic:
             implicated_facts=[],
             abstain=False,
             reason=None,
+            escape_triggered=(status in ["marginal", "unstable"]),
         )
 
     # ------------------------------------------------------------------ dimensions

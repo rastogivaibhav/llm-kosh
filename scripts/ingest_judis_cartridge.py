@@ -643,7 +643,14 @@ def main() -> None:
             f = TARGET_DIR / fname
             if f.exists():
                 f.unlink()
-        log.info("Cleared existing cartridge files.")
+        # Also clear the event log and self-model so the engine starts truly fresh
+        events_file = TARGET_DIR / "reasoning" / "events.jsonl"
+        if events_file.exists():
+            events_file.unlink()
+        self_model_file = TARGET_DIR / ".self_model.json"
+        if self_model_file.exists():
+            self_model_file.unlink()
+        log.info("Cleared existing cartridge files (dag.json, events.jsonl, .self_model.json).")
 
     log.info("Initializing ReasoningEngine at %s", TARGET_DIR)
     from llm_kosh.engine.reasoning import ReasoningEngine

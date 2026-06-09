@@ -9,9 +9,9 @@ markitdown
 sentence-transformers>=2.2.0
 
 [server]
-fastapi>=0.100.0
+fastapi>=0.116.0
 uvicorn>=0.23.0
-mcp>=1.0.0
+mcp>=1.26.0
 
 [watch]
 watchdog>=3.0.0

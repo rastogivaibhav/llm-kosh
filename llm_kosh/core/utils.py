@@ -103,9 +103,12 @@ def _read_chain_head(ledger: Path) -> str:
     """Last row hash in the chain: from CHAIN_HEAD cache, else tail scan, else genesis."""
     head_file = ledger.parent / "CHAIN_HEAD"
     if head_file.exists():
-        cached = head_file.read_text(encoding="utf-8").strip()
-        if cached.startswith("sha256:"):
-            return cached
+        try:
+            cached = head_file.read_text(encoding="utf-8").strip()
+            if cached.startswith("sha256:"):
+                return cached
+        except OSError:
+            pass  # concurrent os.replace on Windows can make the file briefly unreadable
     if ledger.exists():
         last = None
         with ledger.open("r", encoding="utf-8", errors="replace") as f:
@@ -143,7 +146,11 @@ def append_ledger(root: Path, event: str, payload: dict) -> None:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
             f.flush()
             os.fsync(f.fileno())
-            atomic_write_text(ledger.parent / "CHAIN_HEAD", row["row_hash"] + "\n")
+            try:
+                atomic_write_text(ledger.parent / "CHAIN_HEAD", row["row_hash"] + "\n")
+            except OSError:
+                pass  # CHAIN_HEAD is a read-ahead cache; concurrent replace races on
+                      # Windows are harmless — _read_chain_head falls back to the ledger
         finally:
             _unlock_file(f)
 

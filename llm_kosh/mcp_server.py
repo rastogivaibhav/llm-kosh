@@ -4,7 +4,38 @@ from pathlib import Path
 from functools import wraps
 from typing import Dict, Any, List
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover - exercised in minimal CI/sandbox
+    class _FallbackTool:
+        def __init__(self, name, func):
+            self.name = name
+            self.description = (func.__doc__ or "").strip()
+            self.func = func
+
+    class _FallbackToolManager:
+        def __init__(self):
+            self._tools = {}
+
+    class FastMCP:  # minimal test/dev fallback when optional mcp package is absent
+        def __init__(self, name: str, dependencies=None):
+            self.name = name
+            self.dependencies = dependencies or []
+            self._tool_manager = _FallbackToolManager()
+
+        def tool(self):
+            def decorator(func):
+                self._tool_manager._tools[func.__name__] = _FallbackTool(func.__name__, func)
+                return func
+            return decorator
+
+        async def call_tool(self, name: str, arguments=None):
+            arguments = arguments or {}
+            tool = self._tool_manager._tools[name]
+            return tool.func(**arguments)
+
+        def run(self):
+            return None
 
 from llm_kosh.engine.search import query_memory, semantic_search, get_memory_map, get_project_context
 from llm_kosh.engine.commands import verify_ledger

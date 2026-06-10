@@ -1,0 +1,201 @@
+{
+  "source_files": {
+    "archive4": {
+      "path": "/mnt/data/archive 4.zip",
+      "csv": "incident_event_log.csv"
+    },
+    "archive5": {
+      "path": "/mnt/data/archive 5.zip",
+      "csv": "ITSM_Dataset.csv"
+    }
+  },
+  "dataset_audit": {
+    "archive4_incident_event_log": {
+      "rows": 141712,
+      "unique_incidents": 24918,
+      "date_range": {
+        "sys_updated_min": "2016-02-29 01:23:00",
+        "sys_updated_max": "2017-02-18 15:00:00"
+      },
+      "state_counts": {
+        "Active": 38716,
+        "New": 36407,
+        "Resolved": 25751,
+        "Closed": 24985,
+        "Awaiting User Info": 14642,
+        "Awaiting Vendor": 707,
+        "Awaiting Problem": 461,
+        "Awaiting Evidence": 38,
+        "-100": 5
+      },
+      "priority_counts": {
+        "3 - Moderate": 132452,
+        "4 - Low": 4030,
+        "2 - High": 2972,
+        "1 - Critical": 2258
+      },
+      "with_caused_by_rows": 23,
+      "with_caused_by_incidents": 3,
+      "with_problem_rows": 2295,
+      "with_rfc_rows": 991,
+      "reopened_rows": 2314,
+      "reopened_incidents": 275,
+      "events_per_incident": {
+        "mean": 5.687,
+        "median": 5.0,
+        "p95": 13.0,
+        "max": 58
+      },
+      "incident_groups_with_time_or_mod_order_anomaly": 5,
+      "incident_groups_with_duplicate_update_times": 9318
+    },
+    "archive5_itsm_dataset": {
+      "rows": 100000,
+      "unique_tickets": 100000,
+      "created_range": {
+        "min": "2024-04-01 00:00:00",
+        "max": "2024-08-11 23:58:00"
+      },
+      "status_counts": {
+        "Resolved": 20134,
+        "In Progress": 20123,
+        "Closed": 20015,
+        "New": 20014,
+        "Open": 19714
+      },
+      "priority_counts": {
+        "Medium": 25117,
+        "Critical": 25045,
+        "Low": 25014,
+        "High": 24824
+      },
+      "topic_counts": {
+        "General Inquiry": 20254,
+        "Network Issue": 20053,
+        "Hardware Failure": 20027,
+        "Access Request": 19923,
+        "Software Bug": 19743
+      },
+      "sla_first_response_counts": {
+        "Met": 100000
+      },
+      "sla_resolution_counts": {
+        "Met": 100000
+      },
+      "first_response_minutes": {
+        "mean": 31.257,
+        "p95": 58.0
+      },
+      "resolution_minutes": {
+        "mean": 140.074,
+        "p95": 236.0
+      },
+      "temporal_anomalies": {
+        "first_before_created": 0,
+        "resolution_before_first": 0,
+        "close_before_resolution": 0,
+        "first_response_after_sla_due_but_marked_met": 0,
+        "resolution_after_sla_due_but_marked_met": 0
+      }
+    }
+  },
+  "kosh_ingestion": {
+    "incident_sample_incidents": 100,
+    "incident_sample_rows": 809,
+    "ticket_sample_rows": 100,
+    "facts": 1667,
+    "edges": 2522,
+    "hyperedges": 200,
+    "change_fact_count": 3,
+    "problem_fact_count": 47,
+    "rfc_fact_count": 8
+  },
+  "checks": [
+    {
+      "name": "incident_temporal_state_validity_windows",
+      "passed": true,
+      "score": 1.0,
+      "details": {
+        "checked_states": 809,
+        "passed_states": 809,
+        "bad_examples": []
+      }
+    },
+    {
+      "name": "incident_causal_lifecycle_path_preserved",
+      "passed": true,
+      "score": 1.0,
+      "details": {
+        "checked_incidents": 100,
+        "passed": 100,
+        "failed_examples": []
+      }
+    },
+    {
+      "name": "edge_and_hyperedge_provenance_coverage",
+      "passed": true,
+      "score": 1.0,
+      "details": {
+        "edges": 2522,
+        "edges_with_evidence_refs": 2522,
+        "hyperedges": 200,
+        "hyperedges_with_evidence_refs": 200,
+        "allowed_origins_edges": 2522
+      }
+    },
+    {
+      "name": "sla_joint_causality_hyperedges_fire_only_with_required_sources",
+      "passed": true,
+      "score": 1.0,
+      "details": {
+        "checked_hyperedge_cases": 200,
+        "passed": 200,
+        "failed_examples": []
+      }
+    },
+    {
+      "name": "unrelated_query_no_evidence_or_low_stability",
+      "passed": true,
+      "score": 1.0,
+      "details": {
+        "fibers": 0,
+        "stability_status": "no_evidence",
+        "stability_score": 0.0
+      }
+    },
+    {
+      "name": "dialectic_result_created_for_ticket_query",
+      "passed": true,
+      "score": 1.0,
+      "details": {
+        "ticket": "TCKT-117688",
+        "final_status": "reopened_for_non_convergent_review",
+        "opposition_findings": 2
+      }
+    }
+  ],
+  "time_ablation": {
+    "incident_state_at_midpoint_cases": 1000,
+    "incident_state_accuracy_exact_time": 1.0,
+    "incident_state_accuracy_sequence_order_if_query_is_event_index": 1.0,
+    "incident_state_accuracy_static_collapsed_time": 0.001,
+    "sla_cases": 2000,
+    "sla_accuracy_exact_time": 1.0,
+    "sla_accuracy_sequence_only": 0.0,
+    "sla_accuracy_static_no_time": 0.0,
+    "interpretation": "State ordering can sometimes be recovered from sequence/mod_count, but SLA compliance and exact state-at-clock-time require real temporal evidence. Collapsing to the latest state loses historical truth."
+  },
+  "runtime_seconds": {
+    "read": 1.866,
+    "audit": 9.239,
+    "kosh_build": 3.071,
+    "kosh_eval": 0.326,
+    "time_ablation": 3.415,
+    "total": 17.918
+  },
+  "verdict": {
+    "passed_checks": 6,
+    "total_checks": 6,
+    "all_passed": true
+  }
+}

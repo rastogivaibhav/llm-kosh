@@ -64,12 +64,86 @@ def read_json(path: Path, default=None):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+GENESIS_HASH = "sha256:" + "0" * 64
+
+
+def _lock_file(f) -> None:
+    """Acquire an exclusive advisory lock (POSIX fcntl / Windows msvcrt)."""
+    try:
+        if hasattr(__import__("os"), "name") and __import__("os").name == "nt":
+            import msvcrt
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+    except Exception:
+        pass  # locking is best-effort; never block the write itself
+
+
+def _unlock_file(f) -> None:
+    try:
+        if __import__("os").name == "nt":
+            import msvcrt
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+
+
+def row_hash(row: dict) -> str:
+    """Canonical SHA-256 of a ledger row, excluding its own row_hash field."""
+    payload = {k: v for k, v in row.items() if k != "row_hash"}
+    canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return sha256_bytes(canonical.encode("utf-8"))
+
+
+def _read_chain_head(ledger: Path) -> str:
+    """Last row hash in the chain: from CHAIN_HEAD cache, else tail scan, else genesis."""
+    head_file = ledger.parent / "CHAIN_HEAD"
+    if head_file.exists():
+        cached = head_file.read_text(encoding="utf-8").strip()
+        if cached.startswith("sha256:"):
+            return cached
+    if ledger.exists():
+        last = None
+        with ledger.open("r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.strip():
+                    last = line
+        if last:
+            try:
+                prev_row = json.loads(last)
+                return prev_row.get("row_hash") or row_hash(prev_row)
+            except Exception:
+                pass
+    return GENESIS_HASH
+
+
 def append_ledger(root: Path, event: str, payload: dict) -> None:
+    """Append a hash-chained event row. Locked, fsynced, tamper-evident.
+
+    Each row carries `prev` (hash of the previous row) and `row_hash`
+    (canonical SHA-256 of the row itself), forming a verifiable chain
+    from GENESIS_HASH. Legacy rows without these fields remain valid.
+    """
+    import os
     ledger = root / "ledger" / "events.jsonl"
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    row = {"event_id": f"evt_{uuid.uuid4().hex}", "event": event, "time": now_iso(), **payload}
     with ledger.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        _lock_file(f)
+        try:
+            prev = _read_chain_head(ledger)
+            row = {"event_id": f"evt_{uuid.uuid4().hex}", "event": event,
+                   "time": now_iso(), **payload, "prev": prev}
+            row["row_hash"] = row_hash(row)
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+            atomic_write_text(ledger.parent / "CHAIN_HEAD", row["row_hash"] + "\n")
+        finally:
+            _unlock_file(f)
 
 
 def frontmatter(meta: Dict[str, object]) -> str:
@@ -106,6 +180,13 @@ def parse_frontmatter(text: str) -> Tuple[dict, str]:
                 v = json.loads(v)
             except Exception:
                 v = v.strip('"')
+        elif v.startswith("[") and v.endswith("]"):
+            try:
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    v = parsed
+            except Exception:
+                pass
         meta[k.strip()] = v
     return meta, body
 

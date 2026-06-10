@@ -471,7 +471,7 @@ class CausalDAG:
 
     def add_fact(
         self,
-        content_or_fact,
+        content_or_fact=None,
         ingested_at: Optional[datetime] = None,
         documented_at: Optional[datetime] = None,
         valid_from: Optional[datetime] = None,
@@ -479,6 +479,7 @@ class CausalDAG:
         confidence: Optional[float] = None,
         source: Optional[str] = None,
         resonance_profile: Optional[dict] = None,
+        **kwargs,
     ) -> str:
         """
         Add a temporal fact to the causal DAG.
@@ -500,6 +501,16 @@ class CausalDAG:
         Returns:
             Fact ID (auto-generated)
         """
+        # Compatibility shim: older product/verify code calls
+        # add_fact(content=..., ingested_at=..., ...).  The hardened API keeps
+        # the positional TemporalFact/string forms but also accepts this clearer
+        # keyword style so Kosh Verify, recursive loop, and dataset evaluators
+        # share one stable write path.
+        if content_or_fact is None and "content" in kwargs:
+            content_or_fact = kwargs.pop("content")
+        if kwargs:
+            raise TypeError(f"unexpected add_fact keyword(s): {sorted(kwargs)}")
+
         # Handle TemporalFact object form
         if isinstance(content_or_fact, TemporalFact):
             fact = content_or_fact

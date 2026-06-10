@@ -254,7 +254,7 @@ def main() -> None:
     if getattr(args, 'cmd', None) not in _NO_SPAWN_CMDS:
         try:
             from llm_kosh.service import maybe_spawn
-            maybe_spawn()
+            maybe_spawn(root)
         except Exception:
             pass  # never break the CLI due to spawn failure
 

@@ -16,7 +16,8 @@ from llm_kosh.engine.reasoning import ReasoningEngine
 
 
 # Path to real cartridge
-REAL_CARTRIDGE = Path(r"C:\Users\vrast\OneDrive\Apps\Documents\llm-kosh-cart")
+import os
+REAL_CARTRIDGE = Path(os.environ.get("LLM_KOSH_REAL_CARTRIDGE", r"C:\Users\vrast\OneDrive\Apps\Documents\llm-kosh-cart"))
 
 
 class TestReasoningRealCartridge:
@@ -47,6 +48,8 @@ class TestReasoningRealCartridge:
 
     def test_cartridge_exists(self):
         """Verify real cartridge is accessible"""
+        if not REAL_CARTRIDGE.exists():
+            pytest.skip(f"Real cartridge not found at {REAL_CARTRIDGE} (set LLM_KOSH_REAL_CARTRIDGE)")
         assert REAL_CARTRIDGE.exists(), f"Cartridge not found at {REAL_CARTRIDGE}"
         assert (REAL_CARTRIDGE / "source").exists()
         assert (REAL_CARTRIDGE / "indexes" / "index_state.json").exists()

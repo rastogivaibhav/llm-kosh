@@ -133,7 +133,8 @@ class ServiceRunner:
         _health_pid = os.getpid()
 
         self._config = get_global_config()
-        cartridge_root = get_default_cartridge_root()
+        env_root = os.environ.get("LLMKOSH_ROOT")
+        cartridge_root = Path(env_root).expanduser().resolve() if env_root else get_default_cartridge_root()
 
         self._handle_stale_pid()
         self._write_pid()
@@ -147,6 +148,11 @@ class ServiceRunner:
         try:
             from llm_kosh.core.memory import ensure_root
             ensure_root(cartridge_root)
+        except SystemExit:
+            log.error("Cartridge root invalid: %s — daemon exiting. "
+                      "Set LLMKOSH_ROOT or run `llm-kosh --root <path> init`.", cartridge_root)
+            clear_pid(self._PID_PATH)
+            raise SystemExit(1)
         except Exception as exc:
             log.warning("ensure_root failed: %s", exc)
 
@@ -289,11 +295,13 @@ class ServiceRunner:
 # maybe_spawn
 # ---------------------------------------------------------------------------
 
-def maybe_spawn() -> None:
+def maybe_spawn(root: Optional[Path] = None) -> None:
     """Check health endpoint; spawn daemon if not running.
 
-    Skips if LLMKOSH_NO_AUTOSPAWN=1 is set in the environment.
-    Polls health up to 10 times at 300 ms. Prints status to stderr.
+    Forwards the active cartridge root via LLMKOSH_ROOT so the daemon
+    serves the same cartridge the CLI is operating on. Skips if
+    LLMKOSH_NO_AUTOSPAWN=1. If a recent spawn attempt failed, skips
+    silently for 10 minutes instead of stalling every CLI invocation.
     """
     import urllib.request
     import subprocess
@@ -307,6 +315,18 @@ def maybe_spawn() -> None:
     except Exception:
         pass
 
+    # Cooldown: don't re-attempt (and re-stall) within 10 minutes of a failure
+    cooldown_marker = get_llmkosh_home() / "spawn_failed"
+    try:
+        if cooldown_marker.exists() and (time.time() - cooldown_marker.stat().st_mtime) < 600:
+            return
+    except OSError:
+        pass
+
+    env = dict(os.environ)
+    if root is not None:
+        env["LLMKOSH_ROOT"] = str(root)
+
     cmd = [sys.executable, "-m", "llm_kosh.service", "run"]
     if sys.platform == "win32":
         spawn_kwargs: dict = {"creationflags": 0x00000008}  # DETACHED_PROCESS
@@ -317,6 +337,7 @@ def maybe_spawn() -> None:
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=env,
         **spawn_kwargs,
     )
     print("Starting llm-kosh daemon in background...", file=sys.stderr)
@@ -326,11 +347,21 @@ def maybe_spawn() -> None:
         try:
             urllib.request.urlopen("http://127.0.0.1:5556/health", timeout=0.2)
             print("Daemon ready.", file=sys.stderr)
+            try:
+                cooldown_marker.unlink(missing_ok=True)
+            except OSError:
+                pass
             return
         except Exception:
             pass
 
-    print("Warning: daemon did not start. Running in direct mode.", file=sys.stderr)
+    try:
+        cooldown_marker.parent.mkdir(parents=True, exist_ok=True)
+        cooldown_marker.write_text(str(time.time()))
+    except OSError:
+        pass
+    print("Warning: daemon did not start. Running in direct mode "
+          "(will not retry for 10 minutes; see ~/.llmkosh/daemon.log).", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------

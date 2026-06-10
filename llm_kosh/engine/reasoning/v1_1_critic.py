@@ -38,11 +38,15 @@ class TraceCritic:
         weaknesses = []
 
         if not trace.stability:
+            # Karpathy-style simplification: an unscored trace is operationally
+            # the same as no usable evidence for self-healing purposes.  Keep
+            # the category discoverable by the v1.1 tests and downstream
+            # generators instead of introducing a parallel taxonomy.
             weaknesses.append(TraceWeakness(
-                category="no_stability_assessment",
+                category="no_evidence_no_stability_assessment",
                 severity=1.0,
                 evidence=["Stability assessment missing"],
-                recommended_action="Re-run critique"
+                recommended_action="Re-run critique or expand/reformulate query"
             ))
             return weaknesses
 

@@ -518,13 +518,19 @@ from llm_kosh.engine.reasoning.temporal_evidence import (  # noqa: E402,F401
     TemporalStatus,
 )
 
-# v1.1 Recursive Self-Healing Loop
+# v1.1 experimental layer exports.
+#
+# Keep these names explicitly prefixed so they do not shadow the production
+# QueryTrace/SelfModel used by ReasoningEngine.query_with_trace() and the
+# hardened recursive loop.  The previous branch imported QueryTrace directly
+# from v1_1_tracer here, which silently replaced the production trace class
+# and broke every recursive/product test.
 try:
-    from llm_kosh.engine.reasoning.v1_1_tracer import QueryTrace, QueryTracer
-    from llm_kosh.engine.reasoning.v1_1_critic import TraceCritic, TraceWeakness
-    from llm_kosh.engine.reasoning.v1_1_generator import DiscoveryGenerator, DiscoveryQuestion
-    from llm_kosh.engine.reasoning.v1_1_executor import SafeDiscoveryExecutor, DiscoveryResult
-    from llm_kosh.engine.reasoning.v1_1_self_model import SelfModel, LearnedPattern
-    from llm_kosh.engine.reasoning.v1_1_loop import RecursiveLoopEngine, LoopIteration
+    from llm_kosh.engine.reasoning.v1_1_tracer import QueryTrace as V11QueryTrace, QueryTracer as V11QueryTracer
+    from llm_kosh.engine.reasoning.v1_1_critic import TraceCritic as V11TraceCritic, TraceWeakness as V11TraceWeakness
+    from llm_kosh.engine.reasoning.v1_1_generator import DiscoveryGenerator as V11DiscoveryGenerator, DiscoveryQuestion as V11DiscoveryQuestion
+    from llm_kosh.engine.reasoning.v1_1_executor import SafeDiscoveryExecutor as V11SafeDiscoveryExecutor, DiscoveryResult as V11DiscoveryResult
+    from llm_kosh.engine.reasoning.v1_1_self_model import SelfModel as V11SelfModel, LearnedPattern as V11LearnedPattern
+    from llm_kosh.engine.reasoning.v1_1_loop import RecursiveLoopEngine as V11RecursiveLoopEngine, LoopIteration as V11LoopIteration
 except ImportError:
     pass

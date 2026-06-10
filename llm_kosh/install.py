@@ -1,0 +1,339 @@
+"""One-shot install: ~/.llmkosh setup, OS service registration, claude_desktop_config.json injection."""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+from typing import Optional
+
+from llm_kosh.global_config import (
+    DEFAULT_CONFIG_TOML,
+    get_default_cartridge_root,
+    get_llmkosh_home,
+)
+
+
+# ---------------------------------------------------------------------------
+# Home directory / config
+# ---------------------------------------------------------------------------
+
+def create_home_dir() -> None:
+    """Create ~/.llmkosh and ~/.llmkosh/cartridge if they don't exist."""
+    home = get_llmkosh_home()
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "cartridge").mkdir(parents=True, exist_ok=True)
+    print(f"  [ok] Home directory: {home}")
+
+
+def write_default_config() -> None:
+    """Write DEFAULT_CONFIG_TOML to ~/.llmkosh/config.toml only if not present."""
+    config_path = get_llmkosh_home() / "config.toml"
+    if config_path.exists():
+        print(f"  [skip] Config already exists: {config_path}")
+        return
+    config_path.write_text(DEFAULT_CONFIG_TOML, encoding="utf-8")
+    print(f"  [ok] Wrote default config: {config_path}")
+
+
+def init_default_cartridge() -> None:
+    """Ensure the default cartridge root has been initialised."""
+    from llm_kosh.core.memory import ensure_root
+    root = get_default_cartridge_root()
+    try:
+        ensure_root(root)
+        print(f"  [ok] Cartridge root: {root}")
+    except Exception as exc:
+        print(f"  [warn] Could not initialise cartridge: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# OS service registration
+# ---------------------------------------------------------------------------
+
+def _python_exe() -> str:
+    return sys.executable
+
+
+def _register_darwin() -> bool:
+    """Register a launchd plist on macOS."""
+    plist_dir = Path.home() / "Library" / "LaunchAgents"
+    plist_dir.mkdir(parents=True, exist_ok=True)
+    plist_path = plist_dir / "com.llmkosh.daemon.plist"
+
+    plist_content = textwrap.dedent(f"""\
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+          "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>Label</key>
+            <string>com.llmkosh.daemon</string>
+            <key>ProgramArguments</key>
+            <array>
+                <string>{_python_exe()}</string>
+                <string>-m</string>
+                <string>llm_kosh.service</string>
+                <string>run</string>
+            </array>
+            <key>RunAtLoad</key>
+            <true/>
+            <key>KeepAlive</key>
+            <false/>
+            <key>StandardOutPath</key>
+            <string>{get_llmkosh_home() / "daemon.log"}</string>
+            <key>StandardErrorPath</key>
+            <string>{get_llmkosh_home() / "daemon.err.log"}</string>
+        </dict>
+        </plist>
+    """)
+
+    plist_path.write_text(plist_content, encoding="utf-8")
+    try:
+        subprocess.run(
+            ["launchctl", "load", "-w", str(plist_path)],
+            check=True,
+            capture_output=True,
+        )
+        print(f"  [ok] launchd service registered: {plist_path}")
+        return True
+    except subprocess.CalledProcessError as exc:
+        print(f"  [warn] launchctl load failed: {exc.stderr.decode(errors='replace').strip()}")
+        return False
+
+
+def _register_linux() -> bool:
+    """Register a systemd user unit on Linux."""
+    unit_dir = Path.home() / ".config" / "systemd" / "user"
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    unit_path = unit_dir / "llm-kosh.service"
+
+    unit_content = textwrap.dedent(f"""\
+        [Unit]
+        Description=llm-kosh background daemon
+        After=default.target
+
+        [Service]
+        Type=simple
+        ExecStart={_python_exe()} -m llm_kosh.service run
+        Restart=on-failure
+        RestartSec=10
+
+        [Install]
+        WantedBy=default.target
+    """)
+
+    unit_path.write_text(unit_content, encoding="utf-8")
+    try:
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", "llm-kosh"],
+            check=True,
+            capture_output=True,
+        )
+        print(f"  [ok] systemd user service registered: {unit_path}")
+        return True
+    except subprocess.CalledProcessError as exc:
+        print(f"  [warn] systemctl failed: {exc.stderr.decode(errors='replace').strip()}")
+        return False
+
+
+def _register_windows() -> bool:
+    """Register auto-start on Windows via the user Startup folder (no admin required).
+
+    The XML/schtasks approach requires admin privileges on modern Windows.
+    The Startup folder is always writable by the current user and is the
+    recommended no-admin approach for per-user auto-start services.
+    """
+    startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+    if not startup_dir.exists():
+        print(f"  [warn] Startup folder not found: {startup_dir}")
+        return False
+
+    bat_path = startup_dir / "llm-kosh-daemon.bat"
+    python_exe = _python_exe()
+
+    bat_content = textwrap.dedent(f"""\
+        @echo off
+        start "" /B "{python_exe}" -m llm_kosh.service run
+    """)
+
+    bat_path.write_text(bat_content, encoding="utf-8")
+    print(f"  [ok] Auto-start registered (Startup folder): {bat_path}")
+    print(f"       Daemon will start automatically on next login.")
+    return True
+
+
+def register_os_service() -> bool:
+    """Register the daemon as an OS service. Returns True on success."""
+    print("Registering OS service...")
+    if sys.platform == "darwin":
+        return _register_darwin()
+    elif sys.platform == "linux":
+        return _register_linux()
+    elif sys.platform == "win32":
+        return _register_windows()
+    else:
+        print(f"  [skip] Unsupported platform: {sys.platform}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Claude Desktop config patching
+# ---------------------------------------------------------------------------
+
+def _claude_desktop_config_path() -> Optional[Path]:
+    """Return the platform-specific path to claude_desktop_config.json."""
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    elif sys.platform == "win32":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            return Path(appdata) / "Claude" / "claude_desktop_config.json"
+        return None
+    else:
+        return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
+
+
+def _cartridge_root_str() -> str:
+    """Return the cartridge root as a forward-slash string suitable for JSON."""
+    return str(get_default_cartridge_root()).replace("\\", "/")
+
+
+def patch_claude_desktop_config(yes: bool = False) -> None:
+    """Inject the llm-kosh mcpServers entry into claude_desktop_config.json.
+
+    If an llm-kosh entry already exists and differs, print a diff and prompt
+    unless yes=True.
+    """
+    config_path = _claude_desktop_config_path()
+    if config_path is None:
+        print("  [skip] Could not determine Claude Desktop config path.")
+        return
+
+    root_str = _cartridge_root_str()
+    new_entry = {
+        "command": "llm-kosh",
+        "args": ["mcp-server", "--root", root_str, "--allow-write"],
+        "env": {"CARTRIDGE_WORKSPACE": root_str},
+    }
+
+    existing: dict = {}
+    if config_path.exists():
+        try:
+            existing = json.loads(config_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            existing = {}
+
+    mcp_servers: dict = existing.get("mcpServers", {})
+    current_entry = mcp_servers.get("llm-kosh")
+
+    if current_entry == new_entry:
+        print(f"  [skip] Claude Desktop config already up-to-date: {config_path}")
+        return
+
+    if current_entry is not None and not yes:
+        import difflib
+        old_lines = json.dumps({"llm-kosh": current_entry}, indent=2).splitlines(keepends=True)
+        new_lines = json.dumps({"llm-kosh": new_entry}, indent=2).splitlines(keepends=True)
+        diff = "".join(difflib.unified_diff(old_lines, new_lines, fromfile="current", tofile="proposed"))
+        print("  Existing llm-kosh entry differs from proposed:")
+        print(diff)
+        answer = input("  Apply update? [y/N] ").strip().lower()
+        if answer != "y":
+            print("  [skip] Claude Desktop config not updated.")
+            return
+
+    mcp_servers["llm-kosh"] = new_entry
+    existing["mcpServers"] = mcp_servers
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    print(f"  [ok] Claude Desktop config patched: {config_path}")
+
+
+# ---------------------------------------------------------------------------
+# PATH check
+# ---------------------------------------------------------------------------
+
+def check_path_variable() -> None:
+    """Warn if the directory containing the llm-kosh executable is not on PATH."""
+    import shutil
+
+    if shutil.which("llm-kosh") is not None:
+        print("  [ok] llm-kosh is on PATH.")
+        return
+
+    # Try to determine where scripts are installed
+    scripts_dir: Optional[Path] = None
+    try:
+        import sysconfig
+        scripts_dir = Path(sysconfig.get_path("scripts"))
+    except Exception:
+        pass
+
+    msg = "  [warn] 'llm-kosh' not found on PATH."
+    if scripts_dir:
+        msg += f" You may need to add {scripts_dir} to your PATH."
+    print(msg)
+
+
+# ---------------------------------------------------------------------------
+# Top-level orchestrator
+# ---------------------------------------------------------------------------
+
+def _print_desktop_install_hint() -> None:
+    """Tell the user how to get the desktop app for their platform."""
+    releases_url = "https://github.com/rastogivaibhav/llm-kosh/releases/latest"
+
+    if sys.platform == "win32":
+        print(f"  [info] Desktop app (.exe installer):")
+        print(f"         {releases_url}")
+        print(f"         -> Download llm-kosh-desktop-windows.exe and run it.")
+    elif sys.platform == "darwin":
+        print(f"  [info] Desktop app (.dmg):")
+        print(f"         {releases_url}")
+        print(f"         -> Download llm-kosh-desktop-macos.dmg, open it, drag to Applications.")
+    else:
+        print(f"  [info] Desktop app (.AppImage):")
+        print(f"         {releases_url}")
+        print(f"         -> Download llm-kosh-desktop-linux.AppImage")
+        print(f"         -> chmod +x llm-kosh-desktop-linux.AppImage && ./llm-kosh-desktop-linux.AppImage")
+
+    print(f"  [info] Or run headless - daemon + MCP server are fully functional without the desktop app.")
+
+
+def run_install(yes: bool = False) -> None:
+    """Run the full one-click installation sequence."""
+    print("=== llm-kosh install ===")
+
+    print("\n1. Creating home directory...")
+    create_home_dir()
+
+    print("\n2. Writing default configuration...")
+    write_default_config()
+
+    print("\n3. Initialising default cartridge...")
+    init_default_cartridge()
+
+    print("\n4. Registering OS service...")
+    service_ok = register_os_service()
+
+    print("\n5. Patching Claude Desktop config...")
+    try:
+        patch_claude_desktop_config(yes=yes)
+    except Exception as exc:
+        print(f"  [warn] Claude Desktop config patch failed: {exc}")
+
+    print("\n6. Checking PATH...")
+    check_path_variable()
+
+    print("\n7. Desktop app...")
+    _print_desktop_install_hint()
+
+    print("\n=== Installation complete ===")
+    if not service_ok:
+        print("Note: OS service registration was not fully successful.")
+        print("You can start the daemon manually with: llm-kosh service start")

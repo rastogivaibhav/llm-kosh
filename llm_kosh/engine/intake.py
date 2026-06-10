@@ -244,8 +244,8 @@ def processor_apply(root: Path, batch_id: str) -> dict:
 
 def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: str = "private") -> dict:
     from llm_kosh.intake.converters import MarkItDownAdapter
-    from llm_kosh.core.memory import add_memory
-    from llm_kosh.engine.search import rebuild_index
+    from llm_kosh.core.memory import add_memory, parse_frontmatter, supersede
+    from llm_kosh.engine.search import rebuild_index, iter_source_files
     
     ensure_root(root)
     if not path.exists():
@@ -263,17 +263,43 @@ def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: st
     for p in targets:
         try:
             mem = adapter.convert_to_memory(p)
-            add_memory(
+            
+            # Find existing active memories referencing this file
+            old_ids = []
+            source_origin_str = str(p.resolve())
+            for sf in iter_source_files(root):
+                try:
+                    sf_meta, _ = parse_frontmatter(sf.read_text(encoding="utf-8", errors="replace"))
+                    if sf_meta.get("source_origin") == source_origin_str and sf_meta.get("status") != "superseded":
+                        old_ids.append(sf_meta.get("id"))
+                except Exception:
+                    pass
+
+            extra = dict(mem.extra_meta or {})
+            extra["source_origin"] = source_origin_str
+            new_path = add_memory(
                 root=root,
                 kind=mem.kind,
                 title=mem.title,
                 body=mem.body,
                 project=project,
                 visibility=visibility,
-                extra_meta=mem.extra_meta,
+                extra_meta=extra,
                 reindex=False,
                 quiet=True
             )
+            
+            # Formally supersede old versions
+            try:
+                new_meta, _ = parse_frontmatter(new_path.read_text(encoding="utf-8", errors="replace"))
+                new_id = new_meta.get("id")
+                if new_id:
+                    for old_id in old_ids:
+                        if old_id:
+                            supersede(root, old_id, new_id, reason="File updated in source path")
+            except Exception:
+                pass
+
             totals["added"] += 1
             print(f"Ingested and converted: {p.name} -> source/intake/")
         except Exception as e:

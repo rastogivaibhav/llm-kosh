@@ -1,0 +1,11 @@
+[features]
+experimental_use_rmcp_client = true
+
+[mcp_servers.llm-kosh]
+command = "python"
+args = [
+  "-m",
+  "llm_kosh.mcp_server",
+  "--root",
+  "c:/Users/vrast/Documents/Projects/test/ai_memory_cartridge_v1.0"
+]

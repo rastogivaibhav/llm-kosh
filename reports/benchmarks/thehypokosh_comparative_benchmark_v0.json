@@ -1,0 +1,1014 @@
+{
+  "benchmark": "temporal_causal_provenance_v0",
+  "tasks": 8,
+  "average_scores": {
+    "KeywordRAG": 0.875,
+    "TemporalRAG": 0.938,
+    "AgentMemory": 0.938,
+    "GraphRAG": 0.938,
+    "SelfRAG_like": 0.938,
+    "ReAct_like": 0.938,
+    "TheHypoKosh": 1.0
+  },
+  "feature_checks": {
+    "provenance_inferred_compressed": "1/1",
+    "mechanistic_chain_preserved": "1/1",
+    "hyperedge_joint_sources": "1/1",
+    "no_evidence_abstain": "1/1"
+  },
+  "details": [
+    {
+      "id": "temporal_feb",
+      "query": "What remote work policy was true in February?",
+      "expected": [
+        "remote_old"
+      ],
+      "KeywordRAG": {
+        "found": [
+          "remote_new",
+          "remote_old"
+        ],
+        "score": 0.75
+      },
+      "TemporalRAG": {
+        "found": [
+          "remote_old"
+        ],
+        "score": 1.0
+      },
+      "AgentMemory": {
+        "found": [
+          "remote_old"
+        ],
+        "score": 1.0
+      },
+      "GraphRAG": {
+        "found": [
+          "mitigation_expired",
+          "outage",
+          "remote_old"
+        ],
+        "score": 1.0
+      },
+      "SelfRAG_like": {
+        "found": [
+          "remote_old"
+        ],
+        "score": 1.0
+      },
+      "ReAct_like": {
+        "found": [
+          "mitigation_expired",
+          "outage",
+          "remote_old"
+        ],
+        "score": 1.0
+      },
+      "TheHypoKosh": {
+        "found": [
+          "remote_old"
+        ],
+        "score": 1.0,
+        "stability": "marginal",
+        "abstain": false,
+        "edges": []
+      }
+    },
+    {
+      "id": "temporal_may",
+      "query": "What remote work policy was true in May?",
+      "expected": [
+        "remote_new"
+      ],
+      "KeywordRAG": {
+        "found": [
+          "remote_new",
+          "remote_old",
+          "traffic"
+        ],
+        "score": 0.75
+      },
+      "TemporalRAG": {
+        "found": [
+          "remote_new",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "AgentMemory": {
+        "found": [
+          "remote_new",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "GraphRAG": {
+        "found": [
+          "heap",
+          "mitigation_expired",
+          "outage",
+          "remote_new",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "SelfRAG_like": {
+        "found": [
+          "remote_new",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "ReAct_like": {
+        "found": [
+          "heap",
+          "mitigation_expired",
+          "outage",
+          "remote_new",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "TheHypoKosh": {
+        "found": [
+          "heap",
+          "outage",
+          "remote_new",
+          "traffic"
+        ],
+        "score": 1.0,
+        "stability": "marginal",
+        "abstain": false,
+        "edges": [
+          [
+            "remote_old",
+            "remote_new",
+            "SUPERSEDES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "remote_new",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "root_cause_primary",
+      "query": "Why did service X fail? deployment memory leak saturation outage",
+      "expected": [
+        "deployment",
+        "leak",
+        "heap",
+        "outage"
+      ],
+      "KeywordRAG": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction"
+        ],
+        "score": 1.0
+      },
+      "TemporalRAG": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction"
+        ],
+        "score": 1.0
+      },
+      "AgentMemory": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction"
+        ],
+        "score": 1.0
+      },
+      "GraphRAG": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "mitigation_expired",
+          "outage"
+        ],
+        "score": 1.0
+      },
+      "SelfRAG_like": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "ReAct_like": {
+        "found": [
+          "heap",
+          "leak",
+          "mitigation_expired",
+          "outage",
+          "status_contradiction"
+        ],
+        "score": 0.75
+      },
+      "TheHypoKosh": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0,
+        "stability": "stable",
+        "abstain": false,
+        "edges": [
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "status_contradiction",
+            "heap",
+            "CONTRADICTS",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "status_contradiction",
+            "heap",
+            "CONTRADICTS",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "status_contradiction",
+            "heap",
+            "CONTRADICTS",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "status_contradiction",
+            "heap",
+            "CONTRADICTS",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "deployment",
+            "leak",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "contradiction",
+      "query": "What evidence contradicts the memory leak saturation conclusion for service X?",
+      "expected": [
+        "status_contradiction",
+        "heap"
+      ],
+      "KeywordRAG": {
+        "found": [
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "TemporalRAG": {
+        "found": [
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "AgentMemory": {
+        "found": [
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "GraphRAG": {
+        "found": [
+          "heap",
+          "leak",
+          "mitigation_expired",
+          "outage"
+        ],
+        "score": 0.5
+      },
+      "SelfRAG_like": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "ReAct_like": {
+        "found": [
+          "heap",
+          "leak",
+          "mitigation_expired",
+          "outage",
+          "status_contradiction"
+        ],
+        "score": 1.0
+      },
+      "TheHypoKosh": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0,
+        "stability": "stable",
+        "abstain": false,
+        "edges": [
+          [
+            "deployment",
+            "leak",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "status_contradiction",
+            "heap",
+            "CONTRADICTS",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "deployment",
+            "leak",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "alternative_path",
+      "query": "What alternative explanation should be considered for service X outage traffic spike saturation?",
+      "expected": [
+        "traffic",
+        "heap",
+        "outage"
+      ],
+      "KeywordRAG": {
+        "found": [
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "TemporalRAG": {
+        "found": [
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "AgentMemory": {
+        "found": [
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "GraphRAG": {
+        "found": [
+          "heap",
+          "mitigation_expired",
+          "outage",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "SelfRAG_like": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "ReAct_like": {
+        "found": [
+          "heap",
+          "mitigation_expired",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0
+      },
+      "TheHypoKosh": {
+        "found": [
+          "heap",
+          "leak",
+          "outage",
+          "status_contradiction",
+          "traffic"
+        ],
+        "score": 1.0,
+        "stability": "stable",
+        "abstain": false,
+        "edges": [
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "status_contradiction",
+            "heap",
+            "CONTRADICTS",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "traffic",
+            "heap",
+            "CAUSES",
+            "HYPOTHETICAL",
+            "PREDICTIVE",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "inferred_vs_discovered",
+      "query": "Did deployment directly cause outage or is it inferred from a chain?",
+      "expected": [
+        "deployment",
+        "leak",
+        "heap",
+        "outage"
+      ],
+      "KeywordRAG": {
+        "found": [
+          "deployment",
+          "mitigation_expired",
+          "outage"
+        ],
+        "score": 0.5
+      },
+      "TemporalRAG": {
+        "found": [
+          "deployment",
+          "outage"
+        ],
+        "score": 0.5
+      },
+      "AgentMemory": {
+        "found": [
+          "deployment",
+          "outage"
+        ],
+        "score": 0.5
+      },
+      "GraphRAG": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "mitigation_expired",
+          "outage"
+        ],
+        "score": 1.0
+      },
+      "SelfRAG_like": {
+        "found": [
+          "deployment",
+          "outage"
+        ],
+        "score": 0.5
+      },
+      "ReAct_like": {
+        "found": [
+          "deployment",
+          "leak",
+          "mitigation_expired",
+          "outage"
+        ],
+        "score": 0.75
+      },
+      "TheHypoKosh": {
+        "found": [
+          "deployment",
+          "heap",
+          "leak",
+          "outage"
+        ],
+        "score": 1.0,
+        "stability": "stable",
+        "abstain": false,
+        "edges": [
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "deployment",
+            "leak",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "heap",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "heap",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "deployment",
+            "leak",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "leak",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "deployment",
+            "leak",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ],
+          [
+            "deployment",
+            "outage",
+            "INFERS",
+            "INFERRED",
+            "COMPRESSED",
+            "reinforced_not_discovered"
+          ],
+          [
+            "deployment",
+            "outage",
+            "CAUSES",
+            "INFERRED",
+            "COMPRESSED",
+            "unpromoted"
+          ],
+          [
+            "deployment",
+            "outage",
+            "INFERS",
+            "INFERRED",
+            "COMPRESSED",
+            "reinforced_not_discovered"
+          ],
+          [
+            "deployment",
+            "leak",
+            "CAUSES",
+            "OBSERVED",
+            "MECHANISTIC",
+            "unpromoted"
+          ]
+        ]
+      }
+    },
+    {
+      "id": "hyperedge_joint",
+      "query": "Why did checkout fail when feature flag F and schema migration S were both active?",
+      "expected": [
+        "flag",
+        "schema",
+        "checkout_fail"
+      ],
+      "KeywordRAG": {
+        "found": [
+          "checkout_fail",
+          "flag",
+          "schema"
+        ],
+        "score": 1.0
+      },
+      "TemporalRAG": {
+        "found": [
+          "checkout_fail",
+          "flag",
+          "schema"
+        ],
+        "score": 1.0
+      },
+      "AgentMemory": {
+        "found": [
+          "checkout_fail",
+          "flag",
+          "schema"
+        ],
+        "score": 1.0
+      },
+      "GraphRAG": {
+        "found": [
+          "checkout_fail",
+          "flag",
+          "schema"
+        ],
+        "score": 1.0
+      },
+      "SelfRAG_like": {
+        "found": [
+          "checkout_fail",
+          "flag",
+          "schema"
+        ],
+        "score": 1.0
+      },
+      "ReAct_like": {
+        "found": [
+          "checkout_fail",
+          "flag",
+          "schema"
+        ],
+        "score": 1.0
+      },
+      "TheHypoKosh": {
+        "found": [
+          "checkout_fail",
+          "flag",
+          "schema"
+        ],
+        "score": 1.0,
+        "stability": "marginal",
+        "abstain": false,
+        "edges": []
+      }
+    },
+    {
+      "id": "no_evidence",
+      "query": "What caused the banana moonbeam payroll dragon?",
+      "expected": [],
+      "KeywordRAG": {
+        "found": [],
+        "score": 1.0
+      },
+      "TemporalRAG": {
+        "found": [],
+        "score": 1.0
+      },
+      "AgentMemory": {
+        "found": [],
+        "score": 1.0
+      },
+      "GraphRAG": {
+        "found": [],
+        "score": 1.0
+      },
+      "SelfRAG_like": {
+        "found": [],
+        "score": 1.0
+      },
+      "ReAct_like": {
+        "found": [],
+        "score": 1.0
+      },
+      "TheHypoKosh": {
+        "found": [],
+        "score": 1.0,
+        "stability": "no_evidence",
+        "abstain": true,
+        "edges": []
+      }
+    }
+  ]
+}

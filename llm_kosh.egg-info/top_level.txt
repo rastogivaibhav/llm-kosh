@@ -1,1 +1,14 @@
+brew-formula
+changelogs
+desktop-app
+docs
+examples
+fixtures
 llm_kosh
+packaging
+reports
+research_eval
+scripts
+spec
+tests
+website

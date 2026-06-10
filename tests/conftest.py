@@ -9,6 +9,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+# Prevent the daemon auto-spawn during tests.  The daemon runs rebuild_index in
+# a separate subprocess, which races with tests that also call rebuild_index,
+# causing "table documents already exists" on Python 3.12 Windows.
+os.environ.setdefault("LLMKOSH_NO_AUTOSPAWN", "1")
+
 @pytest.fixture
 def temp_workspace():
     """Provides a temporary workspace path initialized for LlmKosh."""

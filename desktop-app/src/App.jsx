@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './components/layout/Sidebar';
 import BottomBar from './components/layout/BottomBar';
 import Home from './views/Home'; 
+import Explorer from './views/Explorer';
 import Intake from './views/Intake';
 import Search from './views/Search';
 import Prompts from './views/Prompts';
@@ -75,6 +76,12 @@ function App() {
             <Home 
               config={config} 
               setConfig={setConfig} 
+              setStatusMessage={setStatusMessage} 
+            />
+          )}
+          {currentView === 'explorer' && (
+            <Explorer 
+              config={config} 
               setStatusMessage={setStatusMessage} 
             />
           )}

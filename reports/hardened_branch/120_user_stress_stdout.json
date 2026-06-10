@@ -1,0 +1,31 @@
+{
+  "users_requested": 120,
+  "users_completed": 120,
+  "users_passed": 120,
+  "users_failed": 0,
+  "rounds_per_user": 3,
+  "workers": 12,
+  "agent_work_actions": 360,
+  "publish_pull_receipts": 1320,
+  "verify_reports": 1200,
+  "facts_seen_in_reports": 4533,
+  "wall_time_seconds": 18.275879987000053,
+  "users_per_second": 6.566031298375677,
+  "latency_seconds": {
+    "min": 1.642247953000151,
+    "p50": 1.8181666580001092,
+    "p90": 1.8915336499999285,
+    "p95": 1.9259273969998958,
+    "max": 1.9778764329998921,
+    "mean": 1.8151674552416732
+  },
+  "validation_pass_counts": {
+    "local_agents_non_abstain": 120,
+    "no_abstain_after_memory_share": 120,
+    "publish_pull_receipts_created": 120,
+    "salesforce_pulled_other_agents_memory": 120,
+    "transaction_pool_has_all_frameworks": 120,
+    "transaction_pool_has_business_ids": 120,
+    "user_pool_is_scoped": 120
+  }
+}

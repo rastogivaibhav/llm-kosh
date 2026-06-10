@@ -154,12 +154,20 @@ def pack_context(
 
     _pack_dropped = dropped 
 
+    from llm_kosh.core.plugins import PluginManager
+    compiler_plugin = PluginManager.get_context_compiler_plugin(root)
+
     chars_used = 0
     omitted = 0
     source_map = []
     matched_lines = ["# Matched Memory\n"]
     for idx, m in enumerate(matches, 1):
         text = read_doc(root, m["path"])
+        if compiler_plugin:
+            try:
+                text = compiler_plugin.skeletonize(text, m["path"], profile)
+            except Exception:
+                pass
         snippet = m.get("snippet") or ""
         if redact:
             text, _ = redact_text(text)

@@ -45,11 +45,13 @@ def _get_enabled_jobs(root: Path) -> list:
     pol = load_policy(root)
     daemon_cfg = pol.get("daemon", {})
     return daemon_cfg.get("enabled_jobs", [
-        "scan_intake", 
+        "scan_intake",
         "process_intake_folder",
-        "process_safe_receipts", 
-        "rebuild_stale_index", 
-        "regenerate_memory_map"
+        "poll_watched_folders",
+        "process_safe_receipts",
+        "rebuild_stale_index",
+        "regenerate_memory_map",
+        "sync_reasoning_graph"
     ])
 
 # --- Jobs ---
@@ -166,9 +168,155 @@ def job_backup_snapshot(root: Path):
 def job_quarantine_risky_items(root: Path):
     return True, "No risky items detected."
 
+def job_sync_reasoning_graph(root: Path):
+    try:
+        import json as _json
+        from datetime import datetime as _datetime, timezone as _tz
+        from llm_kosh.engine.reasoning import ReasoningEngine
+        from llm_kosh.engine.reasoning.causal_retrieval import CausalRetrieval
+        from llm_kosh.engine.search import query_memory
+    except Exception as e:
+        log_daemon_event(root, "reasoning_sync_error", {"error": str(e)})
+        return False, f"Reasoning sync failed: {e}"
+
+    try:
+        ledger_path = root / "reports" / "daemon" / "reasoning_sync_ledger.json"
+        ledger_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Fix 3 — guard against ledger corruption
+        try:
+            ledger = read_json(ledger_path, {})
+            already_synced = set(ledger.get("synced_ids", []))
+        except (_json.JSONDecodeError, ValueError, KeyError):
+            log_daemon_event(root, "reasoning_sync_ledger_corrupt", {"path": str(ledger_path)})
+            already_synced = set()
+
+        memories = query_memory(root, "", limit=5000)
+
+        engine = ReasoningEngine(root)
+        new_count = 0
+
+        for mem in memories:
+            if mem["id"] in already_synced:
+                continue
+
+            # Fix 4 — prefer full body from source file over 200-char snippet
+            content = mem.get("snippet") or mem.get("title") or ""
+            source_path = root / mem.get("path", "")
+            if source_path.exists():
+                try:
+                    from llm_kosh.core.utils import parse_frontmatter
+                    raw = source_path.read_text(encoding="utf-8")
+                    _, body_text = parse_frontmatter(raw)
+                    if body_text and body_text.strip():
+                        content = body_text.strip()
+                except Exception:
+                    pass  # fall back to snippet
+
+            created_str = mem.get("created", "")
+            try:
+                created_dt = _datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+            except Exception:
+                created_dt = _datetime.now(_tz.utc)
+
+            # Fix 2 — per-item error isolation; Fix 1 — use add_fact directly
+            try:
+                engine.dag.add_fact(
+                    content=content,
+                    ingested_at=_datetime.now(_tz.utc),
+                    documented_at=created_dt,
+                    valid_from=created_dt,
+                    valid_until=None,
+                    confidence=0.80,
+                    source="daemon",
+                )
+                already_synced.add(mem["id"])
+                new_count += 1
+            except Exception as e:
+                log_daemon_event(root, "reasoning_sync_fact_error", {"id": mem["id"], "error": str(e)})
+                already_synced.add(mem["id"])  # skip bad record forever
+
+        # Fix 1 — single snapshot save + one CausalRetrieval rebuild after the loop
+        if new_count > 0:
+            engine.dag.save_snapshot()
+            engine._retrieval = CausalRetrieval(engine.dag)
+
+        write_json(ledger_path, {"synced_ids": list(already_synced)})
+        log_daemon_event(root, "reasoning_sync", {"new": new_count, "total": len(already_synced)})
+        return True, f"Reasoning graph: synced {new_count} new memories ({len(already_synced)} total)."
+
+    except Exception as e:
+        log_daemon_event(root, "reasoning_sync_error", {"error": str(e)})
+        return False, f"Reasoning sync failed: {e}"
+
+
+def job_poll_watched_folders(root: Path):
+    from llm_kosh.engine.intake import intake_file_or_dir
+    pol = load_policy(root)
+    watched_dirs = pol.get("daemon", {}).get("watched_directories", [])
+    if not watched_dirs:
+        return True, "No external folders configured to watch."
+        
+    ledger_path = root / "reports" / "daemon" / "watched_files_ledger.json"
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Load existing ledger
+    ledger = read_json(ledger_path, {})
+    
+    processed = 0
+    failed = 0
+    updated_ledger = {}
+    
+    # Supported file extensions (or just scan all files except skipped ones)
+    skipped_extensions = {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}
+    
+    for d in watched_dirs:
+        dir_path = Path(d)
+        if not dir_path.exists() or not dir_path.is_dir():
+            continue
+            
+        for file_path in dir_path.rglob("*"):
+            if not file_path.is_file():
+                continue
+            if file_path.name.startswith(".") or file_path.suffix.lower() in skipped_extensions:
+                continue
+            # Also skip anything inside the cartridge root itself to avoid loops
+            try:
+                if root in file_path.parents or file_path == root:
+                    continue
+            except Exception:
+                pass
+                
+            try:
+                mtime = file_path.stat().st_mtime
+                key = str(file_path.resolve())
+                
+                # Check if file has changed or is new
+                last_seen_mtime = ledger.get(key)
+                if last_seen_mtime is None or mtime > last_seen_mtime:
+                    res = intake_file_or_dir(root, file_path)
+                    if res.get("added", 0) > 0:
+                        processed += 1
+                        log_daemon_event(root, "watched_file_ingested", {"file": str(file_path)})
+                    else:
+                        failed += 1
+                        log_daemon_event(root, "watched_file_skipped", {"file": str(file_path)})
+                
+                updated_ledger[key] = mtime
+            except Exception as e:
+                failed += 1
+                log_daemon_event(root, "watched_file_error", {"file": str(file_path), "error": str(e)})
+                
+    write_json(ledger_path, updated_ledger)
+    
+    if processed or failed:
+        return True, f"Watched Folders: Ingested {processed} files, failed/skipped {failed}."
+    return True, "Watched Folders: No updates found."
+
 JOBS = {
     "scan_intake": job_scan_intake,
     "process_intake_folder": job_process_intake_folder,
+    "poll_watched_folders": job_poll_watched_folders,
     "process_safe_receipts": job_process_safe_receipts,
     "rebuild_stale_index": job_rebuild_stale_index,
     "rebuild_vector_if_stale": job_rebuild_vector_if_stale,
@@ -177,7 +325,8 @@ JOBS = {
     "regenerate_memory_map": job_regenerate_memory_map,
     "regenerate_workbench": job_regenerate_workbench,
     "backup_snapshot": job_backup_snapshot,
-    "quarantine_risky_items": job_quarantine_risky_items
+    "quarantine_risky_items": job_quarantine_risky_items,
+    "sync_reasoning_graph": job_sync_reasoning_graph,
 }
 
 def daemon_run_job(root: Path, job_name: str):
@@ -266,16 +415,18 @@ def daemon_start(root: Path, mode: str):
                 def on_modified(self, event):
                     self._handle(event)
                 def _handle(self, event):
-                    if not event.is_directory and (event.src_path.endswith(".md") or event.src_path.endswith(".txt")):
-                        src = Path(event.src_path)
-                        if src.name.startswith("."): return
-                        try:
-                            dest = root / "inbox" / f"{src.stem}_{int(time.time())}{src.suffix}"
-                            dest.parent.mkdir(exist_ok=True)
-                            shutil.copy2(src, dest)
-                            daemon_once(root)
-                        except Exception as e:
-                            print(f"Error copying external file {src}: {e}")
+                    if event.is_directory:
+                        return
+                    src = Path(event.src_path)
+                    if src.name.startswith("."): return
+                    if src.suffix.lower() in {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}:
+                        return
+                    try:
+                        from llm_kosh.engine.intake import intake_file_or_dir
+                        intake_file_or_dir(root, src)
+                        daemon_once(root)
+                    except Exception as e:
+                        print(f"Error processing external file {src}: {e}")
                             
             observer = Observer()
             receipts_dir = root / "receipts"

@@ -1,14 +1,17 @@
 import React from 'react';
-import { Activity, Inbox, Search, RefreshCcw, ShieldAlert, Settings, BookOpen } from 'lucide-react';
+import { Activity, Inbox, Search, RefreshCcw, ShieldAlert, Settings, BookOpen, FolderOpen, BarChart2, Zap } from 'lucide-react';
 
 export default function Sidebar({ currentView, setCurrentView }) {
   const tabs = [
     { id: 'dashboard', icon: Activity, label: 'Dashboard' },
+    { id: 'explorer', icon: FolderOpen, label: 'Workspace Explorer' },
     { id: 'intake', icon: Inbox, label: 'Intake Hub' },
     { id: 'search', icon: Search, label: 'Memory Explorer' },
     { id: 'prompts', icon: BookOpen, label: 'Skills & Prompts' },
     { id: 'ailoop', icon: RefreshCcw, label: 'AI Loop (Pack & Absorb)' },
     { id: 'airlock', icon: ShieldAlert, label: 'Airlock (Security)' },
+    { id: 'benchmarks', icon: BarChart2, label: 'Benchmark Suite' },
+    { id: 'agentsim', icon: Zap, label: 'Agent Loop Simulator' },
     { id: 'settings', icon: Settings, label: 'Settings' }
   ];
 

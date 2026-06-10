@@ -146,10 +146,18 @@ def audit(root: Path) -> dict:
     return report
 
 def verify_ledger(root: Path, quiet: bool = False) -> dict:
-    """Check every ledger row is valid JSON with the required fields."""
+    """Verify every ledger row parses, and verify the tamper-evident hash chain.
+
+    Rows written by v2.1.1+ carry `prev`/`row_hash`; each is recomputed and
+    checked against its predecessor. Legacy rows (no hash fields) are counted
+    separately and still considered valid for backward compatibility.
+    """
+    from llm_kosh.core.utils import row_hash as _row_hash, GENESIS_HASH
     ensure_root(root)
     path = root / "ledger" / "events.jsonl"
-    good, bad_lines = 0, []
+    good, bad_lines, legacy = 0, [], 0
+    chain_breaks: list = []
+    expected_prev = GENESIS_HASH
     if path.exists():
         for i, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
             if not line.strip():
@@ -160,11 +168,31 @@ def verify_ledger(root: Path, quiet: bool = False) -> dict:
                     good += 1
                 else:
                     bad_lines.append(i)
+                    continue
             except json.JSONDecodeError:
                 bad_lines.append(i)
-    result = {"good_rows": good, "bad_rows": len(bad_lines), "bad_lines": bad_lines}
+                continue
+            if "row_hash" not in row:
+                legacy += 1
+                continue
+            if _row_hash(row) != row["row_hash"]:
+                chain_breaks.append({"line": i, "type": "row_hash_mismatch"})
+            elif row.get("prev") != expected_prev and expected_prev != GENESIS_HASH:
+                chain_breaks.append({"line": i, "type": "broken_link",
+                                     "expected_prev": expected_prev, "got": row.get("prev")})
+            expected_prev = row["row_hash"]
+    result = {"good_rows": good, "bad_rows": len(bad_lines), "bad_lines": bad_lines,
+              "legacy_rows": legacy, "chained_rows": good - legacy - len(bad_lines),
+              "chain_breaks": chain_breaks, "chain_intact": not chain_breaks}
     if not quiet:
         print(f"Ledger: {good} valid row(s), {len(bad_lines)} bad row(s).")
+        chained = result["chained_rows"]
+        if chained > 0 or legacy > 0:
+            status = "INTACT" if not chain_breaks else f"BROKEN ({len(chain_breaks)} break(s))"
+            print(f"  Hash chain: {status} — {chained} chained, {legacy} legacy row(s).")
+        if chain_breaks:
+            for b in chain_breaks[:10]:
+                print(f"    line {b['line']}: {b['type']}")
         if bad_lines:
             print(f"  bad line numbers: {bad_lines[:20]}")
     return result

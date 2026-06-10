@@ -339,6 +339,29 @@ ipcMain.handle('write-config', (event, config) => {
   return writeConfig(config);
 });
 
+ipcMain.handle('read-cartridge-config', (event, rootPath) => {
+  try {
+    const configFilePath = path.join(rootPath, 'LLM_KOSH.json');
+    if (fs.existsSync(configFilePath)) {
+      return JSON.parse(fs.readFileSync(configFilePath, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Failed to read cartridge config', e);
+  }
+  return null;
+});
+
+ipcMain.handle('write-cartridge-config', (event, rootPath, configObj) => {
+  try {
+    const configFilePath = path.join(rootPath, 'LLM_KOSH.json');
+    fs.writeFileSync(configFilePath, JSON.stringify(configObj, null, 2));
+    return configObj;
+  } catch (e) {
+    console.error('Failed to write cartridge config', e);
+    return null;
+  }
+});
+
 ipcMain.handle('reveal-in-folder', (event, pathToReveal) => {
   shell.showItemInFolder(pathToReveal);
 });
@@ -549,6 +572,25 @@ ipcMain.handle('list-watched-folders', () => {
   return { success: true, folders: [] };
 });
 
+ipcMain.handle('read-directory', async (event, dirPath) => {
+  try {
+    if (!fs.existsSync(dirPath)) return { success: false, error: 'Directory not found' };
+    const stats = fs.statSync(dirPath);
+    if (!stats.isDirectory()) return { success: false, error: 'Not a directory' };
+
+    const items = fs.readdirSync(dirPath, { withFileTypes: true });
+    const result = items.map(item => ({
+      name: item.name,
+      path: path.join(dirPath, item.name),
+      isDirectory: item.isDirectory(),
+      isFile: item.isFile()
+    }));
+    return { success: true, items: result };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('add-watched-folder', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (!result.canceled && result.filePaths.length > 0) {
@@ -623,7 +665,7 @@ ipcMain.handle('start-mcp', async (event, rootPath, options) => {
     return { ok: false, error: 'Executable not found' };
   }
 
-  const args = ['mcp', '--root', rootPath];
+  const args = ['mcp-server', '--root', rootPath];
   if (options?.allowWrite) args.push('--allow-write');
   if (options?.allowMutate) args.push('--allow-mutate');
   if (options?.allowPrivate) args.push('--allow-private');

@@ -10,9 +10,15 @@ from llm_kosh.engine.healing import absorb_receipt, resolve
 # We will import the rest from llm_kosh.engine.commands
 from llm_kosh.engine.commands import *
 
+try:
+    from llm_kosh.global_config import get_default_cartridge_root as _get_default_cartridge_root
+    _DEFAULT_ROOT = str(_get_default_cartridge_root())
+except Exception:
+    _DEFAULT_ROOT = str(Path.cwd() / DEFAULT_ROOT_NAME)
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=f"LlmKosh v{APP_VERSION}")
-    parser.add_argument("--root", default=str(Path.cwd() / DEFAULT_ROOT_NAME), help="Cartridge root folder")
+    parser.add_argument("--root", default=_DEFAULT_ROOT, help="Cartridge root folder")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("init", help="Create a new cartridge")
@@ -203,6 +209,20 @@ def main() -> None:
     p = sub.add_parser("mcp-tools", help="Print the MCP tool schema")
     p = sub.add_parser("mcp-test", help="Test the local MCP server stub")
 
+    p = sub.add_parser("reason", help="Causal temporal reasoning over the memory graph")
+    p.add_argument("query", help="Natural language query")
+    p.add_argument("--when", default="", help="Temporal context: ISO 8601 datetime or Unix timestamp (default: now)")
+    p.add_argument("--depth", type=int, default=3, help="Max causal hops (default 3)")
+    p.add_argument("--json", action="store_true", dest="output_json", help="Output raw JSON instead of narrative")
+
+    p = sub.add_parser("kosh-verify", help="Kosh Verify product API: provenance-aware dialectic verification")
+    p.add_argument("query", help="Question to verify")
+    p.add_argument("--when", default="", help="Temporal context: ISO 8601 datetime or Unix timestamp")
+    p.add_argument("--depth", type=int, default=4)
+    p.add_argument("--no-dialectic", action="store_true", help="Disable convergence/opposition loop")
+    p.add_argument("--json", action="store_true", dest="output_json", help="Output JSON report")
+    p.add_argument("--demo-seed", action="store_true", help="Seed the built-in incident demo before running")
+
     p = sub.add_parser("intake", help="Manage intake control plane or convert/ingest files")
     p.add_argument("action", help="Action (scan, list, show, validate, review, apply, reject, quarantine, status) or file/directory path to ingest")
     p.add_argument("id", nargs="?", default="", help="Intake ID or argument")
@@ -218,8 +238,25 @@ def main() -> None:
     p.add_argument("action", choices=["pack", "receipt", "cartridge", "generate-sample", "report"])
     p.add_argument("target", nargs="?")
 
+    # service subcommand
+    p_service = sub.add_parser("service", help="Manage the llm-kosh background service")
+    p_service.add_argument("action", choices=["start", "stop", "restart", "status", "run"])
+
+    # install subcommand
+    p_install = sub.add_parser("install", help="One-click setup: service + MCP auto-start")
+    p_install.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
+
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
+
+    # Auto-spawn daemon for commands that touch the cartridge
+    _NO_SPAWN_CMDS = {"init", "install", "service", "daemon", "mcp-server", "mcp-tools", "mcp-test", "version"}
+    if getattr(args, 'cmd', None) not in _NO_SPAWN_CMDS:
+        try:
+            from llm_kosh.service import maybe_spawn
+            maybe_spawn(root)
+        except Exception:
+            pass  # never break the CLI due to spawn failure
 
     if args.cmd == "init":
         init_cartridge(root, args.owner)
@@ -476,6 +513,59 @@ def main() -> None:
             raise SystemExit(1)
     elif args.cmd == "mcp-test":
         print("Starting MCP Test...")
+    elif args.cmd == "reason":
+        import sys
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        from llm_kosh.engine.reasoning import ReasoningEngine
+        from llm_kosh.engine.reasoning.formatter import format_narrative
+        engine = ReasoningEngine(root)
+        result = engine.query(args.query, temporal_context=args.when or None, depth=args.depth)
+        if args.output_json:
+            import json
+            bundle_out = {}
+            for fid, fiber in result.bundle.fibers.items():
+                if fid == "__deep_instability__":
+                    continue
+                bundle_out[fid] = {
+                    "fact": {
+                        "id": fiber.fact.id if fiber.fact else fid,
+                        "content": fiber.fact.content if fiber.fact else "",
+                        "valid_from": fiber.fact.valid_from.isoformat() if fiber.fact else "",
+                        "confidence": fiber.fact.confidence if fiber.fact else 0.0,
+                    },
+                    "degeneracy": fiber.degeneracy,
+                    "max_confidence": fiber.max_confidence,
+                }
+            print(json.dumps({
+                "anchors": result.anchors,
+                "bundle": bundle_out,
+                "stability": {
+                    "score": result.stability.score,
+                    "status": result.stability.status,
+                },
+            }, indent=2))
+        else:
+            print(format_narrative(result, args.query))
+    elif args.cmd == "kosh-verify":
+        import sys
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        from llm_kosh.verify import KoshVerify, seed_incident_cartridge
+        kv = seed_incident_cartridge(root) if args.demo_seed else KoshVerify(root)
+        report = kv.verify(
+            args.query,
+            temporal_context=args.when or None,
+            depth=args.depth,
+            dialectic=not args.no_dialectic,
+        )
+        if args.output_json:
+            print(report.to_json(indent=2))
+        else:
+            print(f"Status: {report.status}")
+            print(f"Primary answer: {report.primary_answer}")
+            print(f"Stability: {report.stability_status} ({report.stability_score})")
+            print(kv.explain_provenance(report))
     elif args.cmd == "server":
         from llm_kosh.server import start_server
         start_server(root, args.host, args.port)
@@ -564,6 +654,14 @@ def main() -> None:
             from llm_kosh.engine.intake import processor_apply
             res = processor_apply(root, args.name)
             print(f"Applied proposal: {res}")
+    elif args.cmd == "service":
+        from llm_kosh.service import main as service_main
+        import sys as _sys
+        _sys.argv = [_sys.argv[0]] + ([args.action] if hasattr(args, 'action') else [])
+        service_main()
+    elif args.cmd == "install":
+        from llm_kosh.install import run_install
+        run_install(yes=getattr(args, 'yes', False))
 
 if __name__ == "__main__":
     main()

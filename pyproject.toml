@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "pybind11>=2.10.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-kosh"
-version = "2.1.0"
+version = "2.1.1"
 description = "Local-first AI memory cartridge: persistent, cross-session memory for Claude and any LLM via MCP"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -21,10 +21,11 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    # LlmKosh relies heavily on the standard library for its core
+    "PyYAML>=6.0",
 ]
 
 [project.urls]
@@ -40,9 +41,10 @@ semantic = [
     "sentence-transformers>=2.2.0"
 ]
 server = [
-    "fastapi>=0.100.0",
+    "fastapi>=0.116.0",
     "uvicorn>=0.23.0",
-    "mcp>=1.0.0"
+    "mcp>=1.26.0",
+    "tomli>=2.0.0; python_version < \"3.11\""
 ]
 ingest = [
     "markitdown"
@@ -53,6 +55,14 @@ all = [
 
 [project.scripts]
 llm-kosh = "llm_kosh.cli:main"
+llm-kosh-service = "llm_kosh.service:main"
 
-[tool.setuptools]
-packages = ["llm_kosh", "llm_kosh.intake"]
+[tool.setuptools.packages]
+find = {}
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: integration tests requiring a running service",
+    "asyncio: async tests",
+]

@@ -131,10 +131,12 @@ def append_ledger(root: Path, event: str, payload: dict) -> None:
     import os
     ledger = root / "ledger" / "events.jsonl"
     ledger.parent.mkdir(parents=True, exist_ok=True)
+    # Read chain head BEFORE opening the append handle so the separate read()
+    # call never races with the mandatory byte-range lock on Windows.
+    prev = _read_chain_head(ledger)
     with ledger.open("a", encoding="utf-8") as f:
         _lock_file(f)
         try:
-            prev = _read_chain_head(ledger)
             row = {"event_id": f"evt_{uuid.uuid4().hex}", "event": event,
                    "time": now_iso(), **payload, "prev": prev}
             row["row_hash"] = row_hash(row)

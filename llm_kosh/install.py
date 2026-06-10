@@ -141,49 +141,29 @@ def _register_linux() -> bool:
 
 
 def _register_windows() -> bool:
-    """Register a Task Scheduler task on Windows."""
-    local_app_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    task_dir = local_app_data / "llm-kosh"
-    task_dir.mkdir(parents=True, exist_ok=True)
-    task_xml_path = task_dir / "task.xml"
+    """Register auto-start on Windows via the user Startup folder (no admin required).
 
+    The XML/schtasks approach requires admin privileges on modern Windows.
+    The Startup folder is always writable by the current user and is the
+    recommended no-admin approach for per-user auto-start services.
+    """
+    startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+    if not startup_dir.exists():
+        print(f"  [warn] Startup folder not found: {startup_dir}")
+        return False
+
+    bat_path = startup_dir / "llm-kosh-daemon.bat"
     python_exe = _python_exe()
 
-    task_xml = textwrap.dedent(f"""\
-        <?xml version="1.0" encoding="UTF-16"?>
-        <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-          <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
-          <Actions><Exec>
-            <Command>{python_exe}</Command>
-            <Arguments>-m llm_kosh.service run</Arguments>
-          </Exec></Actions>
-          <Settings><ExecutionTimeLimit>PT0S</ExecutionTimeLimit></Settings>
-        </Task>
+    bat_content = textwrap.dedent(f"""\
+        @echo off
+        start "" /B "{python_exe}" -m llm_kosh.service run
     """)
 
-    task_xml_path.write_text(task_xml, encoding="utf-16")
-
-    try:
-        result = subprocess.run(
-            [
-                "schtasks",
-                "/Create",
-                "/TN", "llm-kosh-daemon",
-                "/XML", str(task_xml_path),
-                "/F",
-            ],
-            check=True,
-            capture_output=True,
-        )
-        print(f"  [ok] Windows Task Scheduler task registered from {task_xml_path}")
-        return True
-    except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.decode(errors="replace").strip() if exc.stderr else ""
-        print(f"  [warn] schtasks failed: {stderr}")
-        return False
-    except FileNotFoundError:
-        print("  [warn] schtasks not found; Task Scheduler registration skipped")
-        return False
+    bat_path.write_text(bat_content, encoding="utf-8")
+    print(f"  [ok] Auto-start registered (Startup folder): {bat_path}")
+    print(f"       Daemon will start automatically on next login.")
+    return True
 
 
 def register_os_service() -> bool:
@@ -236,7 +216,7 @@ def patch_claude_desktop_config(yes: bool = False) -> None:
     root_str = _cartridge_root_str()
     new_entry = {
         "command": "llm-kosh",
-        "args": ["mcp-server", "--root", root_str],
+        "args": ["mcp-server", "--root", root_str, "--allow-write"],
         "env": {"CARTRIDGE_WORKSPACE": root_str},
     }
 

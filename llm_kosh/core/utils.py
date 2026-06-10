@@ -135,28 +135,48 @@ def _read_chain_head(ledger: Path) -> str:
     return GENESIS_HASH
 
 
-def _win32_excl_lock(lock_path: Path):
-    """Acquire an exclusive cross-process lock on Windows via O_EXCL creation.
+def _win32_acquire_write_lock(lock_path: Path, timeout_s: float = 10.0):
+    """Acquire a cross-process write lock on Windows using msvcrt byte-range locking.
 
-    Returns an open fd that the caller must close + unlink to release.
-    Spins up to 10 s (2000 × 5 ms).  Raises RuntimeError on timeout.
+    Uses a PERSISTENT lock file (never created/deleted per-call) to avoid
+    antivirus scanner interference — AV scanners on Windows CI hold newly
+    created files open briefly, causing os.unlink to fail.
 
-    Windows quirk: when the lock file is open by another process with no
-    sharing mode (SHARE_NONE), os.open(O_EXCL) raises PermissionError
-    (ERROR_SHARING_VIOLATION / WinError 32) rather than FileExistsError.
-    We catch both and treat them identically as "retry".
+    The lock file stays on disk; mutual exclusion comes from msvcrt.LK_NBLCK
+    which raises OSError(EACCES) if another process holds the same byte range.
+
+    Returns an open file object.  Caller MUST call _win32_release_write_lock().
     """
-    import time as _time
-    _os = __import__("os")
-    for _ in range(2000):
+    import msvcrt, time as _t
+    lock_path.touch()  # create once; never deleted
+    end = _t.monotonic() + timeout_s
+    while True:
         try:
-            return _os.open(
-                str(lock_path),
-                _os.O_WRONLY | _os.O_CREAT | _os.O_EXCL,
-            )
-        except (FileExistsError, PermissionError):
-            _time.sleep(0.005)
-    raise RuntimeError(f"llm-kosh: could not acquire write lock after 10 s: {lock_path}")
+            f = lock_path.open("rb+")
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+            return f
+        except OSError:
+            try:
+                f.close()
+            except Exception:
+                pass
+            if _t.monotonic() >= end:
+                raise RuntimeError(
+                    f"llm-kosh: could not acquire write lock after {timeout_s:.0f} s: {lock_path}"
+                )
+            _t.sleep(0.005)
+
+
+def _win32_release_write_lock(f) -> None:
+    import msvcrt
+    try:
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+    except OSError:
+        pass
+    try:
+        f.close()
+    except OSError:
+        pass
 
 
 def append_ledger(root: Path, event: str, payload: dict) -> None:
@@ -173,14 +193,15 @@ def append_ledger(root: Path, event: str, payload: dict) -> None:
     # Cross-process mutual exclusion ──────────────────────────────────────────
     # On Windows, open("a") uses SetFilePointer+WriteFile (not atomic across
     # processes), so concurrent appends from separate processes can overlap.
-    # We use an O_EXCL lock file for mutual exclusion; it is atomic at the OS
-    # level and does NOT block readers of the ledger file (unlike msvcrt.locking
-    # which applies mandatory byte-range locks and breaks concurrent reads).
+    # We use msvcrt.locking on a persistent side-file for mutual exclusion.
+    # The side-file is never deleted — this avoids AV scanners that hold
+    # newly-created files open and prevent os.unlink.  The lock only covers
+    # the side-file byte range, so it never blocks readers of events.jsonl.
     # On POSIX, fcntl.flock in _lock_file() provides the same guarantee.
-    lock_fd = None
+    lock_fobj = None
     lock_path = ledger.parent / ".write.lock"
     if os.name == "nt":
-        lock_fd = _win32_excl_lock(lock_path)
+        lock_fobj = _win32_acquire_write_lock(lock_path)
 
     try:
         prev = _read_chain_head(ledger)
@@ -200,21 +221,8 @@ def append_ledger(root: Path, event: str, payload: dict) -> None:
             finally:
                 _unlock_file(f)
     finally:
-        if lock_fd is not None:
-            import time as _t
-            try:
-                os.close(lock_fd)
-            except OSError:
-                pass
-            # Retry unlink: on Windows a concurrent os.open attempt can briefly
-            # hold a handle reference that prevents deletion.
-            for _i in range(50):
-                try:
-                    os.unlink(str(lock_path))
-                    break
-                except OSError:
-                    if _i < 49:
-                        _t.sleep(0.001)
+        if lock_fobj is not None:
+            _win32_release_write_lock(lock_fobj)
 
 
 def frontmatter(meta: Dict[str, object]) -> str:

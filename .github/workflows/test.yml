@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master, develop, "feature/**", "merge/**"]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip setuptools wheel pybind11
+          pip install -e ".[server,watch,ingest]"
+          pip install pytest pytest-asyncio pytest-timeout pytest-cov
+
+      - name: Unit tests
+        run: |
+          pytest tests/ -v --tb=short -k "not integration" --timeout=30 --cov=llm_kosh --cov-report=xml
+
+      - name: Reasoning tests
+        run: |
+          pytest tests/test_reasoning*.py -v --tb=short --timeout=60
+
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml

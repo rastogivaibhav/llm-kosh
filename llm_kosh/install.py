@@ -284,6 +284,27 @@ def check_path_variable() -> None:
 # Top-level orchestrator
 # ---------------------------------------------------------------------------
 
+def _print_desktop_install_hint() -> None:
+    """Tell the user how to get the desktop app for their platform."""
+    releases_url = "https://github.com/rastogivaibhav/llm-kosh/releases/latest"
+
+    if sys.platform == "win32":
+        print(f"  [info] Desktop app (.exe installer):")
+        print(f"         {releases_url}")
+        print(f"         -> Download llm-kosh-desktop-windows.exe and run it.")
+    elif sys.platform == "darwin":
+        print(f"  [info] Desktop app (.dmg):")
+        print(f"         {releases_url}")
+        print(f"         -> Download llm-kosh-desktop-macos.dmg, open it, drag to Applications.")
+    else:
+        print(f"  [info] Desktop app (.AppImage):")
+        print(f"         {releases_url}")
+        print(f"         -> Download llm-kosh-desktop-linux.AppImage")
+        print(f"         -> chmod +x llm-kosh-desktop-linux.AppImage && ./llm-kosh-desktop-linux.AppImage")
+
+    print(f"  [info] Or run headless - daemon + MCP server are fully functional without the desktop app.")
+
+
 def run_install(yes: bool = False) -> None:
     """Run the full one-click installation sequence."""
     print("=== llm-kosh install ===")
@@ -308,6 +329,9 @@ def run_install(yes: bool = False) -> None:
 
     print("\n6. Checking PATH...")
     check_path_variable()
+
+    print("\n7. Desktop app...")
+    _print_desktop_install_hint()
 
     print("\n=== Installation complete ===")
     if not service_ok:

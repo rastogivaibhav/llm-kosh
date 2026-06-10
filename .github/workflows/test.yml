@@ -35,7 +35,7 @@ jobs:
 
       - name: Reasoning tests
         run: |
-          pytest tests/test_reasoning*.py -v --tb=short --timeout=60
+          pytest tests/ -v --tb=short -k "reasoning and not integration and not real_cartridge" --timeout=60
 
       - name: Upload coverage
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.11'

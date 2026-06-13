@@ -68,17 +68,12 @@ GENESIS_HASH = "sha256:" + "0" * 64
 
 
 def _lock_file(f) -> None:
-    """Acquire an advisory lock on the file handle.
-
-    On POSIX we use fcntl.flock (advisory, allows concurrent readers).
-    On Windows we skip msvcrt.locking — it applies mandatory byte-range locks
-    that block concurrent reads from other processes, which breaks concurrent
-    append scenarios.  Windows append-mode writes are atomic for single-record
-    JSON lines (well within the 4 KB atomic-write guarantee), so OS-level
-    append serialisation is sufficient for cross-process safety.
-    """
+    """Acquire an exclusive advisory lock (POSIX fcntl / Windows msvcrt)."""
     try:
-        if __import__("os").name != "nt":
+        if hasattr(__import__("os"), "name") and __import__("os").name == "nt":
+            import msvcrt
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
             import fcntl
             fcntl.flock(f.fileno(), fcntl.LOCK_EX)
     except Exception:
@@ -87,7 +82,10 @@ def _lock_file(f) -> None:
 
 def _unlock_file(f) -> None:
     try:
-        if __import__("os").name != "nt":
+        if __import__("os").name == "nt":
+            import msvcrt
+            msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
             import fcntl
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except Exception:
@@ -105,27 +103,15 @@ def _read_chain_head(ledger: Path) -> str:
     """Last row hash in the chain: from CHAIN_HEAD cache, else tail scan, else genesis."""
     head_file = ledger.parent / "CHAIN_HEAD"
     if head_file.exists():
-        try:
-            cached = head_file.read_text(encoding="utf-8").strip()
-            if cached.startswith("sha256:"):
-                return cached
-        except OSError:
-            pass  # concurrent os.replace on Windows can make the file briefly unreadable
+        cached = head_file.read_text(encoding="utf-8").strip()
+        if cached.startswith("sha256:"):
+            return cached
     if ledger.exists():
         last = None
-        # Retry up to 10x with 5 ms gaps — on Windows, newly created files can be
-        # transiently locked by AV/Defender before any advisory lock is involved.
-        import time
-        for _attempt in range(10):
-            try:
-                with ledger.open("r", encoding="utf-8", errors="replace") as f:
-                    for line in f:
-                        if line.strip():
-                            last = line
-                break
-            except OSError:
-                if _attempt < 9:
-                    time.sleep(0.005)
+        with ledger.open("r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.strip():
+                    last = line
         if last:
             try:
                 prev_row = json.loads(last)
@@ -133,50 +119,6 @@ def _read_chain_head(ledger: Path) -> str:
             except Exception:
                 pass
     return GENESIS_HASH
-
-
-def _win32_acquire_write_lock(lock_path: Path, timeout_s: float = 10.0):
-    """Acquire a cross-process write lock on Windows using msvcrt byte-range locking.
-
-    Uses a PERSISTENT lock file (never created/deleted per-call) to avoid
-    antivirus scanner interference — AV scanners on Windows CI hold newly
-    created files open briefly, causing os.unlink to fail.
-
-    The lock file stays on disk; mutual exclusion comes from msvcrt.LK_NBLCK
-    which raises OSError(EACCES) if another process holds the same byte range.
-
-    Returns an open file object.  Caller MUST call _win32_release_write_lock().
-    """
-    import msvcrt, time as _t
-    lock_path.touch()  # create once; never deleted
-    end = _t.monotonic() + timeout_s
-    while True:
-        try:
-            f = lock_path.open("rb+")
-            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-            return f
-        except OSError:
-            try:
-                f.close()
-            except Exception:
-                pass
-            if _t.monotonic() >= end:
-                raise RuntimeError(
-                    f"llm-kosh: could not acquire write lock after {timeout_s:.0f} s: {lock_path}"
-                )
-            _t.sleep(0.005)
-
-
-def _win32_release_write_lock(f) -> None:
-    import msvcrt
-    try:
-        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-    except OSError:
-        pass
-    try:
-        f.close()
-    except OSError:
-        pass
 
 
 def append_ledger(root: Path, event: str, payload: dict) -> None:
@@ -189,40 +131,19 @@ def append_ledger(root: Path, event: str, payload: dict) -> None:
     import os
     ledger = root / "ledger" / "events.jsonl"
     ledger.parent.mkdir(parents=True, exist_ok=True)
-
-    # Cross-process mutual exclusion ──────────────────────────────────────────
-    # On Windows, open("a") uses SetFilePointer+WriteFile (not atomic across
-    # processes), so concurrent appends from separate processes can overlap.
-    # We use msvcrt.locking on a persistent side-file for mutual exclusion.
-    # The side-file is never deleted — this avoids AV scanners that hold
-    # newly-created files open and prevent os.unlink.  The lock only covers
-    # the side-file byte range, so it never blocks readers of events.jsonl.
-    # On POSIX, fcntl.flock in _lock_file() provides the same guarantee.
-    lock_fobj = None
-    lock_path = ledger.parent / ".write.lock"
-    if os.name == "nt":
-        lock_fobj = _win32_acquire_write_lock(lock_path)
-
-    try:
-        prev = _read_chain_head(ledger)
-        with ledger.open("a", encoding="utf-8") as f:
-            _lock_file(f)
-            try:
-                row = {"event_id": f"evt_{uuid.uuid4().hex}", "event": event,
-                       "time": now_iso(), **payload, "prev": prev}
-                row["row_hash"] = row_hash(row)
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-                f.flush()
-                os.fsync(f.fileno())
-                try:
-                    atomic_write_text(ledger.parent / "CHAIN_HEAD", row["row_hash"] + "\n")
-                except OSError:
-                    pass  # CHAIN_HEAD is a cache; readers fall back to ledger scan
-            finally:
-                _unlock_file(f)
-    finally:
-        if lock_fobj is not None:
-            _win32_release_write_lock(lock_fobj)
+    with ledger.open("a", encoding="utf-8") as f:
+        _lock_file(f)
+        try:
+            prev = _read_chain_head(ledger)
+            row = {"event_id": f"evt_{uuid.uuid4().hex}", "event": event,
+                   "time": now_iso(), **payload, "prev": prev}
+            row["row_hash"] = row_hash(row)
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+            atomic_write_text(ledger.parent / "CHAIN_HEAD", row["row_hash"] + "\n")
+        finally:
+            _unlock_file(f)
 
 
 def frontmatter(meta: Dict[str, object]) -> str:

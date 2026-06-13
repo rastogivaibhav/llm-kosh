@@ -1,26 +1,25 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.rastogivaibhav/llm-kosh",
-  "description": "Local-first AI memory cartridge with temporal causal reasoning. Gives Claude permanent, air-gapped memory across sessions — understands why things happened and in what order, not just keyword search.",
+  "description": "Local-first AI memory cartridge with persistent MCP memory for Claude via SQLite FTS5.",
   "repository": {
     "url": "https://github.com/rastogivaibhav/llm-kosh",
     "source": "github"
   },
-  "version": "2.1.1",
+  "version": "2.1.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "llm-kosh",
-      "version": "2.1.1",
-      "runtime_arguments": ["mcp-server", "--allow-write"],
+      "version": "2.1.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "CARTRIDGE_WORKSPACE",
-          "description": "Path to the local folder llm-kosh uses as its memory cartridge root. Defaults to ~/.llmkosh/cartridge after running llm-kosh install.",
-          "isRequired": false,
+          "description": "Path to the local folder llm-kosh should use as its memory cartridge root.",
+          "isRequired": true,
           "format": "filepath",
           "isSecret": false
         }

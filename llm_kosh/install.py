@@ -141,29 +141,49 @@ def _register_linux() -> bool:
 
 
 def _register_windows() -> bool:
-    """Register auto-start on Windows via the user Startup folder (no admin required).
+    """Register a Task Scheduler task on Windows."""
+    local_app_data = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    task_dir = local_app_data / "llm-kosh"
+    task_dir.mkdir(parents=True, exist_ok=True)
+    task_xml_path = task_dir / "task.xml"
 
-    The XML/schtasks approach requires admin privileges on modern Windows.
-    The Startup folder is always writable by the current user and is the
-    recommended no-admin approach for per-user auto-start services.
-    """
-    startup_dir = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
-    if not startup_dir.exists():
-        print(f"  [warn] Startup folder not found: {startup_dir}")
-        return False
-
-    bat_path = startup_dir / "llm-kosh-daemon.bat"
     python_exe = _python_exe()
 
-    bat_content = textwrap.dedent(f"""\
-        @echo off
-        start "" /B "{python_exe}" -m llm_kosh.service run
+    task_xml = textwrap.dedent(f"""\
+        <?xml version="1.0" encoding="UTF-16"?>
+        <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+          <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
+          <Actions><Exec>
+            <Command>{python_exe}</Command>
+            <Arguments>-m llm_kosh.service run</Arguments>
+          </Exec></Actions>
+          <Settings><ExecutionTimeLimit>PT0S</ExecutionTimeLimit></Settings>
+        </Task>
     """)
 
-    bat_path.write_text(bat_content, encoding="utf-8")
-    print(f"  [ok] Auto-start registered (Startup folder): {bat_path}")
-    print(f"       Daemon will start automatically on next login.")
-    return True
+    task_xml_path.write_text(task_xml, encoding="utf-16")
+
+    try:
+        result = subprocess.run(
+            [
+                "schtasks",
+                "/Create",
+                "/TN", "llm-kosh-daemon",
+                "/XML", str(task_xml_path),
+                "/F",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        print(f"  [ok] Windows Task Scheduler task registered from {task_xml_path}")
+        return True
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr.decode(errors="replace").strip() if exc.stderr else ""
+        print(f"  [warn] schtasks failed: {stderr}")
+        return False
+    except FileNotFoundError:
+        print("  [warn] schtasks not found; Task Scheduler registration skipped")
+        return False
 
 
 def register_os_service() -> bool:
@@ -216,7 +236,7 @@ def patch_claude_desktop_config(yes: bool = False) -> None:
     root_str = _cartridge_root_str()
     new_entry = {
         "command": "llm-kosh",
-        "args": ["mcp-server", "--root", root_str, "--allow-write"],
+        "args": ["mcp-server", "--root", root_str],
         "env": {"CARTRIDGE_WORKSPACE": root_str},
     }
 
@@ -284,27 +304,6 @@ def check_path_variable() -> None:
 # Top-level orchestrator
 # ---------------------------------------------------------------------------
 
-def _print_desktop_install_hint() -> None:
-    """Tell the user how to get the desktop app for their platform."""
-    releases_url = "https://github.com/rastogivaibhav/llm-kosh/releases/latest"
-
-    if sys.platform == "win32":
-        print(f"  [info] Desktop app (.exe installer):")
-        print(f"         {releases_url}")
-        print(f"         -> Download llm-kosh-desktop-windows.exe and run it.")
-    elif sys.platform == "darwin":
-        print(f"  [info] Desktop app (.dmg):")
-        print(f"         {releases_url}")
-        print(f"         -> Download llm-kosh-desktop-macos.dmg, open it, drag to Applications.")
-    else:
-        print(f"  [info] Desktop app (.AppImage):")
-        print(f"         {releases_url}")
-        print(f"         -> Download llm-kosh-desktop-linux.AppImage")
-        print(f"         -> chmod +x llm-kosh-desktop-linux.AppImage && ./llm-kosh-desktop-linux.AppImage")
-
-    print(f"  [info] Or run headless - daemon + MCP server are fully functional without the desktop app.")
-
-
 def run_install(yes: bool = False) -> None:
     """Run the full one-click installation sequence."""
     print("=== llm-kosh install ===")
@@ -329,9 +328,6 @@ def run_install(yes: bool = False) -> None:
 
     print("\n6. Checking PATH...")
     check_path_variable()
-
-    print("\n7. Desktop app...")
-    _print_desktop_install_hint()
 
     print("\n=== Installation complete ===")
     if not service_ok:

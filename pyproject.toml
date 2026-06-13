@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llm-kosh"
-version = "2.1.1"
+version = "2.1.0"
 description = "Local-first AI memory cartridge: persistent, cross-session memory for Claude and any LLM via MCP"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "PyYAML>=6.0",
+    # LlmKosh relies heavily on the standard library for its core
 ]
 
 [project.urls]

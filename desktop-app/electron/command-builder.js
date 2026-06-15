@@ -6,7 +6,7 @@ function buildCommandArgs(command, args) {
   }
 
   // Ensure args is an array
-  const safeArgs = Array.isArray(args) ? args : [];
+  const safeArgs = Array.isArray(args) ? [...args] : [];
 
   // Security: block dangerous flags
   if (safeArgs.includes('--allow-secrets')) {
@@ -49,6 +49,12 @@ function buildCommandArgs(command, args) {
     if (safeArgs.length > 0) {
       throw new Error(`Security Violation: Command '${command}' does not accept arguments.`);
     }
+  }
+
+  const rootIndex = safeArgs.indexOf('--root');
+  if (rootIndex !== -1 && rootIndex + 1 < safeArgs.length) {
+    const rootValue = safeArgs.splice(rootIndex, 2);
+    return [rootValue[0], rootValue[1], command, ...safeArgs];
   }
 
   return [command, ...safeArgs];

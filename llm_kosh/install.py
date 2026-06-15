@@ -64,6 +64,52 @@ def _python_exe() -> str:
     return sys.executable
 
 
+def _pip_cmd(*args: str) -> list[str]:
+    return [_python_exe(), "-m", "pip", *args]
+
+
+def _run_pip(*args: str) -> subprocess.CompletedProcess[str]:
+    """Run pip in-process-friendly mode and capture output for diagnostics."""
+    return subprocess.run(
+        _pip_cmd(*args),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _print_pip_result(label: str, result: subprocess.CompletedProcess[str]) -> bool:
+    if result.returncode == 0:
+        print(f"  [ok] {label}")
+        return True
+    stderr = (result.stderr or result.stdout or "").strip()
+    if stderr:
+        print(f"  [warn] {label} failed: {stderr}")
+    else:
+        print(f"  [warn] {label} failed with exit code {result.returncode}")
+    return False
+
+
+def uninstall_python_package() -> bool:
+    """Remove the installed llm-kosh distribution from the current Python environment."""
+    print("Removing Python package installation...")
+    result = _run_pip("uninstall", "-y", "llm-kosh")
+    return _print_pip_result("pip uninstall llm-kosh", result)
+
+
+def install_python_package(editable: bool = True) -> bool:
+    """Install llm-kosh from the current source tree into the active Python environment."""
+    print("Installing Python package from current workspace...")
+    install_args = ["install"]
+    if editable:
+        install_args.extend(["-e", "."])
+    else:
+        install_args.append(".")
+    install_args.extend(["--no-deps", "--no-build-isolation", "--upgrade", "--force-reinstall"])
+    result = _run_pip(*install_args)
+    return _print_pip_result("pip install current workspace", result)
+
+
 def _register_darwin() -> bool:
     """Register a launchd plist on macOS."""
     plist_dir = Path.home() / "Library" / "LaunchAgents"
@@ -399,6 +445,10 @@ def run_install(yes: bool = False) -> None:
     """Run the full one-click installation sequence."""
     print("=== llm-kosh install ===")
 
+    print("\n0. Refreshing Python package...")
+    uninstall_python_package()
+    install_ok = install_python_package(editable=True)
+
     print("\n1. Creating home directory...")
     create_home_dir()
 
@@ -421,6 +471,8 @@ def run_install(yes: bool = False) -> None:
     check_path_variable()
 
     print("\n=== Installation complete ===")
+    if not install_ok:
+        print("Note: Python package refresh was not fully successful.")
     if not service_ok:
         print("Note: OS service registration was not fully successful.")
         print("You can start the service manually with: llm-kosh service start")
@@ -429,6 +481,7 @@ def run_install(yes: bool = False) -> None:
 def run_uninstall(yes: bool = False) -> None:
     """Reverse the install flow as cleanly as possible."""
     print("=== llm-kosh uninstall ===")
+    uninstall_python_package()
     unregister_os_service()
     try:
         unpatch_claude_desktop_config()

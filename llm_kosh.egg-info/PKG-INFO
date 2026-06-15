@@ -147,7 +147,7 @@ for fact_id, fiber in result.bundle.fibers.items():
 - 🧠 **Lightning Fast Local Memory:** Powered by an embedded SQLite FTS5 database. Sub-50ms search times across thousands of context files.
 - ⚡ **Global Quick Capture:** Press `Ctrl+Shift+Space` anywhere on your OS to instantly dump a thought, decision, or code snippet into your cartridge.
 - 🛡️ **Air-Gapped & Secure:** Built-in safety Airlock prevents destructive writes. No data ever leaves your machine unless you explicitly pack it.
-- 🖥️ **Beautiful Desktop UI:** Comes with a glassmorphism Electron/React desktop app to manage your memory, monitor the MCP daemon, and configure hotkeys.
+- 🖥️ **Beautiful Desktop UI:** Comes with a glassmorphism Electron/React desktop app to manage your memory, monitor the sustained background service, and configure hotkeys.
 
 ## 📦 Quickstart
 
@@ -171,9 +171,9 @@ pip install "llm-kosh[all]"
 llm-kosh init --owner "Your Name"
 ```
 
-**3. Launch the Desktop App & Daemon**
+**3. Launch the Desktop App & Service**
 ```bash
-# Starts the UI, the background watcher, and the MCP bridge
+# Starts the UI, the sustained service, and the MCP bridge
 llm-kosh desktop
 ```
 

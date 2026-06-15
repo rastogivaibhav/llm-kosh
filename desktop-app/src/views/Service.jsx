@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Play, Square, RefreshCw, Activity } from 'lucide-react';
 import { api } from '../lib/api';
 
-export default function Daemon({ config }) {
+export default function Service({ config }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const fetchStatus = async () => {
     try {
-      const st = await api.getLocalDaemonDetails();
+      const st = await api.getLocalServiceDetails();
       setStatus(st);
     } catch (err) {
       console.error(err);
@@ -23,21 +23,21 @@ export default function Daemon({ config }) {
 
   const handleStart = async () => {
     setLoading(true);
-    await api.startDaemon(config.cartridgeRoot, config.daemonMode || 'auto');
+    await api.startService(config.cartridgeRoot, config.daemonMode || 'auto');
     await fetchStatus();
     setLoading(false);
   };
 
   const handleStop = async () => {
     setLoading(true);
-    await api.stopDaemon();
+    await api.stopService();
     await fetchStatus();
     setLoading(false);
   };
 
   const handleRunOnce = async () => {
     setLoading(true);
-    await api.daemonOnce(config.cartridgeRoot, config.daemonMode || 'auto');
+    await api.serviceOnce(config.cartridgeRoot, config.daemonMode || 'auto');
     setLoading(false);
   };
 
@@ -57,7 +57,7 @@ export default function Daemon({ config }) {
       <div className="flex items-center justify-between p-4 border-b border-vscode-border">
         <h1 className="text-xl font-semibold flex items-center gap-2">
           <Activity size={20} className={isRunning ? 'text-green-500' : 'text-gray-500'} />
-          Daemon Manager
+          Service Manager
         </h1>
         <div className="flex gap-2">
           {isRunning ? (
@@ -66,7 +66,7 @@ export default function Daemon({ config }) {
               disabled={loading}
               className="flex items-center gap-2 px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-200 rounded border border-red-800 transition-colors disabled:opacity-50"
             >
-              <Square size={16} fill="currentColor" /> Stop Daemon
+              <Square size={16} fill="currentColor" /> Stop Service
             </button>
           ) : (
             <button
@@ -74,14 +74,14 @@ export default function Daemon({ config }) {
               disabled={loading}
               className="flex items-center gap-2 px-3 py-1.5 bg-green-900/50 hover:bg-green-900 text-green-200 rounded border border-green-800 transition-colors disabled:opacity-50"
             >
-              <Play size={16} fill="currentColor" /> Start Daemon
+              <Play size={16} fill="currentColor" /> Start Service
             </button>
           )}
           <button
             onClick={handleRunOnce}
             disabled={loading || isRunning}
             className="flex items-center gap-2 px-3 py-1.5 bg-vscode-buttonPrimary hover:bg-vscode-buttonHover text-white rounded transition-colors disabled:opacity-50"
-            title="Runs the daemon loop exactly once and exits"
+            title="Runs the service loop exactly once and exits"
           >
             <RefreshCw size={16} /> Run Once
           </button>
@@ -125,7 +125,7 @@ export default function Daemon({ config }) {
 
         <div className="flex-1 flex flex-col min-h-0 border border-vscode-border rounded overflow-hidden">
           <div className="bg-vscode-inputBg px-3 py-2 text-xs font-semibold text-gray-400 border-b border-vscode-border flex justify-between">
-            <span>Daemon Logs</span>
+            <span>Service Logs</span>
             <span>Last 50 entries</span>
           </div>
           <div className="flex-1 overflow-auto p-2 bg-[#050505] font-mono text-xs">

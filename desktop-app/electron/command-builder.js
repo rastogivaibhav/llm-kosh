@@ -1,5 +1,5 @@
 function buildCommandArgs(command, args) {
-  const allowedCommands = ['status', 'init', 'pack', 'safe-pack', 'validate-pack', 'validate-receipt', 'absorb', 'daemon'];
+  const allowedCommands = ['status', 'init', 'pack', 'safe-pack', 'validate-pack', 'validate-receipt', 'absorb', 'daemon', 'service', 'install', 'uninstall', 'desktop'];
   
   if (!allowedCommands.includes(command)) {
     throw new Error(`Security Violation: Command '${command}' is not allowed in Phase 4.`);
@@ -25,12 +25,14 @@ function buildCommandArgs(command, args) {
     }
   }
 
-  // If daemon, validate subcommand and mode
-  if (command === 'daemon') {
+  // If daemon/service, validate subcommand and mode
+  if (command === 'daemon' || command === 'service') {
     const subcommand = safeArgs[0];
-    const allowedSubcommands = ['once', 'start', 'status'];
+    const allowedSubcommands = command === 'daemon'
+      ? ['once', 'start', 'status']
+      : ['install', 'uninstall', 'start', 'stop', 'restart', 'status'];
     if (!allowedSubcommands.includes(subcommand)) {
-      throw new Error(`Security Violation: Daemon subcommand '${subcommand}' is not allowed.`);
+      throw new Error(`Security Violation: ${command} subcommand '${subcommand}' is not allowed.`);
     }
 
     const modeIndex = safeArgs.indexOf('--mode');
@@ -38,8 +40,14 @@ function buildCommandArgs(command, args) {
       const mode = safeArgs[modeIndex + 1];
       const allowedModes = ['auto', 'polling', 'watchdog'];
       if (!allowedModes.includes(mode)) {
-        throw new Error(`Security Violation: Daemon mode '${mode}' is not allowed.`);
+        throw new Error(`Security Violation: Service mode '${mode}' is not allowed.`);
       }
+    }
+  }
+
+  if (command === 'install' || command === 'uninstall' || command === 'desktop') {
+    if (safeArgs.length > 0) {
+      throw new Error(`Security Violation: Command '${command}' does not accept arguments.`);
     }
   }
 

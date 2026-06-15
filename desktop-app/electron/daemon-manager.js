@@ -19,6 +19,7 @@ class DaemonManager {
     this.logs.unshift(entry);
     if (this.logs.length > 100) this.logs.pop();
     this.emitEvent('daemon-log', entry);
+    this.emitEvent('service-log', entry);
     
     // Parse for receipts
     if (type === 'stdout' || type === 'stderr') {
@@ -70,7 +71,7 @@ class DaemonManager {
       const rawArgs = ['start', '--root', rootPath];
       if (mode) rawArgs.push('--mode', mode);
       
-      const fullArgs = buildCommandArgs('daemon', rawArgs);
+      const fullArgs = buildCommandArgs('service', rawArgs);
 
       this.activeDaemon = spawn(exe, fullArgs, {
         cwd: app.getPath('home'),
@@ -94,6 +95,7 @@ class DaemonManager {
         this.activeDaemon = null;
         this.uptimeStart = null;
         this.emitEvent('daemon-status-changed', { running: false });
+        this.emitEvent('service-status-changed', { running: false });
         if (code !== 0 && code !== null) {
           this.lastError = `Exited with code ${code}`;
           this.notify('Daemon Stopped', `The daemon stopped unexpectedly (code ${code}).`);
@@ -106,9 +108,11 @@ class DaemonManager {
         this.activeDaemon = null;
         this.uptimeStart = null;
         this.emitEvent('daemon-status-changed', { running: false });
+        this.emitEvent('service-status-changed', { running: false });
       });
 
       this.emitEvent('daemon-status-changed', { running: true });
+      this.emitEvent('service-status-changed', { running: true });
       return { ok: true, stdout: 'Daemon started.' };
     } catch (e) {
       this.lastError = e.message;
@@ -123,6 +127,7 @@ class DaemonManager {
       this.uptimeStart = null;
       this.addLog('system', 'Daemon stopped manually');
       this.emitEvent('daemon-status-changed', { running: false });
+      this.emitEvent('service-status-changed', { running: false });
       return { ok: true, stdout: 'Daemon stopped.' };
     }
     return { ok: false, stderr: 'No active daemon.' };

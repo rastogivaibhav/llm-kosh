@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: llm-kosh
-Version: 2.1.0
+Version: 2.1.1
 Summary: Local-first AI memory cartridge: persistent, cross-session memory for Claude and any LLM via MCP
 Author-email: Vaibhav Rastogi <rastogivaibhav@gmail.com>
 License-Expression: MIT

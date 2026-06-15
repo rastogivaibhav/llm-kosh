@@ -85,8 +85,12 @@ async function runSmokeTestSequence(exe) {
   results.push(absorbRes);
 
   // 7. Daemon Status
-  const daemonRes = await runCommand(exe, 'daemon', ['status', '--root', testRootPath]);
-  results.push(daemonRes);
+  const serviceRes = await runCommand(exe, 'service', ['status', '--root', testRootPath]);
+  results.push(serviceRes);
+  if (!serviceRes.ok) {
+    const daemonRes = await runCommand(exe, 'daemon', ['status', '--root', testRootPath]);
+    results.push(daemonRes);
+  }
 
   return cleanupAndReturn(testRootPath, results);
 }

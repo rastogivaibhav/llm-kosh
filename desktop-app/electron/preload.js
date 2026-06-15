@@ -18,9 +18,12 @@ contextBridge.exposeInMainWorld('llmKosh', {
   validateReceipt: (rootPath, receiptPath) => ipcRenderer.invoke('validate-receipt', rootPath, receiptPath),
   absorbReceipt: (rootPath, receiptPath) => ipcRenderer.invoke('absorb-receipt', rootPath, receiptPath),
   setLoginItem: (enable) => ipcRenderer.invoke('set-login-item', enable),
-  getDaemonStatus: (rootPath) => ipcRenderer.invoke('get-daemon-status', rootPath),
-  getLocalDaemonDetails: () => ipcRenderer.invoke('get-local-daemon-details'),
-  daemonOnce: (rootPath, mode) => ipcRenderer.invoke('daemon-once', rootPath, mode),
+  getServiceStatus: (rootPath) => ipcRenderer.invoke('get-service-status', rootPath),
+  getDaemonStatus: (rootPath) => ipcRenderer.invoke('get-service-status', rootPath),
+  getLocalServiceDetails: () => ipcRenderer.invoke('get-local-service-details'),
+  getLocalDaemonDetails: () => ipcRenderer.invoke('get-local-service-details'),
+  serviceOnce: (rootPath, mode) => ipcRenderer.invoke('service-once', rootPath, mode),
+  daemonOnce: (rootPath, mode) => ipcRenderer.invoke('service-once', rootPath, mode),
   startMcp: (rootPath, options) => ipcRenderer.invoke('start-mcp', rootPath, options),
   stopMcp: () => ipcRenderer.invoke('stop-mcp'),
   getMcpStatus: () => ipcRenderer.invoke('get-mcp-status'),
@@ -36,8 +39,17 @@ contextBridge.exposeInMainWorld('llmKosh', {
       ipcRenderer.removeListener('mcp-log', callback);
     };
   },
-  startDaemon: (rootPath, mode) => ipcRenderer.invoke('start-daemon', rootPath, mode),
-  stopDaemon: () => ipcRenderer.invoke('stop-daemon'),
+  startService: (rootPath, mode) => ipcRenderer.invoke('start-service', rootPath, mode),
+  startDaemon: (rootPath, mode) => ipcRenderer.invoke('start-service', rootPath, mode),
+  stopService: () => ipcRenderer.invoke('stop-service'),
+  stopDaemon: () => ipcRenderer.invoke('stop-service'),
+  onServiceLog: (callback) => {
+    const subscription = (event, msg) => callback(msg);
+    ipcRenderer.on('service-log', subscription);
+    return () => {
+      ipcRenderer.removeListener('service-log', subscription);
+    };
+  },
   onDaemonLog: (callback) => {
     const subscription = (event, msg) => callback(msg);
     ipcRenderer.on('daemon-log', subscription);
@@ -53,5 +65,7 @@ contextBridge.exposeInMainWorld('llmKosh', {
   getLogs: () => ipcRenderer.invoke('get-logs'),
   runSmokeTest: () => ipcRenderer.invoke('run-smoke-test'),
   runKoshCommand: (rootPath, command, args) => ipcRenderer.invoke('run-kosh-command', rootPath, command, args),
+  installKosh: () => ipcRenderer.invoke('install-kosh'),
+  uninstallKosh: () => ipcRenderer.invoke('uninstall-kosh'),
   closeQuickCapture: () => ipcRenderer.send('close-quick-capture'),
 });

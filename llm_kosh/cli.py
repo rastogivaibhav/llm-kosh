@@ -124,12 +124,12 @@ def main() -> None:
     p.add_argument("action", choices=["list", "show"])
     p.add_argument("review_id", nargs="?")
     
-    p = sub.add_parser("daemon", help="Manage the LlmKosh Self-Healing Daemon OS")
+    p = sub.add_parser("daemon", help="Legacy alias for the sustained background service")
     p.add_argument("action", choices=["start", "once", "status", "jobs", "run-job", "log", "stop"])
-    p.add_argument("--mode", choices=["auto", "watchdog", "polling"], default="watchdog", help="Mode for daemon start")
+    p.add_argument("--mode", choices=["auto", "watchdog", "polling"], default="watchdog", help="Mode for legacy daemon start")
     p.add_argument("job_name", nargs="?", help="Job name for run-job")
-    
-    sub.add_parser("watch", help="(Deprecated) Use `daemon start --mode watchdog`")
+
+    sub.add_parser("watch", help="(Deprecated) Use `service start`")
 
     sub.add_parser("audit", help="Audit cartridge")
     p = sub.add_parser("heal", help="Repair structural issues and rebuild derived state")
@@ -239,18 +239,21 @@ def main() -> None:
     p.add_argument("target", nargs="?")
 
     # service subcommand
-    p_service = sub.add_parser("service", help="Manage the llm-kosh background service")
-    p_service.add_argument("action", choices=["start", "stop", "restart", "status", "run"])
+    p_service = sub.add_parser("service", help="Manage the sustained llm-kosh service")
+    p_service.add_argument("action", choices=["install", "uninstall", "start", "stop", "restart", "status", "run"])
 
     # install subcommand
     p_install = sub.add_parser("install", help="One-click setup: service + MCP auto-start")
     p_install.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
+    p_uninstall = sub.add_parser("uninstall", help="Remove service registration and desktop integration")
+    p_uninstall.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
+    sub.add_parser("desktop", help="Install and start the sustained service, then launch the desktop app if available")
 
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
 
     # Auto-spawn daemon for commands that touch the cartridge
-    _NO_SPAWN_CMDS = {"init", "install", "service", "daemon", "mcp-server", "mcp-tools", "mcp-test", "version"}
+    _NO_SPAWN_CMDS = {"init", "install", "uninstall", "service", "daemon", "desktop", "mcp-server", "mcp-tools", "mcp-test", "version"}
     if getattr(args, 'cmd', None) not in _NO_SPAWN_CMDS:
         try:
             from llm_kosh.service import maybe_spawn
@@ -655,13 +658,30 @@ def main() -> None:
             res = processor_apply(root, args.name)
             print(f"Applied proposal: {res}")
     elif args.cmd == "service":
-        from llm_kosh.service import main as service_main
-        import sys as _sys
-        _sys.argv = [_sys.argv[0]] + ([args.action] if hasattr(args, 'action') else [])
-        service_main()
+        if args.action in {"start", "stop", "restart", "status", "run"}:
+            from llm_kosh.service import main as service_main
+            import sys as _sys
+            _sys.argv = [_sys.argv[0], args.action]
+            service_main()
+        elif args.action == "install":
+            from llm_kosh.install import run_install
+            run_install(yes=True)
+        elif args.action == "uninstall":
+            from llm_kosh.install import run_uninstall
+            run_uninstall(yes=True)
     elif args.cmd == "install":
         from llm_kosh.install import run_install
         run_install(yes=getattr(args, 'yes', False))
+    elif args.cmd == "uninstall":
+        from llm_kosh.install import run_uninstall
+        run_uninstall(yes=getattr(args, 'yes', False))
+    elif args.cmd == "desktop":
+        from llm_kosh.install import run_install
+        run_install(yes=True)
+        from llm_kosh.service import main as service_main
+        import sys as _sys
+        _sys.argv = [_sys.argv[0], "start"]
+        service_main()
 
 if __name__ == "__main__":
     main()

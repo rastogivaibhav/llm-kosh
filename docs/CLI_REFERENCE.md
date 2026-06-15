@@ -89,11 +89,19 @@ llm-kosh quarantine --id mem_98765
 
 Background operations for automation and IDE integration.
 
-### `daemon`
-Start the self-healing background OS.
+### `service`
+Manage the sustained background service.
 ```bash
-# Start the daemon in filesystem watchdog mode
-llm-kosh daemon start --mode watchdog
+# Install, start, or remove the service
+llm-kosh service install
+llm-kosh service start
+llm-kosh service uninstall
+```
+
+### `desktop`
+One-shot orchestration for local desktop users.
+```bash
+llm-kosh desktop
 ```
 
 ### `mcp-server`

@@ -128,6 +128,14 @@ llm_kosh/engine/reasoning/temporal_evidence.py
 llm_kosh/engine/reasoning/trace.py
 llm_kosh/engine/reasoning/trace_critic.py
 llm_kosh/engine/reasoning/tracer.py
+llm_kosh/engine/reasoning/v1_1_critic.py
+llm_kosh/engine/reasoning/v1_1_evaluation.py
+llm_kosh/engine/reasoning/v1_1_executor.py
+llm_kosh/engine/reasoning/v1_1_generator.py
+llm_kosh/engine/reasoning/v1_1_integration.py
+llm_kosh/engine/reasoning/v1_1_loop.py
+llm_kosh/engine/reasoning/v1_1_self_model.py
+llm_kosh/engine/reasoning/v1_1_tracer.py
 llm_kosh/intake/__init__.py
 llm_kosh/intake/converters.py
 llm_kosh/processors/core.py
@@ -190,6 +198,7 @@ tests/test_kosh_verify_framework_agents_shared_pool.py
 tests/test_kosh_verify_multi_agent_servicenow.py
 tests/test_kosh_verify_product_wedge.py
 tests/test_kosh_verify_temporal_causal_provenance_datasets.py
+tests/test_ledger_hardening.py
 tests/test_legal_extractor.py
 tests/test_mcp_adapter.py
 tests/test_mcp_reasoning_narrative.py
@@ -218,3 +227,4 @@ tests/test_trace.py
 tests/test_workbench.py
 tests/harness/benchmark_support.py
 tests/harness/ingest_support_cartridge.py
+tests/reasoning/test_v1_1_layers.py

@@ -5,7 +5,7 @@ This document describes how to build installers and executables for the llm-kosh
 ## Prerequisites
 - Node.js (v18+)
 - npm
-- (Optional) `llm-kosh` Python CLI. Note that in v0.2, **the CLI is not bundled yet**. Users must have the CLI installed or available on their system path, or configure its location manually.
+- (Optional) `llm-kosh` Python CLI. The desktop app can call the CLI for install, uninstall, and service control when it is available, or you can configure a custom executable path.
 
 ## Build Instructions
 
@@ -37,12 +37,12 @@ All packaged artifacts will be output to the `desktop-app/dist-electron` folder.
 
 ## Limitations and OS Warnings
 
-### 1. The Python CLI is Not Bundled (v0.2)
-- This package only bundles the Electron shell. It attempts to resolve the `llm-kosh` executable via:
+### 1. CLI Resolution
+- The app resolves the `llm-kosh` executable via:
   1. User Configuration (`~/.config/llm-kosh-config.json` -> `executablePath`)
-  2. Sidecar path (e.g., `resources/bin/llm-kosh`) - *Not populated in v0.2*
+  2. Sidecar path (e.g., `resources/bin/llm-kosh`)
   3. System `PATH`.
-- If the CLI is not found, the app gracefully opens an Onboarding screen where the user can click **"Locate Custom Executable"**.
+- If the CLI is not found, the app gracefully opens an onboarding screen where the user can locate a custom executable.
 
 ### 2. macOS Unsigned App Warning
 - The macOS build is currently unsigned. When users download and launch the `.dmg`, macOS Gatekeeper may block it. Users will need to bypass this by right-clicking the app and selecting "Open".

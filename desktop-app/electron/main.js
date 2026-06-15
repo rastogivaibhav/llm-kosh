@@ -205,9 +205,9 @@ function updateTrayMenu() {
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open llm-kosh', click: () => { mainWindow?.show(); } },
     { type: 'separator' },
-    { label: `Daemon: ${status.running ? 'Running' : 'Stopped'}`, enabled: false },
+    { label: `Service: ${status.running ? 'Running' : 'Stopped'}`, enabled: false },
     { 
-      label: status.running ? 'Stop Daemon' : 'Start Daemon', 
+      label: status.running ? 'Stop Service' : 'Start Service', 
       click: () => {
         if (status.running) {
           daemonManager.stop();
@@ -249,9 +249,9 @@ app.whenReady().then(() => {
     updateTrayMenu();
   }
 
-  // Subscribe to daemon events to update tray
+  // Subscribe to service events to update tray
   daemonManager.subscribe((eventName) => {
-    if (eventName === 'daemon-status-changed') {
+    if (eventName === 'daemon-status-changed' || eventName === 'service-status-changed') {
       updateTrayMenu();
     }
   });
@@ -440,23 +440,34 @@ ipcMain.handle('absorb-receipt', async (event, rootPath, receiptPath) => {
   return await runLlmKosh('absorb', ['--root', rootPath, receiptPath]);
 });
 
+ipcMain.handle('get-service-status', async (event, rootPath) => {
+  const isLocalRunning = daemonManager.getStatus().running;
+  const res = await runLlmKosh('service', ['status', '--root', rootPath]);
+  return { ...res, isLocalRunning };
+});
 ipcMain.handle('get-daemon-status', async (event, rootPath) => {
   const isLocalRunning = daemonManager.getStatus().running;
   const res = await runLlmKosh('daemon', ['status', '--root', rootPath]);
   return { ...res, isLocalRunning };
 });
 
-ipcMain.handle('get-local-daemon-details', () => {
+ipcMain.handle('get-local-service-details', () => {
   return daemonManager.getStatus();
 });
+ipcMain.handle('get-local-daemon-details', () => daemonManager.getStatus());
 
+ipcMain.handle('service-once', async (event, rootPath, mode) => {
+  const args = ['once', '--root', rootPath];
+  if (mode) args.push('--mode', mode);
+  return await runLlmKosh('service', args);
+});
 ipcMain.handle('daemon-once', async (event, rootPath, mode) => {
   const args = ['once', '--root', rootPath];
   if (mode) args.push('--mode', mode);
   return await runLlmKosh('daemon', args);
 });
 
-ipcMain.handle('start-daemon', async (event, rootPath, mode) => {
+ipcMain.handle('start-service', async (event, rootPath, mode) => {
   const config = readConfig();
   const daemonMode = mode || config.daemonMode || 'auto';
   
@@ -466,17 +477,27 @@ ipcMain.handle('start-daemon', async (event, rootPath, mode) => {
   
   // Forward logs from daemonManager to the renderer
   daemonManager.subscribe((eventName, payload) => {
-    if (eventName === 'daemon-log') {
-      try { event.sender.send('daemon-log', { type: payload.type, data: payload.message }); } catch (e) {}
+    if (eventName === 'daemon-log' || eventName === 'service-log') {
+      try {
+        const packed = { type: payload.type, data: payload.message };
+        event.sender.send('service-log', packed);
+        event.sender.send('daemon-log', packed);
+      } catch (e) {}
     }
   });
 
   return daemonManager.start(configPath, process.resourcesPath, rootPath, daemonMode);
 });
+ipcMain.handle('start-daemon', async (event, rootPath, mode) => {
+  const config = readConfig();
+  const daemonMode = mode || config.daemonMode || 'auto';
+  return daemonManager.start(configPath, process.resourcesPath, rootPath, daemonMode);
+});
 
-ipcMain.handle('stop-daemon', () => {
+ipcMain.handle('stop-service', () => {
   return daemonManager.stop();
 });
+ipcMain.handle('stop-daemon', () => daemonManager.stop());
 
 ipcMain.handle('get-logs', () => {
   const config = readConfig();
@@ -712,4 +733,12 @@ ipcMain.handle('run-kosh-command', async (event, rootPath, command, args) => {
   // Safe generic execution since runLlmKosh prevents shell injection
   const fullArgs = ['--root', rootPath, ...(args || [])];
   return await runLlmKosh(command, fullArgs);
+});
+
+ipcMain.handle('install-kosh', async () => {
+  return await runLlmKosh('install', []);
+});
+
+ipcMain.handle('uninstall-kosh', async () => {
+  return await runLlmKosh('uninstall', []);
 });

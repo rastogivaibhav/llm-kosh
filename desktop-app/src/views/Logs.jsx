@@ -87,7 +87,7 @@ export default function Logs() {
             {JSON.stringify(logsData.config, null, 2)}
           </div>
           
-          <h2 className="text-sm font-semibold text-gray-400 uppercase mt-6 mb-2">Daemon Status</h2>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase mt-6 mb-2">Service Status</h2>
           <div className={`p-4 rounded border font-mono text-xs ${logsData.daemonRunning ? 'bg-green-900/20 border-green-900 text-green-400' : 'bg-vscode-inputBg border-vscode-border text-gray-400'}`}>
             {logsData.daemonRunning ? '● Active process owned by desktop app' : '○ Not running in desktop app'}
           </div>

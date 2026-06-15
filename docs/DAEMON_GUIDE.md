@@ -1,3 +1,3 @@
-# Daemon Guide
+# Service Guide
 
-Run `llm-kosh daemon start --mode watchdog` to automatically scan intake queues.
+Run `llm-kosh service start` to automatically scan intake queues.

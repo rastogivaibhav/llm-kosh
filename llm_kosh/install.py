@@ -1,4 +1,10 @@
-"""One-shot install: ~/.llmkosh setup, OS service registration, claude_desktop_config.json injection."""
+"""Install and uninstall helpers for llm-kosh.
+
+This module owns the user-facing lifecycle:
+- create/remove the local home directory structure
+- register/unregister the sustained background service
+- patch/unpatch Claude Desktop MCP config
+"""
 
 from __future__ import annotations
 
@@ -62,7 +68,10 @@ def _register_darwin() -> bool:
     """Register a launchd plist on macOS."""
     plist_dir = Path.home() / "Library" / "LaunchAgents"
     plist_dir.mkdir(parents=True, exist_ok=True)
-    plist_path = plist_dir / "com.llmkosh.daemon.plist"
+    plist_path = plist_dir / "com.llmkosh.service.plist"
+    label = "com.llmkosh.service"
+    log_dir = get_llmkosh_home()
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     plist_content = textwrap.dedent(f"""\
         <?xml version="1.0" encoding="UTF-8"?>
@@ -71,7 +80,7 @@ def _register_darwin() -> bool:
         <plist version="1.0">
         <dict>
             <key>Label</key>
-            <string>com.llmkosh.daemon</string>
+            <string>{label}</string>
             <key>ProgramArguments</key>
             <array>
                 <string>{_python_exe()}</string>
@@ -79,29 +88,30 @@ def _register_darwin() -> bool:
                 <string>llm_kosh.service</string>
                 <string>run</string>
             </array>
+            <key>WorkingDirectory</key>
+            <string>{get_default_cartridge_root()}</string>
             <key>RunAtLoad</key>
             <true/>
             <key>KeepAlive</key>
-            <false/>
+            <true/>
+            <key>ProcessType</key>
+            <string>Background</string>
             <key>StandardOutPath</key>
-            <string>{get_llmkosh_home() / "daemon.log"}</string>
+            <string>{log_dir / "service.log"}</string>
             <key>StandardErrorPath</key>
-            <string>{get_llmkosh_home() / "daemon.err.log"}</string>
+            <string>{log_dir / "service.err.log"}</string>
         </dict>
         </plist>
     """)
 
     plist_path.write_text(plist_content, encoding="utf-8")
     try:
-        subprocess.run(
-            ["launchctl", "load", "-w", str(plist_path)],
-            check=True,
-            capture_output=True,
-        )
+        subprocess.run(["launchctl", "bootstrap", f"gui/{os.getuid()}", str(plist_path)], check=True, capture_output=True)
+        subprocess.run(["launchctl", "enable", f"gui/{os.getuid()}/{label}"], check=False, capture_output=True)
         print(f"  [ok] launchd service registered: {plist_path}")
         return True
     except subprocess.CalledProcessError as exc:
-        print(f"  [warn] launchctl load failed: {exc.stderr.decode(errors='replace').strip()}")
+        print(f"  [warn] launchctl bootstrap failed: {exc.stderr.decode(errors='replace').strip()}")
         return False
 
 
@@ -110,17 +120,21 @@ def _register_linux() -> bool:
     unit_dir = Path.home() / ".config" / "systemd" / "user"
     unit_dir.mkdir(parents=True, exist_ok=True)
     unit_path = unit_dir / "llm-kosh.service"
+    working_dir = get_default_cartridge_root()
+    working_dir.mkdir(parents=True, exist_ok=True)
 
     unit_content = textwrap.dedent(f"""\
         [Unit]
-        Description=llm-kosh background daemon
+        Description=llm-kosh background service
         After=default.target
 
         [Service]
         Type=simple
         ExecStart={_python_exe()} -m llm_kosh.service run
+        WorkingDirectory={working_dir}
         Restart=on-failure
         RestartSec=10
+        Environment=LLMKOSH_ROOT={working_dir}
 
         [Install]
         WantedBy=default.target
@@ -128,8 +142,9 @@ def _register_linux() -> bool:
 
     unit_path.write_text(unit_content, encoding="utf-8")
     try:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False, capture_output=True)
         subprocess.run(
-            ["systemctl", "--user", "enable", "--now", "llm-kosh"],
+            ["systemctl", "--user", "enable", "--now", "llm-kosh.service"],
             check=True,
             capture_output=True,
         )
@@ -153,6 +168,11 @@ def _register_windows() -> bool:
         <?xml version="1.0" encoding="UTF-16"?>
         <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
           <Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers>
+          <Principals>
+            <Principal id="Author">
+              <RunLevel>LeastPrivilege</RunLevel>
+            </Principal>
+          </Principals>
           <Actions><Exec>
             <Command>{python_exe}</Command>
             <Arguments>-m llm_kosh.service run</Arguments>
@@ -168,7 +188,7 @@ def _register_windows() -> bool:
             [
                 "schtasks",
                 "/Create",
-                "/TN", "llm-kosh-daemon",
+                "/TN", "llm-kosh-service",
                 "/XML", str(task_xml_path),
                 "/F",
             ],
@@ -187,7 +207,7 @@ def _register_windows() -> bool:
 
 
 def register_os_service() -> bool:
-    """Register the daemon as an OS service. Returns True on success."""
+    """Register the service as an OS service. Returns True on success."""
     print("Registering OS service...")
     if sys.platform == "darwin":
         return _register_darwin()
@@ -195,6 +215,50 @@ def register_os_service() -> bool:
         return _register_linux()
     elif sys.platform == "win32":
         return _register_windows()
+    else:
+        print(f"  [skip] Unsupported platform: {sys.platform}")
+        return False
+
+
+def unregister_os_service() -> bool:
+    """Remove the OS service registration. Returns True on success."""
+    print("Unregistering OS service...")
+    if sys.platform == "darwin":
+        plist_path = Path.home() / "Library" / "LaunchAgents" / "com.llmkosh.service.plist"
+        label = "com.llmkosh.service"
+        try:
+            subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}", str(plist_path)], check=False, capture_output=True)
+            subprocess.run(["launchctl", "disable", f"gui/{os.getuid()}/{label}"], check=False, capture_output=True)
+            if plist_path.exists():
+                plist_path.unlink()
+            print(f"  [ok] launchd service removed: {plist_path}")
+            return True
+        except OSError as exc:
+            print(f"  [warn] Could not remove launchd service: {exc}")
+            return False
+    elif sys.platform == "linux":
+        unit_path = Path.home() / ".config" / "systemd" / "user" / "llm-kosh.service"
+        try:
+            subprocess.run(["systemctl", "--user", "disable", "--now", "llm-kosh.service"], check=False, capture_output=True)
+            subprocess.run(["systemctl", "--user", "daemon-reload"], check=False, capture_output=True)
+            if unit_path.exists():
+                unit_path.unlink()
+            print(f"  [ok] systemd user service removed: {unit_path}")
+            return True
+        except OSError as exc:
+            print(f"  [warn] Could not remove systemd user service: {exc}")
+            return False
+    elif sys.platform == "win32":
+        try:
+            subprocess.run(["schtasks", "/Delete", "/TN", "llm-kosh-service", "/F"], check=False, capture_output=True)
+            print("  [ok] Windows Task Scheduler task removed: llm-kosh-service")
+            return True
+        except FileNotFoundError:
+            print("  [warn] schtasks not found; Task Scheduler removal skipped")
+            return False
+        except OSError as exc:
+            print(f"  [warn] Could not remove scheduled task: {exc}")
+            return False
     else:
         print(f"  [skip] Unsupported platform: {sys.platform}")
         return False
@@ -274,6 +338,33 @@ def patch_claude_desktop_config(yes: bool = False) -> None:
     print(f"  [ok] Claude Desktop config patched: {config_path}")
 
 
+def unpatch_claude_desktop_config() -> None:
+    """Remove the llm-kosh entry from Claude Desktop config if present."""
+    config_path = _claude_desktop_config_path()
+    if config_path is None or not config_path.exists():
+        print("  [skip] Claude Desktop config not found.")
+        return
+
+    try:
+        existing = json.loads(config_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        print("  [warn] Claude Desktop config unreadable; leaving untouched.")
+        return
+
+    mcp_servers = existing.get("mcpServers", {})
+    if "llm-kosh" not in mcp_servers:
+        print("  [skip] Claude Desktop config has no llm-kosh entry.")
+        return
+
+    del mcp_servers["llm-kosh"]
+    if mcp_servers:
+        existing["mcpServers"] = mcp_servers
+    else:
+        existing.pop("mcpServers", None)
+    config_path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    print(f"  [ok] Claude Desktop config cleaned: {config_path}")
+
+
 # ---------------------------------------------------------------------------
 # PATH check
 # ---------------------------------------------------------------------------
@@ -332,4 +423,15 @@ def run_install(yes: bool = False) -> None:
     print("\n=== Installation complete ===")
     if not service_ok:
         print("Note: OS service registration was not fully successful.")
-        print("You can start the daemon manually with: llm-kosh service start")
+        print("You can start the service manually with: llm-kosh service start")
+
+
+def run_uninstall(yes: bool = False) -> None:
+    """Reverse the install flow as cleanly as possible."""
+    print("=== llm-kosh uninstall ===")
+    unregister_os_service()
+    try:
+        unpatch_claude_desktop_config()
+    except Exception as exc:
+        print(f"  [warn] Claude Desktop config cleanup failed: {exc}")
+    print("=== Uninstall complete ===")

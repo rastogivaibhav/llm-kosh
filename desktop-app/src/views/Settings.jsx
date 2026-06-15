@@ -12,6 +12,7 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
   const [cliHealth, setCliHealth] = useState(null);
   const [runningSmokeTest, setRunningSmokeTest] = useState(false);
   const [smokeTestResults, setSmokeTestResults] = useState(null);
+  const [serviceLoading, setServiceLoading] = useState(false);
 
   // MCP Panel State
   const [mcpStatus, setMcpStatus] = useState({ running: false, pid: null });
@@ -156,6 +157,24 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
     setStatusMessage('Smoke test completed.');
   };
 
+  const handleInstallKosh = async () => {
+    setServiceLoading(true);
+    setStatusMessage('Installing llm-kosh...');
+    const res = await api.installKosh();
+    setServiceLoading(false);
+    setStatusMessage(res?.ok ? 'llm-kosh installed.' : `Install failed: ${res?.stderr || 'unknown error'}`);
+    checkCliHealth();
+  };
+
+  const handleUninstallKosh = async () => {
+    setServiceLoading(true);
+    setStatusMessage('Uninstalling llm-kosh...');
+    const res = await api.uninstallKosh();
+    setServiceLoading(false);
+    setStatusMessage(res?.ok ? 'llm-kosh uninstalled.' : `Uninstall failed: ${res?.stderr || 'unknown error'}`);
+    checkCliHealth();
+  };
+
   return (
     <div className="p-8 h-full flex flex-col bg-brand-bg overflow-y-auto">
       <div className="flex items-center justify-between mb-8">
@@ -164,7 +183,7 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
             <SettingsIcon className="text-brand-accent" size={28} />
             App Configuration
           </h1>
-          <p className="text-brand-muted mt-1">Manage CLI integrations, workspace roots, and daemon behaviors.</p>
+          <p className="text-brand-muted mt-1">Manage CLI integrations, workspace roots, and service behaviors.</p>
         </div>
       </div>
 
@@ -293,7 +312,7 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
                     onChange={handleChange}
                     className="w-4 h-4 text-brand-accent bg-brand-surface border-brand-border rounded focus:ring-brand-accent"
                   />
-                  <span className="text-sm font-semibold text-brand-text group-hover:text-brand-accent transition-colors">Automatically start Daemon when app opens</span>
+                  <span className="text-sm font-semibold text-brand-text group-hover:text-brand-accent transition-colors">Automatically start the background service when app opens</span>
                 </label>
 
                 <label className="flex items-center gap-3 cursor-pointer group">
@@ -304,12 +323,12 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
                     onChange={handleChange}
                     className="w-4 h-4 text-brand-accent bg-brand-surface border-brand-border rounded focus:ring-brand-accent"
                   />
-                  <span className="text-sm font-semibold text-brand-text group-hover:text-brand-accent transition-colors">Enable desktop notifications for Daemon events</span>
+                  <span className="text-sm font-semibold text-brand-text group-hover:text-brand-accent transition-colors">Enable desktop notifications for service events</span>
                 </label>
               </div>
 
               <div className="flex flex-col gap-2 mt-2 border-t border-brand-border pt-4">
-                <label className="text-xs font-bold text-brand-muted uppercase">Daemon Startup Mode</label>
+                <label className="text-xs font-bold text-brand-muted uppercase">Service Startup Mode</label>
                 <select
                   name="daemonMode"
                   value={formData.daemonMode}
@@ -370,6 +389,27 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
               <TestTube size={16} />
               {runningSmokeTest ? 'Running Suite...' : 'Run Local Smoke Test'}
             </button>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+              <button
+                type="button"
+                onClick={handleInstallKosh}
+                disabled={serviceLoading}
+                className="flex items-center justify-center gap-2 w-full bg-brand-success/10 border border-brand-success/30 hover:bg-brand-success/20 text-brand-success px-4 py-3 rounded-xl transition-colors font-bold disabled:opacity-50"
+              >
+                <Play size={16} fill="currentColor" />
+                {serviceLoading ? 'Working...' : 'Install / Repair'}
+              </button>
+              <button
+                type="button"
+                onClick={handleUninstallKosh}
+                disabled={serviceLoading}
+                className="flex items-center justify-center gap-2 w-full bg-brand-danger/10 border border-brand-danger/30 hover:bg-brand-danger/20 text-brand-danger px-4 py-3 rounded-xl transition-colors font-bold disabled:opacity-50"
+              >
+                <Square size={16} fill="currentColor" />
+                {serviceLoading ? 'Working...' : 'Uninstall'}
+              </button>
+            </div>
           </div>
 
           {smokeTestResults && (

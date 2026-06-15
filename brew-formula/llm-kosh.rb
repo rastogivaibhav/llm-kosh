@@ -30,7 +30,7 @@ class LlmKosh < Formula
 
   def post_install
     ohai "llm-kosh installed!"
-    ohai "Start the daemon:  llm-kosh service start"
+    ohai "Start the service:  llm-kosh service start"
     ohai "Quick capture:     Ctrl+Shift+Space  (requires desktop app)"
   end
 

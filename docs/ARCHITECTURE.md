@@ -7,12 +7,12 @@
 1. **The Core Engine:** The source of truth. Handles the filesystem-backed storage of typed memories (e.g., `decision`, `project`, `prompt`). It enforces structural schema and handles transactional backups.
 2. **The Intake/Processor Pipeline:** The "Inbox". Raw files are dumped here. The control plane (`intake`) scans them, and declarative `processor` rules parse them to automatically suggest structured memory proposals.
 3. **The Search Indices (FTS & Vector):** Memories are indexed using standard Full-Text Search (`index`) and semantically embedded (`embed`) via TF-IDF or local `sentence-transformers` for deep query resolution.
-4. **The Daemon OS:** A background process running in `watchdog` or `polling` modes. It continuously audits the cartridge, self-heals broken links, updates search indices, and processes background jobs.
+4. **The Background Service:** A background process running in `watchdog` or `polling` modes. It continuously audits the cartridge, self-heals broken links, updates search indices, and processes background jobs.
 
 ## 2. The Client Ecosystem
 
 While the CLI is the foundation, `llm-kosh` provides diverse UI surfaces that act as lightweight clients communicating with the Core Engine:
-- **The Electron Desktop App:** A graphical dashboard for controlling the Daemon, configuring Watched Folders, and managing outbound packs and inbound receipts via secure IPC channels.
+- **The Electron Desktop App:** A graphical dashboard for controlling the service, configuring Watched Folders, and managing outbound packs and inbound receipts via secure IPC channels.
 - **The Local Workbench (`llm-kosh workbench`):** A browser-based interface served over local HTTP for rapid exploration and visualization of the memory map.
 - **The MCP Server (`llm-kosh mcp-server`):** A Model Context Protocol server that allows modern AI IDEs (like Claude Desktop) to connect directly to the cartridge via `stdio` or HTTP, enabling live context retrieval.
 

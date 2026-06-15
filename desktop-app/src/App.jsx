@@ -10,7 +10,6 @@ import Airlock from './views/Airlock';
 import Receipts from './views/Receipts'; 
 import GeneratePack from './views/GeneratePack'; 
 import Settings from './views/Settings';
-import Daemon from './views/Daemon';
 import Onboarding from './views/Onboarding';
 import { api } from './lib/api';
 

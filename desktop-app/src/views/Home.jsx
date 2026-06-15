@@ -7,12 +7,12 @@ export default function Home({ config, setConfig, setStatusMessage }) {
   const [statusOutput, setStatusOutput] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Daemon state
-  const [daemonMode, setDaemonMode] = useState('auto');
-  const [daemonStatus, setDaemonStatus] = useState(null);
-  const [daemonLogs, setDaemonLogs] = useState('');
-  const [isDaemonRunning, setIsDaemonRunning] = useState(false);
-  const [daemonLoading, setDaemonLoading] = useState(false);
+  // Service state
+  const [serviceMode, setServiceMode] = useState('auto');
+  const [serviceStatus, setServiceStatus] = useState(null);
+  const [serviceLogs, setServiceLogs] = useState('');
+  const [isServiceRunning, setIsServiceRunning] = useState(false);
+  const [serviceLoading, setServiceLoading] = useState(false);
 
   // Watched Folders state
   const [watchedFolders, setWatchedFolders] = useState([]);
@@ -33,19 +33,19 @@ export default function Home({ config, setConfig, setStatusMessage }) {
     if (config?.cartridgeRoot) {
       setRoot(config.cartridgeRoot);
       handleRefresh(config.cartridgeRoot);
-      handleRefreshDaemon(config.cartridgeRoot);
+      handleRefreshService(config.cartridgeRoot);
     }
     loadWatchedFolders();
   }, [config?.cartridgeRoot]);
 
   useEffect(() => {
-    const unsubscribe = api.onDaemonLog((msg) => {
-      setDaemonLogs((prev) => {
+    const unsubscribe = api.onServiceLog((msg) => {
+      setServiceLogs((prev) => {
         const newLog = prev + msg.data;
         return newLog.length > 10000 ? newLog.substring(newLog.length - 10000) : newLog;
       });
       if (msg.type === 'exit' || msg.type === 'error') {
-        setIsDaemonRunning(false);
+        setIsServiceRunning(false);
       }
     });
 
@@ -95,38 +95,38 @@ export default function Home({ config, setConfig, setStatusMessage }) {
     setLoading(false);
   };
 
-  const handleRefreshDaemon = async (path = root) => {
+  const handleRefreshService = async (path = root) => {
     if (!path) return;
-    setDaemonLoading(true);
-    const result = await api.getDaemonStatus(path);
-    setDaemonLoading(false);
+    setServiceLoading(true);
+    const result = await api.getServiceStatus(path);
+    setServiceLoading(false);
     if (result.ok) {
-      setDaemonStatus(result.stdout);
-      setIsDaemonRunning(result.isLocalRunning);
+      setServiceStatus(result.stdout);
+      setIsServiceRunning(result.isLocalRunning);
     } else {
-      setDaemonStatus(`Error getting status: ${result.stderr}`);
-      setIsDaemonRunning(result.isLocalRunning);
+      setServiceStatus(`Error getting status: ${result.stderr}`);
+      setIsServiceRunning(result.isLocalRunning);
     }
   };
 
-  const handleToggleDaemon = async () => {
+  const handleToggleService = async () => {
     if (!root) return;
-    if (isDaemonRunning) {
-      const res = await api.stopDaemon();
+    if (isServiceRunning) {
+      const res = await api.stopService();
       if (res.ok) {
-        setIsDaemonRunning(false);
-        setDaemonLogs((prev) => prev + `\n[System] Daemon stopped.\n`);
+        setIsServiceRunning(false);
+        setServiceLogs((prev) => prev + `\n[System] Service stopped.\n`);
       }
     } else {
-      const res = await api.startDaemon(root, daemonMode);
+      const res = await api.startService(root, serviceMode);
       if (res.ok) {
-        setIsDaemonRunning(true);
-        setDaemonLogs((prev) => prev + `\n[System] Daemon started (${daemonMode}).\n`);
+        setIsServiceRunning(true);
+        setServiceLogs((prev) => prev + `\n[System] Service started (${serviceMode}).\n`);
       } else {
-        setDaemonLogs((prev) => prev + `\n[Error] Daemon start failed: ${res.stderr}\n`);
+        setServiceLogs((prev) => prev + `\n[Error] Service start failed: ${res.stderr}\n`);
       }
     }
-    handleRefreshDaemon(root);
+    handleRefreshService(root);
   };
 
   const handleAddWatchedFolder = async () => {
@@ -166,7 +166,7 @@ export default function Home({ config, setConfig, setStatusMessage }) {
             <Activity className="text-brand-accent" size={28} />
             System Dashboard
           </h1>
-          <p className="text-brand-muted mt-1">Real-time telemetry and daemon control</p>
+          <p className="text-brand-muted mt-1">Real-time telemetry and service control</p>
         </div>
       </div>
 
@@ -199,15 +199,15 @@ export default function Home({ config, setConfig, setStatusMessage }) {
           </div>
         </div>
 
-        {/* Daemon Pulse Card */}
+        {/* Service Pulse Card */}
         <div className="bg-brand-panel p-6 rounded-2xl border border-brand-border shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold tracking-widest uppercase text-brand-muted flex items-center gap-2">
-              <Activity size={16} /> Daemon Pulse
+              <Activity size={16} /> Service Pulse
             </h2>
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold ${isDaemonRunning ? 'border-brand-success/30 text-brand-success bg-brand-success/10' : 'border-brand-muted/30 text-brand-muted bg-brand-muted/10'}`}>
-              <div className={`w-2 h-2 rounded-full ${isDaemonRunning ? 'bg-brand-success animate-pulse' : 'bg-brand-muted'}`}></div>
-              {isDaemonRunning ? 'ACTIVE' : 'IDLE'}
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-bold ${isServiceRunning ? 'border-brand-success/30 text-brand-success bg-brand-success/10' : 'border-brand-muted/30 text-brand-muted bg-brand-muted/10'}`}>
+              <div className={`w-2 h-2 rounded-full ${isServiceRunning ? 'bg-brand-success animate-pulse' : 'bg-brand-muted'}`}></div>
+              {isServiceRunning ? 'ACTIVE' : 'IDLE'}
             </div>
           </div>
           
@@ -215,9 +215,9 @@ export default function Home({ config, setConfig, setStatusMessage }) {
              <div className="flex-1">
                <label className="text-xs font-semibold text-brand-muted uppercase mb-1 block">Operation Mode</label>
                <select 
-                  value={daemonMode}
-                  onChange={(e) => setDaemonMode(e.target.value)}
-                  disabled={isDaemonRunning || !root}
+                  value={serviceMode}
+                  onChange={(e) => setServiceMode(e.target.value)}
+                  disabled={isServiceRunning || !root}
                   className="w-full bg-brand-surface border border-brand-border rounded-xl p-2.5 text-sm font-medium text-brand-text focus:outline-none focus:border-brand-accent transition-colors"
                 >
                   <option value="auto">Auto (Events + Polling)</option>
@@ -227,21 +227,21 @@ export default function Home({ config, setConfig, setStatusMessage }) {
              </div>
              <div className="pt-5">
                <button 
-                  onClick={handleToggleDaemon}
-                  disabled={!root || daemonLoading}
+                  onClick={handleToggleService}
+                  disabled={!root || serviceLoading}
                   className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all shadow-sm ${
-                    isDaemonRunning 
+                    isServiceRunning 
                     ? 'bg-brand-surface text-brand-danger border border-brand-danger/30 hover:bg-brand-danger/10' 
                     : 'bg-brand-accent text-white hover:bg-brand-accentHover hover:shadow-md'
                   }`}
                 >
-                  {isDaemonRunning ? <><Square size={16} fill="currentColor" /> Stop</> : <><Play size={16} fill="currentColor" /> Start</>}
+                  {isServiceRunning ? <><Square size={16} fill="currentColor" /> Stop</> : <><Play size={16} fill="currentColor" /> Start</>}
                 </button>
              </div>
           </div>
 
           <div className="mt-auto">
-             <h3 className="text-xs font-semibold text-brand-muted uppercase mb-2">Background Watched Folders</h3>
+            <h3 className="text-xs font-semibold text-brand-muted uppercase mb-2">Background Watched Folders</h3>
              <div className="flex flex-wrap gap-2">
                {watchedFolders.length === 0 ? (
                  <span className="text-xs text-brand-muted italic">No external folders watched.</span>
@@ -313,13 +313,13 @@ export default function Home({ config, setConfig, setStatusMessage }) {
           </div>
         </div>
 
-        {/* Daemon Logs */}
+        {/* Service Logs */}
         <div className="bg-brand-panel p-6 rounded-2xl border border-brand-border shadow-sm flex flex-col">
           <h2 className="text-sm font-bold tracking-widest uppercase text-brand-muted flex items-center gap-2 mb-4">
-             <Terminal size={16} /> Daemon Output
+             <Terminal size={16} /> Service Output
           </h2>
           <div className="flex-1 bg-[#1C1917] p-4 rounded-xl border border-[#2D1B14] font-mono text-xs overflow-auto text-[#E2E8F0] whitespace-pre-wrap shadow-inner flex flex-col-reverse">
-             <div>{daemonLogs || 'Listening for events...'}</div>
+             <div>{serviceLogs || 'Listening for events...'}</div>
           </div>
         </div>
 

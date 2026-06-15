@@ -110,6 +110,21 @@ def install_python_package(editable: bool = True) -> bool:
     return _print_pip_result("pip install current workspace", result)
 
 
+def repair_python_package() -> bool:
+    """Reinstall the current workspace using the fastest reliable path available."""
+    print("Repairing Python package installation...")
+    uninstall_python_package()
+
+    # Prefer a direct source install first; it tends to be faster than editable
+    # installs in this environment and gives us a clean, current wheel-equivalent
+    # record in site-packages.
+    if install_python_package(editable=False):
+        return True
+
+    print("  [warn] Direct install failed; retrying editable install.")
+    return install_python_package(editable=True)
+
+
 def _register_darwin() -> bool:
     """Register a launchd plist on macOS."""
     plist_dir = Path.home() / "Library" / "LaunchAgents"
@@ -446,8 +461,7 @@ def run_install(yes: bool = False) -> None:
     print("=== llm-kosh install ===")
 
     print("\n0. Refreshing Python package...")
-    uninstall_python_package()
-    install_ok = install_python_package(editable=True)
+    install_ok = repair_python_package()
 
     print("\n1. Creating home directory...")
     create_home_dir()

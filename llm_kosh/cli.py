@@ -245,7 +245,9 @@ def main() -> None:
     # install subcommand
     p_install = sub.add_parser("install", help="One-click setup: service + MCP auto-start")
     p_install.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
+    p_install.add_argument("--clean", action="store_true", help="Remove local state before reinstalling")
     sub.add_parser("repair-install", help="Repair the local Python installation from the current workspace")
+    sub.add_parser("clean-install", help="Remove local state and reinstall everything from scratch")
     p_uninstall = sub.add_parser("uninstall", help="Remove service registration and desktop integration")
     p_uninstall.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
     sub.add_parser("desktop", help="Install and start the sustained service, then launch the desktop app if available")
@@ -254,7 +256,7 @@ def main() -> None:
     root = Path(args.root).expanduser().resolve()
 
     # Auto-spawn daemon for commands that touch the cartridge
-    _NO_SPAWN_CMDS = {"init", "install", "repair-install", "uninstall", "service", "daemon", "desktop", "mcp-server", "mcp-tools", "mcp-test", "version"}
+    _NO_SPAWN_CMDS = {"init", "install", "repair-install", "clean-install", "uninstall", "service", "daemon", "desktop", "mcp-server", "mcp-tools", "mcp-test", "version"}
     if getattr(args, 'cmd', None) not in _NO_SPAWN_CMDS:
         try:
             from llm_kosh.service import maybe_spawn
@@ -672,10 +674,13 @@ def main() -> None:
             run_uninstall(yes=True)
     elif args.cmd == "install":
         from llm_kosh.install import run_install
-        run_install(yes=getattr(args, 'yes', False))
+        run_install(yes=getattr(args, 'yes', False), clean=getattr(args, 'clean', False))
     elif args.cmd == "repair-install":
         from llm_kosh.install import repair_python_package
         repair_python_package()
+    elif args.cmd == "clean-install":
+        from llm_kosh.install import run_clean_reinstall
+        run_clean_reinstall(yes=True)
     elif args.cmd == "uninstall":
         from llm_kosh.install import run_uninstall
         run_uninstall(yes=getattr(args, 'yes', False))

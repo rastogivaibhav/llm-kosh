@@ -47,10 +47,10 @@ def write_default_config() -> None:
 
 def init_default_cartridge() -> None:
     """Ensure the default cartridge root has been initialised."""
-    from llm_kosh.core.memory import ensure_root
+    from llm_kosh.core.memory import init_cartridge
     root = get_default_cartridge_root()
     try:
-        ensure_root(root)
+        init_cartridge(root, "llm-kosh")
         print(f"  [ok] Cartridge root: {root}")
     except Exception as exc:
         print(f"  [warn] Could not initialise cartridge: {exc}")
@@ -94,7 +94,20 @@ def uninstall_python_package() -> bool:
     """Remove the installed llm-kosh distribution from the current Python environment."""
     print("Removing Python package installation...")
     result = _run_pip("uninstall", "-y", "llm-kosh")
-    return _print_pip_result("pip uninstall llm-kosh", result)
+    if result.returncode == 0:
+        print("  [ok] pip uninstall llm-kosh")
+        return True
+
+    stderr = (result.stderr or result.stdout or "")
+    if "No files were found to uninstall" in stderr or "The system cannot find the file specified" in stderr:
+        print("  [warn] pip uninstall llm-kosh hit a stale-entrypoint cleanup issue; continuing.")
+        return True
+
+    if stderr.strip():
+        print(f"  [warn] pip uninstall llm-kosh failed: {stderr.strip()}")
+    else:
+        print(f"  [warn] pip uninstall llm-kosh failed with exit code {result.returncode}")
+    return False
 
 
 def install_python_package(editable: bool = True) -> bool:
@@ -260,6 +273,9 @@ def _register_windows() -> bool:
         return True
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode(errors="replace").strip() if exc.stderr else ""
+        if "The system cannot find the path specified" in stderr:
+            print("  [warn] schtasks reported a path issue while creating the task; check the packaged executable path.")
+            return False
         print(f"  [warn] schtasks failed: {stderr}")
         return False
     except FileNotFoundError:
@@ -426,6 +442,32 @@ def unpatch_claude_desktop_config() -> None:
     print(f"  [ok] Claude Desktop config cleaned: {config_path}")
 
 
+def clean_local_state() -> bool:
+    """Remove local llm-kosh state so install can start fresh."""
+    print("Cleaning local llm-kosh state...")
+    ok = True
+    try:
+        unregister_os_service()
+    except Exception as exc:
+        print(f"  [warn] Service cleanup failed: {exc}")
+        ok = False
+    try:
+        unpatch_claude_desktop_config()
+    except Exception as exc:
+        print(f"  [warn] Claude Desktop cleanup failed: {exc}")
+        ok = False
+    try:
+        home = get_llmkosh_home()
+        if home.exists():
+            import shutil
+            shutil.rmtree(home, ignore_errors=True)
+            print(f"  [ok] Removed local home directory: {home}")
+    except Exception as exc:
+        print(f"  [warn] Could not remove local home directory: {exc}")
+        ok = False
+    return ok
+
+
 # ---------------------------------------------------------------------------
 # PATH check
 # ---------------------------------------------------------------------------
@@ -456,32 +498,36 @@ def check_path_variable() -> None:
 # Top-level orchestrator
 # ---------------------------------------------------------------------------
 
-def run_install(yes: bool = False) -> None:
+def run_install(yes: bool = False, clean: bool = False) -> None:
     """Run the full one-click installation sequence."""
     print("=== llm-kosh install ===")
 
-    print("\n0. Refreshing Python package...")
+    if clean:
+        print("\n0. Cleaning local state...")
+        clean_local_state()
+
+    print("\n1. Refreshing Python package...")
     install_ok = repair_python_package()
 
-    print("\n1. Creating home directory...")
+    print("\n2. Creating home directory...")
     create_home_dir()
 
-    print("\n2. Writing default configuration...")
+    print("\n3. Writing default configuration...")
     write_default_config()
 
-    print("\n3. Initialising default cartridge...")
+    print("\n4. Initialising default cartridge...")
     init_default_cartridge()
 
-    print("\n4. Registering OS service...")
+    print("\n5. Registering OS service...")
     service_ok = register_os_service()
 
-    print("\n5. Patching Claude Desktop config...")
+    print("\n6. Patching Claude Desktop config...")
     try:
         patch_claude_desktop_config(yes=yes)
     except Exception as exc:
         print(f"  [warn] Claude Desktop config patch failed: {exc}")
 
-    print("\n6. Checking PATH...")
+    print("\n7. Checking PATH...")
     check_path_variable()
 
     print("\n=== Installation complete ===")
@@ -502,3 +548,9 @@ def run_uninstall(yes: bool = False) -> None:
     except Exception as exc:
         print(f"  [warn] Claude Desktop config cleanup failed: {exc}")
     print("=== Uninstall complete ===")
+
+
+def run_clean_reinstall(yes: bool = False) -> None:
+    """Run a full clean reinstall cycle."""
+    clean_local_state()
+    run_install(yes=yes, clean=False)

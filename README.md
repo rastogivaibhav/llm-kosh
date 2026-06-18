@@ -2,10 +2,18 @@
 
 <!-- mcp-name: io.github.rastogivaibhav/llm-kosh -->
 
-**Give your local LLMs a permanent, air-gapped memory cartridge.**
+**Local-first memory cartridge for Claude, Cursor, and MCP-compatible AI agents.**
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/rastogivaibhav/llm-kosh/main/docs/assets/demo.webp" alt="Claude Remembers" width="800"/>
+</p>
 
-`llm-kosh` is a lightning-fast, SQLite-backed memory system that gives AI assistants (like Claude and Cursor) permanent recall across sessions. Stop copy-pasting the same 15 architectural decisions and database schemas into every new chat. 
+```bash
+pip install "llm-kosh[all]"
+```
+
+## ❓ Why this exists
+Stop copy-pasting the same 15 architectural decisions and database schemas into every new chat. `llm-kosh` is a lightning-fast, SQLite-backed memory system that gives AI assistants (like Claude and Cursor) permanent recall across sessions. 
 
 By running completely locally, it guarantees zero cloud syncing, zero API costs, and absolute privacy for your proprietary codebase.
 
@@ -139,6 +147,16 @@ llm-kosh init --owner "Your Name"
 # Starts the UI, the sustained service, and the MCP bridge
 llm-kosh desktop
 ```
+
+---
+
+## 🔒 Security & Privacy
+
+`llm-kosh` was built with privacy as the core principle.
+
+- **100% Local Storage:** All memory data is stored locally in an embedded SQLite database (`.llm-kosh/memory.db`).
+- **No Telemetry, No Sync:** No data ever leaves your machine. There are no cloud accounts, no sync servers, and no telemetry. The only time your data leaves your machine is when *you* explicitly share context with an LLM via the MCP protocol.
+- **Strict Write Permissions:** By default, the MCP server runs in **Read-Only** mode to prevent rogue LLMs from deleting or corrupting your memory. To allow the LLM to write new memories autonomously, you must explicitly pass the `--allow-write` flag (`llm-kosh mcp --allow-write`).
 
 ---
 

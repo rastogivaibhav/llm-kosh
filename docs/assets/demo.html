@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude - llm-kosh demo</title>
+<style>
+  body {
+    background-color: #2b2d31;
+    color: #dbdee1;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  .header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #1e1f22;
+    display: flex;
+    align-items: center;
+  }
+  .header svg {
+    width: 24px;
+    height: 24px;
+    margin-right: 12px;
+    fill: #d3d1cb;
+  }
+  .chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .message {
+    display: flex;
+    gap: 16px;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+  }
+  .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 14px;
+  }
+  .avatar-user {
+    background-color: #5865f2;
+    color: white;
+  }
+  .avatar-claude {
+    background-color: #d3d1cb;
+    color: #1e1f22;
+  }
+  .message-content {
+    flex: 1;
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .tool-use {
+    background-color: #1e1f22;
+    border: 1px solid #383a40;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #949ba4;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tool-use svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+  .input-area {
+    padding: 20px 40px;
+    background-color: #2b2d31;
+    max-width: 800px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .input-box {
+    background-color: #383a40;
+    border-radius: 12px;
+    display: flex;
+    align-items: flex-end;
+    padding: 12px 16px;
+  }
+  input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #dbdee1;
+    font-size: 15px;
+    outline: none;
+    font-family: inherit;
+    padding: 4px 0;
+  }
+  .send-btn {
+    background: #d3d1cb;
+    border: none;
+    border-radius: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-left: 12px;
+    transition: transform 0.1s;
+  }
+  .send-btn:active {
+    transform: scale(0.95);
+  }
+  .send-btn svg {
+    width: 16px;
+    height: 16px;
+    fill: #1e1f22;
+  }
+  code {
+    background-color: #1e1f22;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+  .typing-indicator {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    height: 24px;
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    background-color: #949ba4;
+    border-radius: 50%;
+    animation: bounce 1.4s infinite ease-in-out both;
+  }
+  .dot:nth-child(1) { animation-delay: -0.32s; }
+  .dot:nth-child(2) { animation-delay: -0.16s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+  <span style="font-weight: 600; color: #f2f3f5;">Claude</span>
+</div>
+
+<div class="chat-container" id="chat">
+  <!-- Initial state empty, messages added via JS -->
+</div>
+
+<div class="input-area">
+  <div class="input-box">
+    <input type="text" id="userInput" placeholder="Message Claude..." autocomplete="off">
+    <button class="send-btn" id="sendBtn">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const chat = document.getElementById('chat');
+  const input = document.getElementById('userInput');
+  const btn = document.getElementById('sendBtn');
+
+  function addUserMessage(text) {
+    const div = document.createElement('div');
+    div.className = 'message';
+    div.innerHTML = `
+      <div class="avatar avatar-user">U</div>
+      <div class="message-content">${text}</div>
+    `;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function addClaudeMessage(html) {
+    const div = document.createElement('div');
+    div.className = 'message';
+    div.innerHTML = `
+      <div class="avatar avatar-claude">C</div>
+      <div class="message-content">${html}</div>
+    `;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function addTyping() {
+    const div = document.createElement('div');
+    div.className = 'message typing';
+    div.id = 'typing';
+    div.innerHTML = `
+      <div class="avatar avatar-claude">C</div>
+      <div class="message-content">
+        <div class="typing-indicator">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    `;
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function removeTyping() {
+    const t = document.getElementById('typing');
+    if(t) t.remove();
+  }
+
+  async function typeText(text, delay = 40) {
+    input.value = '';
+    for (let i = 0; i < text.length; i++) {
+      input.value += text[i];
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+
+  function clickSend() {
+    btn.style.transform = 'scale(0.95)';
+    setTimeout(() => { btn.style.transform = 'scale(1)'; }, 100);
+    const val = input.value;
+    input.value = '';
+    addUserMessage(val);
+  }
+
+  async function runDemo() {
+    await new Promise(r => setTimeout(r, 1000));
+    
+    // First message
+    await typeText("What was the architecture decision we made yesterday?", 30);
+    await new Promise(r => setTimeout(r, 300));
+    clickSend();
+    addTyping();
+    
+    await new Promise(r => setTimeout(r, 2000));
+    removeTyping();
+    addClaudeMessage(`
+      <div class="tool-use">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22l-1.92 3.32c-.12.21-.07.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        Using llm-kosh tool: reasoning_query("architecture decision yesterday")
+      </div>
+      According to your local <code>llm-kosh</code> memory cartridge, you decided to use <strong>OAuth2</strong> over <strong>JWT tokens</strong> yesterday.<br><br>The causal chain in the memory shows:<br>1. You experienced a token refresh bug in staging.<br>2. You superseded the previous JWT decision with OAuth2 using Auth0 to handle token rotation automatically.<br>3. This decision was marked as <code>[APPROVED]</code> by the team lead.
+    `);
+
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Second message
+    await typeText("Awesome, use that for the new endpoint.", 30);
+    await new Promise(r => setTimeout(r, 300));
+    clickSend();
+    addTyping();
+
+    await new Promise(r => setTimeout(r, 1500));
+    removeTyping();
+    addClaudeMessage(`
+      <div class="tool-use">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22l-1.92 3.32c-.12.21-.07.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .43-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        Using llm-kosh tool: memorize("New endpoint uses OAuth2 as per previous decision")
+      </div>
+      Got it! I've saved this to your memory cartridge. I'll proceed with implementing the new endpoint using the OAuth2 flow with Auth0.
+    `);
+  }
+
+  // Auto-start the demo when loaded
+  window.onload = runDemo;
+</script>
+</body>
+</html>

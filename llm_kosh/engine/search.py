@@ -77,7 +77,7 @@ def rebuild_index(root: Path, force: bool = False) -> bool:
         CREATE INDEX IF NOT EXISTS idx_docs_kind ON documents(kind);
         CREATE INDEX IF NOT EXISTS idx_docs_status ON documents(status);
         CREATE INDEX IF NOT EXISTS idx_docs_visibility ON documents(visibility);
-        CREATE VIRTUAL TABLE documents_fts USING fts5(
+        CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
           id UNINDEXED, title, project, kind, body, content=''
         );
         """

@@ -405,7 +405,7 @@ def daemon_start(root: Path, mode: str):
                     src = Path(event.src_path)
                     if src.name.startswith(".") or "processed" in src.parts:
                         return
-                    if src.parent != intake_dir:
+                    if str(src.parent.resolve()).lower() != str(intake_dir.resolve()).lower():
                         return
                     daemon_run_job(root, "process_intake_folder")
                             

@@ -250,6 +250,7 @@ def _register_windows() -> bool:
           <Actions><Exec>
             <Command>{python_exe}</Command>
             <Arguments>-m llm_kosh.service run</Arguments>
+            <WorkingDirectory>{get_default_cartridge_root()}</WorkingDirectory>
           </Exec></Actions>
           <Settings><ExecutionTimeLimit>PT0S</ExecutionTimeLimit></Settings>
         </Task>

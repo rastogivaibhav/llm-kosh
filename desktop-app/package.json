@@ -4,7 +4,10 @@
   "appId": "com.llmkosh.desktop",
   "version": "0.2.0",
   "description": "Desktop interface for llm-kosh memory cartridges",
-  "author": "llm-kosh",
+  "author": {
+    "name": "llm-kosh",
+    "email": "rastogivaibhav@gmail.com"
+  },
   "copyright": "Copyright © 2026 llm-kosh",
   "private": true,
   "main": "electron/main.js",

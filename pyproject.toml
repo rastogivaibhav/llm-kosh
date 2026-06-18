@@ -26,6 +26,7 @@ classifiers = [
 ]
 dependencies = [
     # LlmKosh relies heavily on the standard library for its core
+    "PyYAML>=6.0"
 ]
 
 [project.urls]

@@ -709,7 +709,7 @@ def semantic_search(root: Path, query: str, k: int = 10, kinds: Optional[List[st
                     active_only: bool = False, project: str = "") -> List[dict]:
     meta = _vmeta(root)
     if not meta:
-        raise SystemExit("No vector index yet. Build one:  llm_kosh_cli.py --root <root> embed")
+        raise SystemExit("No vector index yet. Build one: llm-kosh --root <root> embed")
         
     cfg = read_json(root / "LLM_KOSH.json", {}) or {}
     retrieval_weights = cfg.get("retrieval_weights", {})

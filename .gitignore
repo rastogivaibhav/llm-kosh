@@ -21,7 +21,11 @@ desktop-app/node_modules/
 desktop-app/dist-electron/
 desktop-app/dist/
 desktop-app/dist-build/
+desktop-app/test-results/
+desktop-app/playwright-report/
 sidecar/
+llm_kosh/engine/*.so
+llm_kosh/engine/*.pyd
 
 # Non-essential documentation and development artifacts
 # Design and planning documents

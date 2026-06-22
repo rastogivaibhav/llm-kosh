@@ -4,6 +4,8 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 
 const isDev = process.env.NODE_ENV === 'development';
+const isE2E = process.env.LLM_KOSH_E2E_MODE ? true : false;
+const e2eRendererUrl = process.env.LLM_KOSH_E2E_URL || 'http://127.0.0.1:4173';
 const configPath = path.join(app.getPath('userData'), 'llm-kosh-config.json');
 
 const { readConfig: rc, writeConfig: wc } = require('./config-store');
@@ -129,6 +131,8 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:48512');
     // mainWindow.webContents.openDevTools();
+  } else if (isE2E) {
+    mainWindow.loadURL(e2eRendererUrl);
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'));
   }
@@ -174,6 +178,8 @@ function createQuickCaptureWindow() {
 
   if (isDev) {
     quickCaptureWindow.loadURL('http://localhost:48512/?quick=1');
+  } else if (isE2E) {
+    quickCaptureWindow.loadURL(`${e2eRendererUrl}/?quick=1`);
   } else {
     quickCaptureWindow.loadFile(path.join(__dirname, '../dist/index.html'), {
       query: { quick: '1' }
@@ -686,7 +692,7 @@ ipcMain.handle('start-mcp', async (event, rootPath, options) => {
     return { ok: false, error: 'Executable not found' };
   }
 
-  const args = ['mcp-server', '--root', rootPath];
+  const args = ['--root', rootPath, 'mcp-server'];
   if (options?.allowWrite) args.push('--allow-write');
   if (options?.allowMutate) args.push('--allow-mutate');
   if (options?.allowPrivate) args.push('--allow-private');

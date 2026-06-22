@@ -12,7 +12,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 @pytest.fixture
 def temp_workspace():
     """Provides a temporary workspace path initialized for LlmKosh."""
-    temp_dir = tempfile.mkdtemp(prefix="koush_test_")
+    temp_dir = tempfile.mkdtemp(prefix="llm_kosh_test_")
     
     # Initialize basic llm_kosh structure
     ledger_dir = Path(temp_dir) / ".llm_kosh"
@@ -25,7 +25,7 @@ def temp_workspace():
 
 @pytest.fixture
 def runner():
-    """Provides a helper to run llm_kosh_cli main with args and capture output."""
+    """Provides a helper to run llm-kosh main with args and capture output."""
     from llm_kosh.cli import main
     
     def _run(*args, workspace=None):
@@ -35,7 +35,7 @@ def runner():
         stdout = io.StringIO()
         stderr = io.StringIO()
         
-        cmd = ["llm_kosh_cli"]
+        cmd = ["llm-kosh"]
         if workspace:
             cmd.extend(["--root", str(workspace)])
         cmd.extend(args)

@@ -36,7 +36,7 @@ def sha256_file(path: Path) -> str:
 
 def ensure_root(root: Path) -> None:
     if not (root / "LLM_KOSH.json").exists():
-        raise SystemExit(f"Not an AI cartridge root: {root}\nRun: llm_kosh_cli.py --root {root} init")
+        raise SystemExit(f"Not an AI cartridge root: {root}\nRun: llm-kosh --root {root} init")
 
 
 def atomic_write_text(path: Path, text: str, encoding: str = "utf-8") -> None:

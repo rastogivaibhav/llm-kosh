@@ -27,8 +27,8 @@ Simply add this to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "llm-kosh": {
-      "command": "uvx",
-      "args": ["llm-kosh", "mcp", "--root", "C:/path/to/your/cartridge", "--allow-write"]
+      "command": "llm-kosh",
+      "args": ["--root", "C:/path/to/your/cartridge", "mcp-server", "--allow-write"]
     }
   }
 }
@@ -138,7 +138,7 @@ pip install "llm-kosh[all]"
 
 **2. Initialize a new cartridge**
 ```bash
-# Creates a new .llm-kosh root in your current directory
+# Creates a new cartridge at the configured/default root
 llm-kosh init --owner "Your Name"
 ```
 
@@ -156,7 +156,7 @@ llm-kosh desktop
 
 - **100% Local Storage:** All memory data is stored locally in an embedded SQLite database (`.llm-kosh/memory.db`).
 - **No Telemetry, No Sync:** No data ever leaves your machine. There are no cloud accounts, no sync servers, and no telemetry. The only time your data leaves your machine is when *you* explicitly share context with an LLM via the MCP protocol.
-- **Strict Write Permissions:** By default, the MCP server runs in **Read-Only** mode to prevent rogue LLMs from deleting or corrupting your memory. To allow the LLM to write new memories autonomously, you must explicitly pass the `--allow-write` flag (`llm-kosh mcp --allow-write`).
+- **Strict Write Permissions:** By default, the MCP server runs in **Read-Only** mode to prevent rogue LLMs from deleting or corrupting your memory. To allow the LLM to write new memories autonomously, you must explicitly pass the `--allow-write` flag (`llm-kosh mcp-server --allow-write`).
 
 ---
 

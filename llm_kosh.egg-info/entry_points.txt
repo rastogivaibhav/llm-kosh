@@ -1,3 +1,0 @@
-[console_scripts]
-llm-kosh = llm_kosh.cli:main
-llm-kosh-service = llm_kosh.service:main

@@ -32,7 +32,8 @@ function buildCommandArgs(command, args) {
       ? ['once', 'start', 'status']
       : ['install', 'uninstall', 'start', 'stop', 'restart', 'status'];
     if (!allowedSubcommands.includes(subcommand)) {
-      throw new Error(`Security Violation: ${command} subcommand '${subcommand}' is not allowed.`);
+      const label = command === 'daemon' ? 'Daemon subcommand' : 'Service subcommand';
+      throw new Error(`Security Violation: ${label} '${subcommand}' is not allowed.`);
     }
 
     const modeIndex = safeArgs.indexOf('--mode');
@@ -40,7 +41,7 @@ function buildCommandArgs(command, args) {
       const mode = safeArgs[modeIndex + 1];
       const allowedModes = ['auto', 'polling', 'watchdog'];
       if (!allowedModes.includes(mode)) {
-        throw new Error(`Security Violation: Service mode '${mode}' is not allowed.`);
+        throw new Error(`Security Violation: Daemon mode '${mode}' is not allowed.`);
       }
     }
   }
@@ -53,8 +54,8 @@ function buildCommandArgs(command, args) {
 
   const rootIndex = safeArgs.indexOf('--root');
   if (rootIndex !== -1 && rootIndex + 1 < safeArgs.length) {
-    const rootValue = safeArgs.splice(rootIndex, 2);
-    return [rootValue[0], rootValue[1], command, ...safeArgs];
+    const rootArgs = safeArgs.splice(rootIndex, 2);
+    return [...rootArgs, command, ...safeArgs];
   }
 
   return [command, ...safeArgs];

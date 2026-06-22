@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import sys
@@ -38,7 +39,7 @@ _PROJECT_ROOT = _SCRIPT_DIR.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-DEFAULT_CARTRIDGE = Path(r"C:\Users\vrast\Downloads\llm-kosh-support-bench")
+DEFAULT_CARTRIDGE = Path(os.environ.get("LLM_KOSH_SUPPORT_BENCH", "test_root/llm-kosh-support-bench"))
 
 # Ablation configs: (id, label, dialectic, depth)
 # depth=6 on avg-degree-5 graph is O(5^6)=15k paths — too slow for batch.

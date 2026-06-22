@@ -84,13 +84,16 @@ async function runSmokeTestSequence(exe) {
   const absorbRes = await runCommand(exe, 'absorb', ['--root', testRootPath, receiptPath]);
   results.push(absorbRes);
 
-  // 7. Daemon Status
+  // 7. Daemon / service status
   const serviceRes = await runCommand(exe, 'service', ['status', '--root', testRootPath]);
-  results.push(serviceRes);
-  if (!serviceRes.ok) {
-    const daemonRes = await runCommand(exe, 'daemon', ['status', '--root', testRootPath]);
-    results.push(daemonRes);
+  if (!serviceRes.ok && serviceRes.step === 'service' && serviceRes.stdout.includes('not running')) {
+    serviceRes.ok = true;
+    serviceRes.note = 'Service is installed but not running, which is acceptable for a smoke check.';
   }
+  results.push(serviceRes);
+
+  const daemonRes = await runCommand(exe, 'daemon', ['status', '--root', testRootPath]);
+  results.push(daemonRes);
 
   return cleanupAndReturn(testRootPath, results);
 }

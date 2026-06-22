@@ -1,8 +1,7 @@
 r"""
-Integration test with real llm-kosh cartridge
+Integration test with a real llm-kosh cartridge.
 
-Tests ReasoningEngine on actual memories from:
-C:\Users\vrast\OneDrive\Apps\Documents\llm-kosh-cart
+Set LLM_KOSH_REAL_CARTRIDGE to run these tests against local private data.
 """
 import json
 import time
@@ -15,9 +14,9 @@ from llm_kosh.core.memory import init_cartridge
 from llm_kosh.engine.reasoning import ReasoningEngine
 
 
-# Path to real cartridge
 import os
-REAL_CARTRIDGE = Path(os.environ.get("LLM_KOSH_REAL_CARTRIDGE", r"C:\Users\vrast\OneDrive\Apps\Documents\llm-kosh-cart"))
+REAL_CARTRIDGE_ENV = os.environ.get("LLM_KOSH_REAL_CARTRIDGE")
+REAL_CARTRIDGE = Path(REAL_CARTRIDGE_ENV) if REAL_CARTRIDGE_ENV else None
 
 
 class TestReasoningRealCartridge:
@@ -26,6 +25,8 @@ class TestReasoningRealCartridge:
     @pytest.fixture
     def real_docs(self):
         """Load real documents from cartridge"""
+        if REAL_CARTRIDGE is None:
+            pytest.skip("Set LLM_KOSH_REAL_CARTRIDGE to run real-cartridge tests")
         source_dir = REAL_CARTRIDGE / "source"
         if not source_dir.exists():
             pytest.skip(f"Real cartridge not found at {REAL_CARTRIDGE}")
@@ -48,6 +49,8 @@ class TestReasoningRealCartridge:
 
     def test_cartridge_exists(self):
         """Verify real cartridge is accessible"""
+        if REAL_CARTRIDGE is None:
+            pytest.skip("Set LLM_KOSH_REAL_CARTRIDGE to run real-cartridge tests")
         if not REAL_CARTRIDGE.exists():
             pytest.skip(f"Real cartridge not found at {REAL_CARTRIDGE} (set LLM_KOSH_REAL_CARTRIDGE)")
         assert REAL_CARTRIDGE.exists(), f"Cartridge not found at {REAL_CARTRIDGE}"
@@ -210,6 +213,8 @@ class TestReasoningRealCartridge:
 
     def test_cartridge_metadata(self):
         """Read and display cartridge metadata"""
+        if REAL_CARTRIDGE is None:
+            pytest.skip("Set LLM_KOSH_REAL_CARTRIDGE to run real-cartridge tests")
         metadata_file = REAL_CARTRIDGE / "LLM_KOSH.json"
 
         if metadata_file.exists():

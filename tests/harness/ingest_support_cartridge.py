@@ -37,6 +37,7 @@ import argparse
 import csv
 import json
 import logging
+import os
 import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -55,8 +56,8 @@ if str(_PROJECT_ROOT) not in sys.path:
 # ---------------------------------------------------------------------------
 # Paths & tuning knobs
 # ---------------------------------------------------------------------------
-SOURCE_CSV   = Path(r"C:\Users\vrast\AppData\Local\Temp\aa_dataset-tickets-multi-lang-5-2-50-version.csv")
-TARGET_DIR   = Path(r"C:\Users\vrast\Downloads\llm-kosh-support-bench")
+SOURCE_CSV   = Path(os.environ.get("LLM_KOSH_SUPPORT_SOURCE_CSV", "fixtures/aa_dataset-tickets-multi-lang-5-2-50-version.csv"))
+TARGET_DIR   = Path(os.environ.get("LLM_KOSH_SUPPORT_BENCH", "test_root/llm-kosh-support-bench"))
 TARGET_COUNT = 3_000          # facts to ingest
 HOLDOUT_COUNT = 300           # same-vocab holdout (NOT ingested)
 

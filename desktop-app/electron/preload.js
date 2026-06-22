@@ -1,71 +1,132 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('llmKosh', {
-  selectCartridgeRoot: () => ipcRenderer.invoke('select-cartridge-root'),
-  createCartridgeRoot: (ownerName) => ipcRenderer.invoke('create-cartridge-root', ownerName),
-  getStatus: (rootPath) => ipcRenderer.invoke('get-status', rootPath),
-  selectExecutable: () => ipcRenderer.invoke('select-executable'),
-  readConfig: () => ipcRenderer.invoke('read-config'),
-  writeConfig: (config) => ipcRenderer.invoke('write-config', config),
-  readCartridgeConfig: (rootPath) => ipcRenderer.invoke('read-cartridge-config', rootPath),
-  writeCartridgeConfig: (rootPath, config) => ipcRenderer.invoke('write-cartridge-config', rootPath, config),
-  revealInFolder: (path) => ipcRenderer.invoke('reveal-in-folder', path),
-  selectOutputFolder: () => ipcRenderer.invoke('select-output-folder'),
-  generatePack: (rootPath, options) => ipcRenderer.invoke('generate-pack', rootPath, options),
-  validatePack: (rootPath, packPath) => ipcRenderer.invoke('validate-pack', rootPath, packPath),
-  selectReceiptFile: () => ipcRenderer.invoke('select-receipt-file'),
-  readReceiptFile: (filePath) => ipcRenderer.invoke('read-receipt-file', filePath),
-  validateReceipt: (rootPath, receiptPath) => ipcRenderer.invoke('validate-receipt', rootPath, receiptPath),
-  absorbReceipt: (rootPath, receiptPath) => ipcRenderer.invoke('absorb-receipt', rootPath, receiptPath),
-  setLoginItem: (enable) => ipcRenderer.invoke('set-login-item', enable),
-  getServiceStatus: (rootPath) => ipcRenderer.invoke('get-service-status', rootPath),
-  getDaemonStatus: (rootPath) => ipcRenderer.invoke('get-service-status', rootPath),
-  getLocalServiceDetails: () => ipcRenderer.invoke('get-local-service-details'),
-  getLocalDaemonDetails: () => ipcRenderer.invoke('get-local-service-details'),
-  serviceOnce: (rootPath, mode) => ipcRenderer.invoke('service-once', rootPath, mode),
-  daemonOnce: (rootPath, mode) => ipcRenderer.invoke('service-once', rootPath, mode),
-  startMcp: (rootPath, options) => ipcRenderer.invoke('start-mcp', rootPath, options),
-  stopMcp: () => ipcRenderer.invoke('stop-mcp'),
-  getMcpStatus: () => ipcRenderer.invoke('get-mcp-status'),
-  onMcpStatusChanged: (callback) => {
-    ipcRenderer.on('mcp-status-changed', callback);
-    return () => {
-      ipcRenderer.removeListener('mcp-status-changed', callback);
-    };
-  },
-  onMcpLog: (callback) => {
-    ipcRenderer.on('mcp-log', callback);
-    return () => {
-      ipcRenderer.removeListener('mcp-log', callback);
-    };
-  },
-  startService: (rootPath, mode) => ipcRenderer.invoke('start-service', rootPath, mode),
-  startDaemon: (rootPath, mode) => ipcRenderer.invoke('start-service', rootPath, mode),
-  stopService: () => ipcRenderer.invoke('stop-service'),
-  stopDaemon: () => ipcRenderer.invoke('stop-service'),
-  onServiceLog: (callback) => {
-    const subscription = (event, msg) => callback(msg);
-    ipcRenderer.on('service-log', subscription);
-    return () => {
-      ipcRenderer.removeListener('service-log', subscription);
-    };
-  },
-  onDaemonLog: (callback) => {
-    const subscription = (event, msg) => callback(msg);
-    ipcRenderer.on('daemon-log', subscription);
-    return () => {
-      ipcRenderer.removeListener('daemon-log', subscription);
-    };
-  },
-  listWatchedFolders: () => ipcRenderer.invoke('list-watched-folders'),
-  addWatchedFolder: () => ipcRenderer.invoke('add-watched-folder'),
-  removeWatchedFolder: (path) => ipcRenderer.invoke('remove-watched-folder', path),
-  readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
-  testCli: () => ipcRenderer.invoke('test-cli'),
-  getLogs: () => ipcRenderer.invoke('get-logs'),
-  runSmokeTest: () => ipcRenderer.invoke('run-smoke-test'),
-  runKoshCommand: (rootPath, command, args) => ipcRenderer.invoke('run-kosh-command', rootPath, command, args),
-  installKosh: () => ipcRenderer.invoke('install-kosh'),
-  uninstallKosh: () => ipcRenderer.invoke('uninstall-kosh'),
-  closeQuickCapture: () => ipcRenderer.send('close-quick-capture'),
-});
+const e2eMode = process.env.LLM_KOSH_E2E_MODE || '';
+
+const e2eBridge = e2eMode
+  ? {
+      selectCartridgeRoot: async () => 'C:\\e2e\\root',
+      createCartridgeRoot: async () => ({ ok: true, folder: 'C:\\e2e\\root' }),
+      getStatus: async () => ({ ok: true, stdout: 'E2E status ok' }),
+      selectExecutable: async () => 'llm-kosh',
+      readConfig: async () => (
+        e2eMode === 'onboarding'
+          ? {}
+          : {
+              cartridgeRoot: 'C:\\e2e\\root',
+              executablePath: 'llm-kosh',
+              cliMode: 'Auto',
+              daemonMode: 'auto',
+            }
+      ),
+      writeConfig: async (config) => config,
+      readCartridgeConfig: async () => ({ schema: 'llm-kosh.v0', version: '1.0.0', retrieval_weights: {} }),
+      writeCartridgeConfig: async (rootPath, config) => config,
+      revealInFolder: () => {},
+      selectOutputFolder: async () => 'C:\\e2e\\exports',
+      generatePack: async () => ({ ok: true, outPath: 'C:\\e2e\\exports\\pack.zip', stdout: 'Pack created' }),
+      validatePack: async () => ({ ok: true, stdout: 'Pack valid' }),
+      selectReceiptFile: async () => 'C:\\e2e\\receipt.md',
+      readReceiptFile: async () => ({ success: true, content: '# MEMORY_RECEIPT\n' }),
+      validateReceipt: async () => ({ ok: true, stdout: 'Receipt valid' }),
+      absorbReceipt: async () => ({ ok: true, stdout: 'Receipt absorbed' }),
+      setLoginItem: async () => ({ ok: true }),
+      getServiceStatus: async () => ({ ok: true, isLocalRunning: false, stdout: 'Service stopped' }),
+      getDaemonStatus: async () => ({ ok: true, isLocalRunning: false, stdout: 'Daemon stopped' }),
+      getLocalServiceDetails: async () => ({ running: false }),
+      getLocalDaemonDetails: async () => ({ running: false }),
+      serviceOnce: async () => ({ ok: true, stdout: 'Service ran once' }),
+      daemonOnce: async () => ({ ok: true, stdout: 'Daemon ran once' }),
+      startMcp: async () => ({ ok: true }),
+      stopMcp: async () => ({ ok: true }),
+      getMcpStatus: async () => ({
+        running: false,
+        pid: null,
+        startTime: null,
+        lastEvent: 'Idle',
+        logs: [],
+      }),
+      onMcpStatusChanged: () => () => {},
+      onMcpLog: () => () => {},
+      startService: async () => ({ ok: true }),
+      startDaemon: async () => ({ ok: true }),
+      stopService: async () => ({ ok: true }),
+      stopDaemon: async () => ({ ok: true }),
+      onServiceLog: () => () => {},
+      onDaemonLog: () => () => {},
+      listWatchedFolders: async () => ({ success: true, folders: [] }),
+      addWatchedFolder: async () => ({ success: true, folders: ['C:\\e2e\\watched'] }),
+      removeWatchedFolder: async () => ({ success: true, folders: [] }),
+      readDirectory: async () => ({ success: true, items: [] }),
+      testCli: async () => (
+        e2eMode === 'onboarding'
+          ? { ok: false, executablePath: null, mode: 'Auto', stderr: 'llm-kosh CLI not detected for E2E', exitCode: -1 }
+          : { ok: true, executablePath: 'llm-kosh', mode: 'Bundled', version: '2.1.1', stdout: 'llm-kosh 2.1.1', stderr: '', exitCode: 0 }
+      ),
+      getLogs: async () => ({ ok: true, logs: [], config: {}, daemonRunning: false }),
+      runSmokeTest: async () => ([
+        { ok: true, step: 'create-temp-root', stdout: 'C:\\e2e\\root' },
+        { ok: true, step: 'init' },
+        { ok: true, step: 'status' },
+        { ok: true, step: 'safe-pack' },
+        { ok: true, step: 'validate-pack' },
+        { ok: true, step: 'validate-receipt' },
+        { ok: true, step: 'absorb' },
+        { ok: true, step: 'service' },
+        { ok: true, step: 'daemon' },
+      ]),
+      runKoshCommand: async () => ({ ok: true, stdout: 'Mock query output' }),
+      installKosh: async () => ({ ok: true, stderr: '' }),
+      uninstallKosh: async () => ({ ok: true, stderr: '' }),
+      closeQuickCapture: () => {},
+    }
+  : null;
+
+const bridge = e2eBridge || window.llmKosh || {
+  selectCartridgeRoot: async () => 'C:\\mock\\root',
+  createCartridgeRoot: async () => ({ ok: true, folder: 'C:\\mock\\root' }),
+  getStatus: async () => ({ ok: true, stdout: 'Mock status' }),
+  selectExecutable: async () => 'C:\\mock\\llm-kosh',
+  readConfig: async () => ({ cartridgeRoot: 'C:\\mock\\root' }),
+  writeConfig: async (cfg) => cfg,
+  readCartridgeConfig: async () => ({ schema: 'llm-kosh.v0', version: '1.0.0', retrieval_weights: {} }),
+  writeCartridgeConfig: async (r, cfg) => cfg,
+  revealInFolder: () => {},
+  selectOutputFolder: async () => 'C:\\mock\\exports',
+  generatePack: async () => ({ ok: true, outPath: 'C:\\mock\\exports\\pack.zip' }),
+  validatePack: async () => ({ ok: true }),
+  selectReceiptFile: async () => 'C:\\mock\\receipt.md',
+  readReceiptFile: async () => ({ success: true, content: 'Mock receipt content' }),
+  validateReceipt: async () => ({ ok: true }),
+  absorbReceipt: async () => ({ ok: true }),
+  setLoginItem: async () => ({ ok: true }),
+  getServiceStatus: async () => ({ ok: true, isLocalRunning: false }),
+  getDaemonStatus: async () => ({ ok: true, isLocalRunning: false }),
+  getLocalServiceDetails: () => ({ running: false }),
+  getLocalDaemonDetails: () => ({ running: false }),
+  serviceOnce: async () => ({ ok: true }),
+  daemonOnce: async () => ({ ok: true }),
+  startMcp: async () => {},
+  stopMcp: async () => {},
+  getMcpStatus: async () => ({ running: false, logs: [] }),
+  onMcpStatusChanged: () => () => {},
+  onMcpLog: () => () => {},
+  startService: async () => {},
+  startDaemon: async () => {},
+  stopService: async () => {},
+  stopDaemon: async () => {},
+  onServiceLog: () => () => {},
+  onDaemonLog: () => () => {},
+  listWatchedFolders: async () => ({ success: true, folders: [] }),
+  addWatchedFolder: async () => {},
+  removeWatchedFolder: async () => {},
+  readDirectory: async () => [],
+  testCli: async () => ({ ok: true }),
+  getLogs: async () => [],
+  runSmokeTest: async () => ({ ok: true }),
+  runKoshCommand: async () => ({ ok: true, stdout: 'Mock query output' }),
+  installKosh: async () => ({ ok: true }),
+  uninstallKosh: async () => ({ ok: true }),
+  closeQuickCapture: () => {},
+};
+
+contextBridge.exposeInMainWorld('llmKosh', bridge);

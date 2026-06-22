@@ -58,8 +58,15 @@ all = [
 llm-kosh = "llm_kosh.cli:main"
 llm-kosh-service = "llm_kosh.service:main"
 
-[tool.setuptools.packages]
-find = {}
+[tool.setuptools.packages.find]
+include = ["llm_kosh*"]
+exclude = [
+    "tests*",
+    "scripts*",
+    "examples*",
+    "desktop-app*",
+    "research_eval*",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

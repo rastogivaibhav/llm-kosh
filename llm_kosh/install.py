@@ -378,7 +378,7 @@ def patch_claude_desktop_config(yes: bool = False) -> None:
     root_str = _cartridge_root_str()
     new_entry = {
         "command": "llm-kosh",
-        "args": ["mcp-server", "--root", root_str],
+        "args": ["--root", root_str, "mcp-server"],
         "env": {"CARTRIDGE_WORKSPACE": root_str},
     }
 

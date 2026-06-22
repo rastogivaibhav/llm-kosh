@@ -80,7 +80,7 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
   const getMcpConfigJson = () => {
     const root = formData.cartridgeRoot || config?.cartridgeRoot || 'C:\\path\\to\\your\\cartridge';
     const exe = formData.executablePath || 'llm-kosh';
-    const args = ['mcp', '--root', root];
+    const args = ['--root', root, 'mcp-server'];
     if (mcpOptions.allowWrite) args.push('--allow-write');
     if (mcpOptions.allowMutate) args.push('--allow-mutate');
     if (mcpOptions.allowPrivate) args.push('--allow-private');

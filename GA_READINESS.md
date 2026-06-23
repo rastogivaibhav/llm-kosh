@@ -23,7 +23,7 @@ Date: 2026-06-23
 
 ## Remaining release gates
 
-1. Let the expanded GitHub Actions matrix pass on Python 3.9-3.13 across Windows, macOS, and Linux.
+1. Let the expanded GitHub Actions matrix pass on Python 3.10-3.13 across Windows, macOS, and Linux.
 2. Configure a Windows code-signing certificate and verify Authenticode on the installer and bundled executables. The local test artifact is unsigned.
 3. Configure Apple Developer ID signing and notarization; validate the DMG on a clean macOS host.
 4. Build and smoke-test the Linux AppImage/deb on a clean Linux host.

@@ -4,7 +4,7 @@ A short path from install to a working local cartridge, MCP server, and receipt 
 
 ## 0. Install
 
-Python 3.9 or newer is required.
+Python 3.10 or newer is required.
 
 ```bash
 python -m pip install --upgrade llm-kosh

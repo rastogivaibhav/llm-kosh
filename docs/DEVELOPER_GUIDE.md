@@ -5,7 +5,7 @@ service runtime, or desktop integration.
 
 ## Supported runtimes
 
-- Python 3.9 through 3.13.
+- Python 3.10 through 3.13.
 - Node.js 20 for the desktop app.
 - Windows, macOS, and Linux are expected to remain supported.
 

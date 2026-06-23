@@ -19,7 +19,7 @@ handing a private workspace to a hosted memory service.
 
 ## Install and run
 
-Python 3.9 or newer is required.
+Python 3.10 or newer is required.
 
 ```bash
 python -m pip install --upgrade llm-kosh

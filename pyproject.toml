@@ -7,7 +7,7 @@ name = "llm-kosh"
 version = "2.1.1"
 description = "Local-first AI memory cartridge: persistent, cross-session memory for Claude and any LLM via MCP"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 authors = [
     { name = "Vaibhav Rastogi", email = "rastogivaibhav@gmail.com" }
@@ -17,7 +17,6 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel", "pybind11>=2.10.0"]
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["mcp", "llm", "memory", "claude", "ai", "context", "cartridge", "sqlite", "fts5"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
@@ -25,8 +25,9 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    # LlmKosh relies heavily on the standard library for its core
-    "PyYAML>=6.0"
+    "PyYAML>=6.0",
+    "mcp>=1.26.0,<2",
+    "tomli>=2.0.0; python_version < \"3.11\"",
 ]
 
 [project.urls]
@@ -44,14 +45,16 @@ semantic = [
 server = [
     "fastapi>=0.116.0",
     "uvicorn>=0.23.0",
-    "mcp>=1.26.0",
-    "tomli>=2.0.0; python_version < \"3.11\""
 ]
 ingest = [
     "markitdown"
 ]
 all = [
-    "llm-kosh[watch,semantic,server,ingest]"
+    "watchdog>=3.0.0",
+    "sentence-transformers>=2.2.0",
+    "fastapi>=0.116.0",
+    "uvicorn>=0.23.0",
+    "markitdown",
 ]
 
 [project.scripts]
@@ -70,6 +73,7 @@ exclude = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "integration: integration tests requiring a running service",
     "asyncio: async tests",

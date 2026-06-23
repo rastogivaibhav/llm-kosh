@@ -4,8 +4,13 @@ A 10-minute path from empty cartridge to a working boot/work/absorb loop.
 
 ## 0. Prerequisites
 
-Python 3.10+. No install, no internet. (Optional: `pip install sentence-transformers` for
-semantic search.) In examples below `R` is your cartridge folder.
+Install Python 3.9+ and llm-kosh. MCP support is included in the normal package.
+
+```bash
+python -m pip install --upgrade llm-kosh
+```
+
+In examples below `R` is your cartridge folder.
 
 ```bash
 R=~/AI-Cartridge

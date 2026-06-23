@@ -1,9 +1,12 @@
-import sys
+import os
 from setuptools import setup
 from setuptools.errors import CCompilerError, PlatformError
 
-# Try to load Pybind11 setup helpers
+# Native math is an explicit opt-in so the default PyPI artifact stays a
+# portable pure-Python wheel. The tested Python fallback is always available.
 try:
+    if os.environ.get("LLM_KOSH_BUILD_NATIVE") != "1":
+        raise ImportError
     from pybind11.setup_helpers import Pybind11Extension, build_ext
     ext_modules = [
         Pybind11Extension(

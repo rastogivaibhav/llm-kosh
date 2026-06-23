@@ -2,166 +2,121 @@
 
 <!-- mcp-name: io.github.rastogivaibhav/llm-kosh -->
 
-**Local-first memory cartridge for Claude, Cursor, and MCP-compatible AI agents.**
+Local-first, persistent memory for MCP-compatible AI clients. Memories remain
+plain files on your machine, with SQLite FTS5 search and a tamper-evident event
+ledger.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/rastogivaibhav/llm-kosh/main/docs/assets/demo.webp" alt="Claude Remembers" width="800"/>
-</p>
+## Install and run
+
+Python 3.9 or newer is required.
 
 ```bash
-pip install "llm-kosh[all]"
+python -m pip install --upgrade llm-kosh
+llm-kosh install --yes
+llm-kosh status
 ```
 
-## ❓ Why this exists
-Stop copy-pasting the same 15 architectural decisions and database schemas into every new chat. `llm-kosh` is a lightning-fast, SQLite-backed memory system that gives AI assistants (like Claude and Cursor) permanent recall across sessions. 
+`llm-kosh install` creates `~/.llmkosh/cartridge`, registers the background
+service when the operating system permits it, and adds a read-only MCP entry to
+Claude Desktop. Restart Claude Desktop after setup.
 
-By running completely locally, it guarantees zero cloud syncing, zero API costs, and absolute privacy for your proprietary codebase.
+If service registration is unavailable, run it for the current login session:
 
-## 🚀 The Killer Feature: Native MCP Server
-`llm-kosh` natively supports the **Model Context Protocol (MCP)**. This means tools like Claude Desktop and Cursor can automatically search and read your memory cartridge *without you doing anything*.
-
-### Claude Desktop Setup
-Simply add this to your `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "llm-kosh": {
-      "command": "llm-kosh",
-      "args": ["--root", "C:/path/to/your/cartridge", "mcp-server", "--allow-write"]
-    }
-  }
-}
-```
-*Now, when you ask Claude "What database are we using for auth?", it automatically searches your `llm-kosh` cartridge and knows the answer.*
-
-## 🧠 Temporal Causal Reasoning Engine
-
-Most memory systems do keyword retrieval. You get back five disconnected facts and have to assemble the story yourself.
-
-llm-kosh includes a **Temporal Causal Reasoning Engine** that understands *why* things happened and *in what order*. When you ask about the authentication system, it doesn't just find five matching notes — it traces the causal chain: the decision that led to the refactor, the refactor that introduced the bug, the hotfix that closed the incident. In order. With confidence scores.
-
-### Before (keyword retrieval)
-```
-You: "What happened to the auth system last quarter?"
-
-Results:
-• [NOTE] JWT token refresh bug — Dec 14
-• [DECISION] Migrate to OAuth2 — Oct 3
-• [NOTE] Hotfix deployed — Dec 15
-• [DECISION] Auth service staging deploy — Nov 8
-• [NOTE] OAuth2 provider integration — Oct 22
-```
-Five facts. No order. No story. You assemble it manually.
-
-### After (causal reasoning)
-```
-You: "What happened to the auth system last quarter?"
-
-Causal chain (stability: 0.85, 5 hops):
-  1. Oct 3  → DECISION: Migrate to OAuth2 [approved by steering]
-  2. Oct 22 → OAuth2 provider integration completed (ENABLES →)
-  3. Nov 8  → Auth service deployed to staging, smoke tests passed (ENABLES →)
-  4. Dec 14 → Token refresh bug discovered in production (CAUSES →)
-  5. Dec 15 → Hotfix merged. Authentication fully stable. (SUPERSEDES Dec 14)
-```
-One coherent narrative. Cause and effect. Time-ordered. No assembly required.
-
-### How it works
-
-The engine builds a **causal graph** over your memories as you add them. Each fact connects to related facts via typed edges (`ENABLES`, `CAUSES`, `CONTRADICTS`, `SUPERSEDES`, `INFERS`). When you query, it runs:
-
-1. **DCT resonance retrieval** — finds facts that vibrate at the same frequency as your query
-2. **Bidirectional fiber bundle traversal** — traces causal paths forward *and* backward through time
-3. **Lyapunov stability scoring** — measures how coherent and non-contradictory the retrieved chain is
-4. **Escape mechanism** — if the chain is unstable, surfaces contradictions and alternative routes
-
-Benchmarked at **100% accuracy** on temporal reasoning tests (10/10), up from a 50% baseline with keyword-only retrieval.
-
-### Try it via MCP (Claude Desktop)
-
-Once the MCP server is running, Claude can call the reasoning engine directly:
-
-```
-You: "Walk me through what happened to our authentication system"
-
-Claude uses: reasoning_query("authentication system history")
-→ Returns causal narrative with timestamps, edge types, and stability score
-```
-
-### Try it via Python
-
-```python
-from llm_kosh.engine.reasoning import ReasoningEngine
-from pathlib import Path
-
-engine = ReasoningEngine(Path("./my-cartridge"))
-
-result = engine.query(
-    "What led to the auth system refactor?",
-    temporal_context="2025-12-01T00:00:00Z",
-    depth=5
-)
-
-# result.bundle.fibers — causal chain, time-ordered
-# result.stability.score — how coherent the chain is (0–1)
-# result.escape_triggered — True if contradictions were surfaced
-for fact_id, fiber in result.bundle.fibers.items():
-    print(f"{fiber.fact.valid_from}: {fiber.fact.content}")
-```
-
----
-
-## ✨ Features
-
-- 🧩 **Temporal Causal Reasoning:** Understands *why* and *in what order*. Traces causal chains across your memory graph. 100% accuracy on temporal benchmarks.
-- 🧠 **Lightning Fast Local Memory:** Powered by an embedded SQLite FTS5 database. Sub-50ms search times across thousands of context files.
-- ⚡ **Global Quick Capture:** Press `Ctrl+Shift+Space` anywhere on your OS to instantly dump a thought, decision, or code snippet into your cartridge.
-- 🛡️ **Air-Gapped & Secure:** Built-in safety Airlock prevents destructive writes. No data ever leaves your machine unless you explicitly pack it.
-- 🖥️ **Beautiful Desktop UI:** Comes with a glassmorphism Electron/React desktop app to manage your memory, monitor the sustained background service, and configure hotkeys.
-
-## 📦 Quickstart
-
-Get from zero to a running memory cartridge in under 2 minutes.
-
-**1. Install the core system**
 ```bash
-# Core memory store (no extra deps)
-pip install llm-kosh
-
-# With MCP server + FastAPI (recommended for Claude Desktop integration)
-pip install "llm-kosh[server]"
-
-# Everything including vector search
-pip install "llm-kosh[all]"
+llm-kosh service start
+llm-kosh service status
 ```
 
-**2. Initialize a new cartridge**
+## Minimal manual setup
+
+To use a cartridge outside the default location:
+
 ```bash
-# Creates a new cartridge at the configured/default root
-llm-kosh init --owner "Your Name"
+llm-kosh --root ./my-cartridge init --owner "Your Name"
+llm-kosh --root ./my-cartridge add --kind note --title "First memory" --body "Hello"
+llm-kosh --root ./my-cartridge query "Hello"
 ```
 
-**3. Launch the Desktop App & Service**
+Run the MCP server over stdio:
+
 ```bash
-# Starts the UI, the sustained service, and the MCP bridge
-llm-kosh desktop
+llm-kosh --root ./my-cartridge mcp-server
 ```
 
----
+Or use local streamable HTTP:
 
-## 🔒 Security & Privacy
+```bash
+llm-kosh --root ./my-cartridge mcp-server --http --port 8000
+# endpoint: http://127.0.0.1:8000/mcp
+```
 
-`llm-kosh` was built with privacy as the core principle.
+The MCP server is read-only by default. Enable capabilities explicitly only
+when the connected client should have them:
 
-- **100% Local Storage:** All memory data is stored locally in an embedded SQLite database (`.llm-kosh/memory.db`).
-- **No Telemetry, No Sync:** No data ever leaves your machine. There are no cloud accounts, no sync servers, and no telemetry. The only time your data leaves your machine is when *you* explicitly share context with an LLM via the MCP protocol.
-- **Strict Write Permissions:** By default, the MCP server runs in **Read-Only** mode to prevent rogue LLMs from deleting or corrupting your memory. To allow the LLM to write new memories autonomously, you must explicitly pass the `--allow-write` flag (`llm-kosh mcp-server --allow-write`).
+```bash
+llm-kosh --root ./my-cartridge mcp-server --allow-write
+```
 
----
+Additional capability flags are `--allow-mutate` and `--allow-private`.
 
-### 📚 Deep Dives:
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [MCP Integration Guide](docs/MCP_GUIDE.md)
-- [Comprehensive CLI Reference](docs/CLI_REFERENCE.md)
-- [Temporal Causal Reasoning Engine](docs/REASONING.md)
+## Background service
+
+The sustained service watches intake and receipt folders, maintains derived
+indexes, and exposes a local health check. Manage it with:
+
+```bash
+llm-kosh service start
+llm-kosh service status
+llm-kosh service stop
+```
+
+`llm-kosh daemon` remains as a legacy foreground scheduler interface. New
+installations should use `llm-kosh service`.
+
+## Optional features
+
+```bash
+python -m pip install "llm-kosh[watch]"     # filesystem events
+python -m pip install "llm-kosh[server]"    # FastAPI service
+python -m pip install "llm-kosh[semantic]"  # local vector search
+python -m pip install "llm-kosh[all]"       # every optional feature
+```
+
+MCP support is included in the normal installation.
+
+## Desktop app
+
+The desktop app is distributed as a separate installer on the GitHub Releases
+page. It contains a bundled CLI sidecar, so end users do not need a separate
+Python installation. The Python command `llm-kosh desktop` configures and starts
+the service expected by that app; it does not install the Electron application.
+
+## Security model
+
+- Storage and search are local; there is no telemetry or automatic cloud sync.
+- MCP starts read-only.
+- Private exports, writes, and mutations require separate opt-in capabilities.
+- Context packs are checked for common secret formats before export.
+- Local files are plaintext; use operating-system disk encryption for data at rest.
+
+See [SECURITY.md](SECURITY.md) for boundaries and limitations.
+
+## Development
+
+```bash
+python -m pip install -e ".[server,watch,ingest]"
+python -m pytest -q
+```
+
+Native C++ math acceleration is optional. Set `LLM_KOSH_BUILD_NATIVE=1` and
+install `pybind11` before building if you want it; release wheels use the tested
+pure-Python fallback for portability.
+
+## Documentation
+
+- [Quickstart](QUICKSTART.md)
+- [MCP guide](docs/MCP_GUIDE.md)
+- [CLI reference](docs/CLI_REFERENCE.md)
+- [Architecture](docs/ARCHITECTURE.md)
+
+Licensed under the MIT License.

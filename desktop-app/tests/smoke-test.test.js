@@ -1,5 +1,4 @@
 const { runSmokeTestSequence } = require('../electron/smoke-test');
-const fs = require('fs');
 
 jest.mock('child_process', () => {
   return {

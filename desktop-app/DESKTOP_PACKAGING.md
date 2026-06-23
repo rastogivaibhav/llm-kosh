@@ -44,12 +44,13 @@ All packaged artifacts will be output to the `desktop-app/dist-electron` folder.
   3. System `PATH`.
 - If the CLI is not found, the app gracefully opens an onboarding screen where the user can locate a custom executable.
 
-### 2. macOS Unsigned App Warning
-- The macOS build is currently unsigned. When users download and launch the `.dmg`, macOS Gatekeeper may block it. Users will need to bypass this by right-clicking the app and selecting "Open".
-- Notarization is not configured in this release.
+### 2. macOS Signing
+- Local developer builds may be unsigned.
+- Public GA builds must be Developer ID signed and notarized. Do not publish an unsigned `.dmg` as GA.
 
-### 3. Windows SmartScreen
-- Windows builds are not signed with an EV certificate. Windows SmartScreen may show a "Windows protected your PC" warning. Users will need to click "More info" -> "Run anyway".
+### 3. Windows Signing
+- Local developer builds may be unsigned.
+- Public GA builds must have a valid Authenticode signature on the NSIS installer and bundled executables before release.
 
 ### 4. Linux AppImage Permissions
 - AppImages downloaded from a browser often lose their executable permissions. Users must run `chmod +x llm-kosh-0.2.0.AppImage` before running.

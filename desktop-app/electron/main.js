@@ -23,11 +23,17 @@ function addLog(entry) {
   }
 }
 
+async function stopSustainedService(rootPath) {
+  const localResult = daemonManager.stop();
+  if (localResult.ok) return localResult;
+  if (!rootPath) return localResult;
+  return runLlmKosh('service', ['stop', '--root', rootPath]);
+}
+
 // Command execution wrapper
 function runLlmKosh(command, args, cwd) {
   return new Promise((resolve) => {
     const startTime = Date.now();
-    const config = readConfig();
     const resolveResult = resolveLlmKoshExecutable(configPath, process.resourcesPath);
     const exe = resolveResult.path;
 
@@ -205,18 +211,19 @@ ipcMain.on('close-quick-capture', () => {
   }
 });
 
-function updateTrayMenu() {
+async function updateTrayMenu() {
   if (!tray) return;
-  const status = daemonManager.getStatus();
+  const status = await daemonManager.getStatus();
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open llm-kosh', click: () => { mainWindow?.show(); } },
     { type: 'separator' },
     { label: `Service: ${status.running ? 'Running' : 'Stopped'}`, enabled: false },
     { 
       label: status.running ? 'Stop Service' : 'Start Service', 
-      click: () => {
+      click: async () => {
         if (status.running) {
-          daemonManager.stop();
+          const cfg = readConfig();
+          await stopSustainedService(cfg.cartridgeRoot);
         } else {
           const cfg = readConfig();
           if (cfg.cartridgeRoot) {
@@ -447,12 +454,12 @@ ipcMain.handle('absorb-receipt', async (event, rootPath, receiptPath) => {
 });
 
 ipcMain.handle('get-service-status', async (event, rootPath) => {
-  const isLocalRunning = daemonManager.getStatus().running;
+  const isLocalRunning = (await daemonManager.getStatus()).running;
   const res = await runLlmKosh('service', ['status', '--root', rootPath]);
   return { ...res, isLocalRunning };
 });
 ipcMain.handle('get-daemon-status', async (event, rootPath) => {
-  const isLocalRunning = daemonManager.getStatus().running;
+  const isLocalRunning = (await daemonManager.getStatus()).running;
   const res = await runLlmKosh('daemon', ['status', '--root', rootPath]);
   return { ...res, isLocalRunning };
 });
@@ -465,7 +472,7 @@ ipcMain.handle('get-local-daemon-details', () => daemonManager.getStatus());
 ipcMain.handle('service-once', async (event, rootPath, mode) => {
   const args = ['once', '--root', rootPath];
   if (mode) args.push('--mode', mode);
-  return await runLlmKosh('service', args);
+  return await runLlmKosh('daemon', args);
 });
 ipcMain.handle('daemon-once', async (event, rootPath, mode) => {
   const args = ['once', '--root', rootPath];
@@ -477,7 +484,7 @@ ipcMain.handle('start-service', async (event, rootPath, mode) => {
   const config = readConfig();
   const daemonMode = mode || config.daemonMode || 'auto';
   
-  if (daemonManager.getStatus().running) {
+  if ((await daemonManager.getStatus()).running) {
     return { ok: false, stderr: 'Daemon is already running in this app instance.' };
   }
   
@@ -500,12 +507,16 @@ ipcMain.handle('start-daemon', async (event, rootPath, mode) => {
   return daemonManager.start(configPath, process.resourcesPath, rootPath, daemonMode);
 });
 
-ipcMain.handle('stop-service', () => {
-  return daemonManager.stop();
+ipcMain.handle('stop-service', async () => {
+  const config = readConfig();
+  return stopSustainedService(config.cartridgeRoot);
 });
-ipcMain.handle('stop-daemon', () => daemonManager.stop());
+ipcMain.handle('stop-daemon', async () => {
+  const config = readConfig();
+  return stopSustainedService(config.cartridgeRoot);
+});
 
-ipcMain.handle('get-logs', () => {
+ipcMain.handle('get-logs', async () => {
   const config = readConfig();
   // Sanitize config - remove any hypothetical secrets if added later
   const safeConfig = { ...config };
@@ -513,7 +524,7 @@ ipcMain.handle('get-logs', () => {
     ok: true,
     logs: commandLogs,
     config: safeConfig,
-    daemonRunning: daemonManager.getStatus().running
+    daemonRunning: (await daemonManager.getStatus()).running
   };
 });
 

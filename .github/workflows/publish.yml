@@ -18,8 +18,15 @@ jobs:
 
       - name: Build
         run: |
-          python -m pip install --upgrade pip build pybind11
+          python -m pip install --upgrade pip build
           python -m build
+
+      - name: Test built wheel
+        run: |
+          python -m pip install "dist/llm_kosh-"*.whl
+          python -m pip install pytest pytest-asyncio fastapi watchdog markitdown
+          cd "$RUNNER_TEMP"
+          LLMKOSH_NO_AUTOSPAWN=1 python -m pytest "$GITHUB_WORKSPACE/tests" -q
 
       - name: Validate
         run: |

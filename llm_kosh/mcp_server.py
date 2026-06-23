@@ -6,7 +6,9 @@ from typing import Dict, Any, List
 
 try:
     from mcp.server.fastmcp import FastMCP  # type: ignore
+    _HAS_MCP = True
 except ModuleNotFoundError:  # pragma: no cover - exercised in minimal CI/sandbox
+    _HAS_MCP = False
     class _FallbackTool:
         def __init__(self, name, func):
             self.name = name
@@ -115,7 +117,7 @@ def get_project_context(project_name: str):
 @mcp.tool()
 def list_intake(status: str = "pending"):
     """Lists the current items pending in the intake queue."""
-    res = intake_list(WORKSPACE_PATH, status="pending")
+    res = intake_list(WORKSPACE_PATH, status=status)
     return json.dumps(res, indent=2)
 
 @mcp.tool()
@@ -355,20 +357,30 @@ def start_server(root: Path, stdio: bool = True, http: bool = False, port: int =
                  allow_write: bool = False, allow_mutate: bool = False, allow_private: bool = False):
     """Starts the MCP server with the specified configuration."""
     global WORKSPACE_PATH
-    WORKSPACE_PATH = root
+    WORKSPACE_PATH = root.expanduser().resolve()
     
     MCP_FLAGS["allow_write"] = allow_write
     MCP_FLAGS["allow_mutate"] = allow_mutate
     MCP_FLAGS["allow_private"] = allow_private
 
+    # stdio=False/http=False is intentionally supported as a configuration-only
+    # mode for embedding and tests.
+    if not stdio and not http:
+        return
+
+    if not _HAS_MCP:
+        raise RuntimeError("MCP runtime is not installed. Reinstall with `pip install -U llm-kosh`.")
+
+    from llm_kosh.core.utils import ensure_root
+    ensure_root(WORKSPACE_PATH)
+
     if stdio:
-        mcp.run()
+        mcp.run(transport="stdio")
     elif http:
-        # Note: FastMCP run currently wraps stdio, but can hook into ASGI/http if needed.
-        # Anthropic standard favors stdio for local tools. 
-        # For HTTP, we just print the intention or rely on internal FastMCP ASGI.
-        print(f"Starting MCP on http://localhost:{port} (If supported by underlying FastMCP)")
-        mcp.run()
+        mcp.settings.host = "127.0.0.1"
+        mcp.settings.port = port
+        print(f"MCP streamable HTTP listening on http://127.0.0.1:{port}/mcp")
+        mcp.run(transport="streamable-http")
 
 def get_mcp_tools_schema(root: Path) -> str:
     """Returns the JSON schema of available tools."""
@@ -386,3 +398,36 @@ def get_mcp_tools_schema(root: Path) -> str:
             "description": t.description
         })
     return json.dumps(tools, indent=2)
+
+
+def main() -> None:
+    """Run the MCP server directly with ``python -m llm_kosh.mcp_server``."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="llm-kosh MCP server")
+    parser.add_argument(
+        "--root",
+        default=os.environ.get("CARTRIDGE_WORKSPACE", "."),
+        help="Cartridge root (or set CARTRIDGE_WORKSPACE)",
+    )
+    transport = parser.add_mutually_exclusive_group()
+    transport.add_argument("--stdio", action="store_true", help="Use stdio transport (default)")
+    transport.add_argument("--http", action="store_true", help="Use streamable HTTP transport")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--allow-write", action="store_true")
+    parser.add_argument("--allow-mutate", action="store_true")
+    parser.add_argument("--allow-private", action="store_true")
+    args = parser.parse_args()
+    start_server(
+        Path(args.root),
+        stdio=not args.http,
+        http=args.http,
+        port=args.port,
+        allow_write=args.allow_write,
+        allow_mutate=args.allow_mutate,
+        allow_private=args.allow_private,
+    )
+
+
+if __name__ == "__main__":
+    main()

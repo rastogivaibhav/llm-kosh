@@ -102,7 +102,7 @@ class TestConcurrency:
         assert len(rows) == 100
         result = verify_ledger(cart, quiet=True)
         assert result["bad_rows"] == 0
-        # every row individually verifiable even if interleaving reordered links
+        assert result["chain_intact"] is True
         for r in rows:
             assert row_hash(r) == r["row_hash"]
 

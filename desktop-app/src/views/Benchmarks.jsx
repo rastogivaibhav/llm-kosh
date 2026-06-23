@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   BarChart2, Shield, Clock, Link, RefreshCw, Zap,
   CheckCircle, XCircle, ChevronDown, ChevronUp,
@@ -425,7 +425,7 @@ export default function Benchmarks({ config }) {
   };
 
   // Attempt to read the latest JSON result file via the CLI bridge
-  const readLatestResult = async () => {
+  const readLatestResult = useCallback(async () => {
     try {
       const api = window.llmKosh;
       if (!api?.runKoshCommand || !config?.cartridgeRoot) return null;
@@ -450,7 +450,7 @@ else:
       console.warn('Could not read benchmark result:', e);
     }
     return null;
-  };
+  }, [config?.cartridgeRoot]);
 
   useEffect(() => {
     readLatestResult().then(data => {
@@ -459,7 +459,7 @@ else:
         setSelectedCat(Object.keys(data.categories || {})[0] || null);
       }
     });
-  }, [config]);
+  }, [readLatestResult]);
 
   const runBenchmark = async () => {
     setRunning(true);

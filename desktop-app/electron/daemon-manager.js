@@ -58,7 +58,7 @@ class DaemonManager {
     }
   }
 
-  start(configPath, resourcesPath, rootPath, mode = 'auto') {
+  start(configPath, resourcesPath, rootPath) {
     if (this.activeDaemon) {
       return { ok: false, stderr: 'Daemon is already running.' };
     }
@@ -68,8 +68,9 @@ class DaemonManager {
       const exe = resolveResult.path;
       if (!exe) throw new Error(resolveResult.error || 'Executable not found.');
 
+      // The sustained service owns its scheduling mode. `--mode` belongs to
+      // the deprecated foreground daemon command and is not valid here.
       const rawArgs = ['start', '--root', rootPath];
-      if (mode) rawArgs.push('--mode', mode);
       
       const fullArgs = buildCommandArgs('service', rawArgs);
 

@@ -144,22 +144,8 @@ export default function Explorer({ config, setStatusMessage }) {
   const [viewMode, setViewMode] = useState('preview'); // preview | source
   const [fileLoading, setFileLoading] = useState(false);
 
-  // Load Watched Folders
-  const loadWatchedFolders = useCallback(async () => {
-    const res = await api.listWatchedFolders();
-    if (res.success) {
-      setWatchedFolders(res.folders);
-      // Pre-initialize folder items
-      for (const folder of res.folders) {
-        if (!folderContents[folder]) {
-          fetchFolderItems(folder);
-        }
-      }
-    }
-  }, [folderContents]);
-
   // Read Directory Contents
-  const fetchFolderItems = async (dirPath) => {
+  const fetchFolderItems = useCallback(async (dirPath) => {
     const res = await api.readDirectory(dirPath);
     if (res.success) {
       // Sort: Directories first, then files alphabetically
@@ -170,7 +156,19 @@ export default function Explorer({ config, setStatusMessage }) {
       });
       setFolderContents(prev => ({ ...prev, [dirPath]: sorted }));
     }
-  };
+  }, []);
+
+  // Load Watched Folders
+  const loadWatchedFolders = useCallback(async () => {
+    const res = await api.listWatchedFolders();
+    if (res.success) {
+      setWatchedFolders(res.folders);
+      // Refresh watched folder items
+      for (const folder of res.folders) {
+        fetchFolderItems(folder);
+      }
+    }
+  }, [fetchFolderItems]);
 
   // Toggle expand / collapse folder
   const toggleFolder = async (dirPath) => {
@@ -234,11 +232,11 @@ export default function Explorer({ config, setStatusMessage }) {
       fetchFolderItems(rootPath);
     }
     loadWatchedFolders();
-  }, [rootPath, loadWatchedFolders]);
+  }, [rootPath, loadWatchedFolders, fetchFolderItems]);
 
   useEffect(() => {
     handleRefreshWorkspace();
-  }, [rootPath]);
+  }, [handleRefreshWorkspace]);
 
   // Line counter layout helper for source code raw view
   const renderSourceWithLines = () => {

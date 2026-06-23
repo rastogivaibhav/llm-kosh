@@ -1,5 +1,7 @@
 exclude .coverage
 exclude pack.zip
+include llm_kosh/engine/bindings.cpp
+include llm_kosh/engine/math_core.hpp
 prune .claude
 prune .codex
 prune .github

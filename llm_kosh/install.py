@@ -15,6 +15,7 @@ import sys
 import textwrap
 from pathlib import Path
 from typing import Optional
+from xml.sax.saxutils import escape as xml_escape
 
 from llm_kosh.global_config import (
     DEFAULT_CONFIG_TOML,
@@ -62,6 +63,20 @@ def init_default_cartridge() -> None:
 
 def _python_exe() -> str:
     return sys.executable
+
+
+def _service_command() -> list[str]:
+    """Command used by OS service managers for source and frozen installs."""
+    if getattr(sys, "frozen", False):
+        return [_python_exe(), "service", "run"]
+    return [_python_exe(), "-m", "llm_kosh.service", "run"]
+
+
+def _mcp_command(root: str) -> tuple[str, list[str]]:
+    """Reliable Claude Desktop command for source and frozen installs."""
+    if getattr(sys, "frozen", False):
+        return _python_exe(), ["--root", root, "mcp-server"]
+    return _python_exe(), ["-m", "llm_kosh.cli", "--root", root, "mcp-server"]
 
 
 def _pip_cmd(*args: str) -> list[str]:
@@ -147,6 +162,10 @@ def _register_darwin() -> bool:
     log_dir = get_llmkosh_home()
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    service_command = _service_command()
+    program_arguments = "\n".join(
+        f"                <string>{xml_escape(arg)}</string>" for arg in service_command
+    )
     plist_content = textwrap.dedent(f"""\
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -157,13 +176,10 @@ def _register_darwin() -> bool:
             <string>{label}</string>
             <key>ProgramArguments</key>
             <array>
-                <string>{_python_exe()}</string>
-                <string>-m</string>
-                <string>llm_kosh.service</string>
-                <string>run</string>
+{program_arguments}
             </array>
             <key>WorkingDirectory</key>
-            <string>{get_default_cartridge_root()}</string>
+            <string>{xml_escape(str(get_default_cartridge_root()))}</string>
             <key>RunAtLoad</key>
             <true/>
             <key>KeepAlive</key>
@@ -171,9 +187,9 @@ def _register_darwin() -> bool:
             <key>ProcessType</key>
             <string>Background</string>
             <key>StandardOutPath</key>
-            <string>{log_dir / "service.log"}</string>
+            <string>{xml_escape(str(log_dir / "service.log"))}</string>
             <key>StandardErrorPath</key>
-            <string>{log_dir / "service.err.log"}</string>
+            <string>{xml_escape(str(log_dir / "service.err.log"))}</string>
         </dict>
         </plist>
     """)
@@ -197,6 +213,8 @@ def _register_linux() -> bool:
     working_dir = get_default_cartridge_root()
     working_dir.mkdir(parents=True, exist_ok=True)
 
+    import shlex
+    exec_start = " ".join(shlex.quote(part) for part in _service_command())
     unit_content = textwrap.dedent(f"""\
         [Unit]
         Description=llm-kosh background service
@@ -204,11 +222,11 @@ def _register_linux() -> bool:
 
         [Service]
         Type=simple
-        ExecStart={_python_exe()} -m llm_kosh.service run
+        ExecStart={exec_start}
         WorkingDirectory={working_dir}
         Restart=on-failure
         RestartSec=10
-        Environment=LLMKOSH_ROOT={working_dir}
+        Environment="LLMKOSH_ROOT={working_dir}"
 
         [Install]
         WantedBy=default.target
@@ -236,7 +254,8 @@ def _register_windows() -> bool:
     task_dir.mkdir(parents=True, exist_ok=True)
     task_xml_path = task_dir / "task.xml"
 
-    python_exe = _python_exe()
+    service_command = _service_command()
+    executable, service_args = service_command[0], service_command[1:]
 
     task_xml = textwrap.dedent(f"""\
         <?xml version="1.0" encoding="UTF-16"?>
@@ -248,9 +267,9 @@ def _register_windows() -> bool:
             </Principal>
           </Principals>
           <Actions><Exec>
-            <Command>{python_exe}</Command>
-            <Arguments>-m llm_kosh.service run</Arguments>
-            <WorkingDirectory>{get_default_cartridge_root()}</WorkingDirectory>
+            <Command>{xml_escape(executable)}</Command>
+            <Arguments>{xml_escape(subprocess.list2cmdline(service_args))}</Arguments>
+            <WorkingDirectory>{xml_escape(str(get_default_cartridge_root()))}</WorkingDirectory>
           </Exec></Actions>
           <Settings><ExecutionTimeLimit>PT0S</ExecutionTimeLimit></Settings>
         </Task>
@@ -376,9 +395,12 @@ def patch_claude_desktop_config(yes: bool = False) -> None:
         return
 
     root_str = _cartridge_root_str()
+    command, command_args = _mcp_command(root_str)
     new_entry = {
-        "command": "llm-kosh",
-        "args": ["--root", root_str, "mcp-server"],
+        # An absolute interpreter path works even when GUI applications do not
+        # inherit the user's shell PATH (common on macOS and Windows).
+        "command": command,
+        "args": command_args,
         "env": {"CARTRIDGE_WORKSPACE": root_str},
     }
 
@@ -500,40 +522,37 @@ def check_path_variable() -> None:
 # ---------------------------------------------------------------------------
 
 def run_install(yes: bool = False, clean: bool = False) -> None:
-    """Run the full one-click installation sequence."""
-    print("=== llm-kosh install ===")
+    """Configure a package that has already been installed by pip/pipx."""
+    print("=== llm-kosh setup ===")
 
     if clean:
         print("\n0. Cleaning local state...")
         clean_local_state()
 
-    print("\n1. Refreshing Python package...")
-    install_ok = repair_python_package()
-
-    print("\n2. Creating home directory...")
+    print("\n1. Creating home directory...")
     create_home_dir()
 
-    print("\n3. Writing default configuration...")
+    print("\n2. Writing default configuration...")
     write_default_config()
 
-    print("\n4. Initialising default cartridge...")
+    print("\n3. Initialising default cartridge...")
     init_default_cartridge()
 
-    print("\n5. Registering OS service...")
+    print("\n4. Registering OS service...")
     service_ok = register_os_service()
 
-    print("\n6. Patching Claude Desktop config...")
+    print("\n5. Configuring Claude Desktop MCP...")
     try:
         patch_claude_desktop_config(yes=yes)
     except Exception as exc:
         print(f"  [warn] Claude Desktop config patch failed: {exc}")
 
-    print("\n7. Checking PATH...")
+    print("\n6. Checking PATH...")
     check_path_variable()
 
-    print("\n=== Installation complete ===")
-    if not install_ok:
-        print("Note: Python package refresh was not fully successful.")
+    print("\n=== Setup complete ===")
+    print("Check it: llm-kosh status")
+    print("MCP (stdio): llm-kosh mcp-server")
     if not service_ok:
         print("Note: OS service registration was not fully successful.")
         print("You can start the service manually with: llm-kosh service start")

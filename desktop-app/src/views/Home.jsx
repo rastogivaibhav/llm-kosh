@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { Activity, Folder, Terminal, Play, Square, Settings, RefreshCcw } from 'lucide-react';
 
@@ -24,19 +24,10 @@ export default function Home({ config, setConfig, setStatusMessage }) {
   const [isMcpRunning, setIsMcpRunning] = useState(false);
   const [mcpLoading, setMcpLoading] = useState(false);
 
-  const loadWatchedFolders = async () => {
+  const loadWatchedFolders = useCallback(async () => {
     const res = await api.listWatchedFolders();
     if (res.success) setWatchedFolders(res.folders);
-  };
-
-  useEffect(() => {
-    if (config?.cartridgeRoot) {
-      setRoot(config.cartridgeRoot);
-      handleRefresh(config.cartridgeRoot);
-      handleRefreshService(config.cartridgeRoot);
-    }
-    loadWatchedFolders();
-  }, [config?.cartridgeRoot]);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = api.onServiceLog((msg) => {
@@ -65,7 +56,7 @@ export default function Home({ config, setConfig, setStatusMessage }) {
     return () => { unsubscribe(); mcpSub(); mcpStatusSub(); };
   }, []);
 
-  const handleRefreshMcp = async () => {
+  const handleRefreshMcp = useCallback(async () => {
     setMcpLoading(true);
     const result = await api.getMcpStatus();
     setMcpLoading(false);
@@ -74,13 +65,13 @@ export default function Home({ config, setConfig, setStatusMessage }) {
     if (result.logs) {
       setMcpLogs(result.logs.map(msg => `[${new Date(msg.timestamp).toLocaleTimeString()}] [${msg.type}] ${msg.message}`).join('\n') + '\n');
     }
-  };
+  }, []);
 
   useEffect(() => {
     handleRefreshMcp();
-  }, []);
+  }, [handleRefreshMcp]);
 
-  const handleRefresh = async (path = root) => {
+  const handleRefresh = useCallback(async (path = root) => {
     if (!path) return;
     setStatusMessage('Checking status...');
     setLoading(true);
@@ -93,9 +84,9 @@ export default function Home({ config, setConfig, setStatusMessage }) {
       setStatusMessage('Status failed.');
     }
     setLoading(false);
-  };
+  }, [root, setStatusMessage]);
 
-  const handleRefreshService = async (path = root) => {
+  const handleRefreshService = useCallback(async (path = root) => {
     if (!path) return;
     setServiceLoading(true);
     const result = await api.getServiceStatus(path);
@@ -107,7 +98,16 @@ export default function Home({ config, setConfig, setStatusMessage }) {
       setServiceStatus(`Error getting status: ${result.stderr}`);
       setIsServiceRunning(result.isLocalRunning);
     }
-  };
+  }, [root]);
+
+  useEffect(() => {
+    if (config?.cartridgeRoot) {
+      setRoot(config.cartridgeRoot);
+      handleRefresh(config.cartridgeRoot);
+      handleRefreshService(config.cartridgeRoot);
+    }
+    loadWatchedFolders();
+  }, [config?.cartridgeRoot, handleRefresh, handleRefreshService, loadWatchedFolders]);
 
   const handleToggleService = async () => {
     if (!root) return;

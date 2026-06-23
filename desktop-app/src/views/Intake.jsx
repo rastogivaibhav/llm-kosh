@@ -159,7 +159,6 @@ function QuickCaptureOverlay({ config }) {
 export default function Intake({ config, setStatusMessage }) {
   // Detect if we were launched in Quick Capture mode by the global hotkey
   const isQuickMode = new URLSearchParams(window.location.search).get('quick') === '1';
-  if (isQuickMode) return <QuickCaptureOverlay config={config} />;
 
   const [root] = useState(config?.cartridgeRoot || '');
   
@@ -172,6 +171,8 @@ export default function Intake({ config, setStatusMessage }) {
   // Intake Scanner state
   const [scanOutput, setScanOutput] = useState('');
   const [scanLoading, setScanLoading] = useState(false);
+
+  if (isQuickMode) return <QuickCaptureOverlay config={config} />;
 
   const handleCaptureInbox = async (e) => {
     e.preventDefault();

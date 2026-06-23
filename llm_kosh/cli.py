@@ -18,6 +18,7 @@ except Exception:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=f"LlmKosh v{APP_VERSION}")
+    parser.add_argument("--version", action="version", version=f"llm-kosh {APP_VERSION}")
     parser.add_argument("--root", default=_DEFAULT_ROOT, help="Cartridge root folder")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -243,14 +244,14 @@ def main() -> None:
     p_service.add_argument("action", choices=["install", "uninstall", "start", "stop", "restart", "status", "run"])
 
     # install subcommand
-    p_install = sub.add_parser("install", help="One-click setup: service + MCP auto-start")
+    p_install = sub.add_parser("install", help="One-click setup after pip install: cartridge + service + MCP")
     p_install.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
     p_install.add_argument("--clean", action="store_true", help="Remove local state before reinstalling")
     sub.add_parser("repair-install", help="Repair the local Python installation from the current workspace")
-    sub.add_parser("clean-install", help="Remove local state and reinstall everything from scratch")
+    sub.add_parser("clean-install", help="Reset local state and run setup again")
     p_uninstall = sub.add_parser("uninstall", help="Remove service registration and desktop integration")
     p_uninstall.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
-    sub.add_parser("desktop", help="Install and start the sustained service, then launch the desktop app if available")
+    sub.add_parser("desktop", help="Configure and start the service used by the separately installed desktop app")
 
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
@@ -507,8 +508,8 @@ def main() -> None:
                 allow_mutate=args.allow_mutate,
                 allow_private=args.allow_private
             )
-        except ImportError:
-            print("MCP dependencies missing. Please `pip install mcp pydantic`.")
+        except (ImportError, RuntimeError) as exc:
+            print(f"Unable to start MCP server: {exc}")
             raise SystemExit(1)
     elif args.cmd == "mcp-tools":
         try:
@@ -518,7 +519,14 @@ def main() -> None:
             print("MCP dependencies missing.")
             raise SystemExit(1)
     elif args.cmd == "mcp-test":
-        print("Starting MCP Test...")
+        from llm_kosh.mcp_server import get_mcp_tools_schema
+        ensure_root(root)
+        import json
+        tools = json.loads(get_mcp_tools_schema(root))
+        if not tools:
+            print("MCP self-test failed: no tools registered.")
+            raise SystemExit(1)
+        print(f"MCP self-test passed: {len(tools)} tools registered.")
     elif args.cmd == "reason":
         import sys
         if hasattr(sys.stdout, 'reconfigure'):
@@ -664,6 +672,7 @@ def main() -> None:
         if args.action in {"start", "stop", "restart", "status", "run"}:
             from llm_kosh.service import main as service_main
             import sys as _sys
+            os.environ["LLMKOSH_ROOT"] = str(root)
             _sys.argv = [_sys.argv[0], args.action]
             service_main()
         elif args.action == "install":

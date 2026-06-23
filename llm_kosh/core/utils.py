@@ -3,8 +3,9 @@ import hashlib
 import json
 import re
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Iterator, Tuple
 
 from .constants import UTC
 
@@ -68,21 +69,27 @@ GENESIS_HASH = "sha256:" + "0" * 64
 
 
 def _lock_file(f) -> None:
-    """Acquire an exclusive advisory lock (POSIX fcntl / Windows msvcrt)."""
-    try:
-        if hasattr(__import__("os"), "name") and __import__("os").name == "nt":
-            import msvcrt
-            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-    except Exception:
-        pass  # locking is best-effort; never block the write itself
+    """Acquire a mandatory-for-us process lock on the first byte of *f*.
+
+    A dedicated lock file is used by :func:`append_ledger`. Lock failures must
+    propagate: continuing without the lock can silently fork the hash chain.
+    """
+    import os
+
+    f.seek(0)
+    if os.name == "nt":
+        import msvcrt
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
 
 
 def _unlock_file(f) -> None:
     try:
-        if __import__("os").name == "nt":
+        import os
+        f.seek(0)
+        if os.name == "nt":
             import msvcrt
             msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
         else:
@@ -90,6 +97,22 @@ def _unlock_file(f) -> None:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     except Exception:
         pass
+
+
+@contextmanager
+def _ledger_lock(lock_path: Path) -> Iterator[None]:
+    """Serialize ledger/head updates across threads and processes."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+b") as lock_file:
+        # msvcrt cannot lock a byte beyond EOF, so ensure byte zero exists.
+        if lock_file.seek(0, 2) == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        _lock_file(lock_file)
+        try:
+            yield
+        finally:
+            _unlock_file(lock_file)
 
 
 def row_hash(row: dict) -> str:
@@ -131,10 +154,11 @@ def append_ledger(root: Path, event: str, payload: dict) -> None:
     import os
     ledger = root / "ledger" / "events.jsonl"
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    prev = _read_chain_head(ledger)
-    with ledger.open("a", encoding="utf-8") as f:
-        _lock_file(f)
-        try:
+    # Reading the previous hash, appending the row, and updating CHAIN_HEAD are
+    # one transaction. In particular, the read must happen *after* locking.
+    with _ledger_lock(ledger.parent / ".events.lock"):
+        prev = _read_chain_head(ledger)
+        with ledger.open("a", encoding="utf-8") as f:
             row = {"event_id": f"evt_{uuid.uuid4().hex}", "event": event,
                    "time": now_iso(), **payload, "prev": prev}
             row["row_hash"] = row_hash(row)
@@ -142,8 +166,6 @@ def append_ledger(root: Path, event: str, payload: dict) -> None:
             f.flush()
             os.fsync(f.fileno())
             atomic_write_text(ledger.parent / "CHAIN_HEAD", row["row_hash"] + "\n")
-        finally:
-            _unlock_file(f)
 
 
 def frontmatter(meta: Dict[str, object]) -> str:

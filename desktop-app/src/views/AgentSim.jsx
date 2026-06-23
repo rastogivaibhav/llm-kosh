@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Zap, CheckCircle, XCircle, PlayCircle, Loader,
   AlertTriangle, ChevronRight, Database, GitBranch,
@@ -189,7 +189,7 @@ export default function AgentSim({ config }) {
     }, 200);
   };
 
-  const readLatestSim = async () => {
+  const readLatestSim = useCallback(async () => {
     try {
       const api = window.llmKosh;
       if (!api?.runKoshCommand || !config?.cartridgeRoot) return null;
@@ -209,11 +209,11 @@ else:
       if (result?.stdout?.trim() !== 'null') return JSON.parse(result.stdout.trim());
     } catch { }
     return null;
-  };
+  }, [config?.cartridgeRoot]);
 
   useEffect(() => {
     readLatestSim().then(d => d && setSimData(d));
-  }, [config]);
+  }, [readLatestSim]);
 
   const runSim = async () => {
     setRunning(true); setError(null);

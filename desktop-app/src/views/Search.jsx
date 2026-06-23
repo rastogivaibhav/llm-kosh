@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../lib/api';
 import { Search as SearchIcon, Database, Zap, RefreshCcw, Box, Sliders as SlidersIcon } from 'lucide-react';
 
@@ -25,18 +25,7 @@ export default function Search({ config, setStatusMessage }) {
   const [cartridgeConfig, setCartridgeConfig] = useState(null);
   const debounceTimeoutRef = useRef(null);
 
-  useEffect(() => {
-    if (root) {
-      loadCartridgeConfig();
-    }
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current);
-      }
-    };
-  }, [root]);
-
-  const loadCartridgeConfig = async () => {
+  const loadCartridgeConfig = useCallback(async () => {
     try {
       const cfg = await api.readCartridgeConfig(root);
       if (cfg) {
@@ -54,7 +43,18 @@ export default function Search({ config, setStatusMessage }) {
     } catch (err) {
       console.error('Failed to load cartridge config', err);
     }
-  };
+  }, [root]);
+
+  useEffect(() => {
+    if (root) {
+      loadCartridgeConfig();
+    }
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, [loadCartridgeConfig, root]);
 
   const updateWeightsInConfig = async (newWeights) => {
     if (!root) return;

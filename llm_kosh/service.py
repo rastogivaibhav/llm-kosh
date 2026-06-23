@@ -32,6 +32,7 @@ from llm_kosh.pid import write_pid, read_pid, is_running, clear_pid
 
 _startup_time: float = time.time()
 _health_pid: int = os.getpid()
+_health_root: str = ""
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
@@ -43,6 +44,7 @@ class _HealthHandler(BaseHTTPRequestHandler):
                 "status": "ok",
                 "pid": _health_pid,
                 "uptime_s": int(time.time() - _startup_time),
+                "root": _health_root,
             }).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -128,13 +130,15 @@ class ServiceRunner:
 
     def run(self) -> None:
         """Main entry point: sets up everything and enters the run loop."""
-        global _health_pid, _startup_time
+        global _health_pid, _startup_time, _health_root
         _startup_time = time.time()
         _health_pid = os.getpid()
 
         self._config = get_global_config()
         env_root = os.environ.get("LLMKOSH_ROOT")
         cartridge_root = Path(env_root).expanduser().resolve() if env_root else get_default_cartridge_root()
+        cartridge_root = cartridge_root.expanduser().resolve()
+        _health_root = str(cartridge_root)
 
         self._handle_stale_pid()
         self._write_pid()
@@ -172,6 +176,8 @@ class ServiceRunner:
 
     def _handle_stale_pid(self) -> None:
         existing = read_pid(self._PID_PATH)
+        if existing and existing != os.getpid() and is_running(existing):
+            raise SystemExit(f"llm-kosh service is already running (pid={existing})")
         if existing and not is_running(existing):
             clear_pid(self._PID_PATH)
 
@@ -327,7 +333,10 @@ def maybe_spawn(root: Optional[Path] = None) -> None:
     if root is not None:
         env["LLMKOSH_ROOT"] = str(root)
 
-    cmd = [sys.executable, "-m", "llm_kosh.service", "run"]
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "service", "run"]
+    else:
+        cmd = [sys.executable, "-m", "llm_kosh.service", "run"]
     if sys.platform == "win32":
         spawn_kwargs: dict = {"creationflags": 0x00000008}  # DETACHED_PROCESS
     else:
@@ -443,9 +452,10 @@ def main() -> None:
             health = _health_check()
             pid = _get_pid()
             uptime = health.get("uptime_s", "?")
-            print("Daemon running (pid=%d, uptime=%ss)" % (pid, uptime))
+            root = health.get("root", "?")
+            print("Service running (pid=%d, uptime=%ss, root=%s)" % (pid, uptime, root))
         else:
-            print("Daemon is not running.")
+            print("Service is not running.")
             raise SystemExit(1)
 
 

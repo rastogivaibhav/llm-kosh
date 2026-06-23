@@ -1,10 +1,11 @@
-# Desktop v0.1 Release Checklist
+# Desktop Release Checklist
 
 Before tagging and building a release for `llm-kosh` desktop, perform the following verification:
 
 ## 1. Automated Tests
 - [ ] Run `npm run test` in the `desktop-app` directory.
 - [ ] Ensure all Jest suites (security, config, resolver, smoke) pass with 100% success.
+- [ ] Run `npm run lint -- --max-warnings=0`.
 
 ## 2. Onboarding Flow
 - [ ] Clear `~/.config/llm-kosh-config.json` (or equivalent `userData` path).
@@ -34,3 +35,6 @@ Before tagging and building a release for `llm-kosh` desktop, perform the follow
 - [ ] Verify the "CLI Missing" state is clear if the path is invalid.
 - [ ] Verify the renderer has no raw `fs` access (e.g. no errors logged in developer console about Node modules).
 - [ ] Ensure no external network calls are required to use the Prompt Library.
+- [ ] Verify the bundled sidecar exists at `resources/bin/llm-kosh` (or `.exe`).
+- [ ] Verify Windows installers and executables have a valid Authenticode signature.
+- [ ] Verify the macOS app is Developer ID signed and notarized; do not publish an unsigned DMG as GA.

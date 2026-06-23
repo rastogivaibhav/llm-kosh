@@ -19,10 +19,14 @@ The service:
 - resolves the cartridge root;
 - validates or initializes expected runtime paths;
 - processes recurring daemon jobs;
-- watches `receipts/` and `intake/` when `watchdog` is available;
+- watches `receipts/`, `intake/`, and any configured external folders when `watchdog` is available;
 - falls back to polling when `watchdog` is unavailable;
 - exposes a local health endpoint;
 - records PID and rotating logs under the llm-kosh home directory.
+
+External folder watching comes from `[daemon].watched_directories` in the
+global config. Use it for ingress folders such as editor or automation export
+directories when you want the service to absorb new files automatically.
 
 ## Environment
 

@@ -107,6 +107,36 @@ class _IntakeFolderHandler(_FSEventHandler):  # type: ignore[misc]
             self._log.warning("daemon_once after intake event failed: %s", exc)
 
 
+class _ExternalFolderHandler(_FSEventHandler):  # type: ignore[misc]
+    def __init__(self, root: Path, logger: logging.Logger) -> None:
+        super().__init__()
+        self._root = root
+        self._log = logger
+
+    def on_created(self, event: object) -> None:  # type: ignore[override]
+        self._handle(event)
+
+    def on_modified(self, event: object) -> None:  # type: ignore[override]
+        self._handle(event)
+
+    def _handle(self, event: object) -> None:
+        if getattr(event, "is_directory", False):
+            return
+        src = Path(getattr(event, "src_path", ""))
+        if not src.name or src.name.startswith("."):
+            return
+        if src.suffix.lower() in {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}:
+            return
+        try:
+            from llm_kosh.engine.intake import intake_file_or_dir
+            intake_file_or_dir(self._root, src)
+            from llm_kosh.daemon import daemon_once
+            daemon_once(self._root)
+            self._log.info("External file ingested by watchdog: %s", src)
+        except Exception as exc:
+            self._log.warning("external file event failed for %s: %s", src, exc)
+
+
 # ---------------------------------------------------------------------------
 # ServiceRunner
 # ---------------------------------------------------------------------------
@@ -256,7 +286,19 @@ class ServiceRunner:
         intake_obs.start()
         self._observers.append(intake_obs)
 
-        log.info("Watchdog observers started for receipts/ and intake/")
+        watched_dirs = self._config.get("daemon", {}).get("watched_directories", [])
+        for watched in watched_dirs:
+            watched_path = Path(watched).expanduser()
+            if not watched_path.exists() or not watched_path.is_dir():
+                log.warning("Skipping external watch path that does not exist: %s", watched_path)
+                continue
+            external_obs = _Observer()
+            external_obs.schedule(_ExternalFolderHandler(root, log), str(watched_path), recursive=True)
+            external_obs.start()
+            self._observers.append(external_obs)
+            log.info("Watchdog observer started for external folder: %s", watched_path)
+
+        log.info("Watchdog observers started for receipts/, intake/, and configured external folders")
 
     def _run_loop(self, root: Path) -> None:
         daemon_cfg = self._config.get("daemon", {})

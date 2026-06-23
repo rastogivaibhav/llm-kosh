@@ -4,6 +4,7 @@ from llm_kosh.cli import main
 from llm_kosh.engine.search import rebuild_index
 
 def test_workbench_build(tmp_path, monkeypatch):
+    monkeypatch.setenv("LLMKOSH_NO_AUTOSPAWN", "1")
     root = tmp_path / "cart"
     # init
     monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
@@ -42,6 +43,7 @@ def test_workbench_build(tmp_path, monkeypatch):
     assert "private/blocked item(s) excluded" not in idx_priv
 
 def test_workbench_export(tmp_path, monkeypatch):
+    monkeypatch.setenv("LLMKOSH_NO_AUTOSPAWN", "1")
     root = tmp_path / "cart2"
     monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()
@@ -54,6 +56,7 @@ def test_workbench_export(tmp_path, monkeypatch):
     assert zip_path.exists()
 
 def test_workbench_clean(tmp_path, monkeypatch):
+    monkeypatch.setenv("LLMKOSH_NO_AUTOSPAWN", "1")
     root = tmp_path / "cart3"
     monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()

@@ -4,6 +4,7 @@ from llm_kosh.cli import main
 import json
 
 def test_receipt_trust_flow(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LLMKOSH_NO_AUTOSPAWN", "1")
     root = tmp_path / "cart"
     monkeypatch.setattr("sys.argv", ["llm-kosh", "--root", str(root), "init"])
     main()

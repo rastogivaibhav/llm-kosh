@@ -5,6 +5,9 @@ exports/tmp-pack-*/
 .pytest_cache/
 .coverage
 .coveragerc
+dist/
+build/
+*.egg-info/
 AI-Cartridge/
 demo_cartridge/
 demo_fixture.json

@@ -6,12 +6,12 @@
     "url": "https://github.com/rastogivaibhav/llm-kosh",
     "source": "github"
   },
-  "version": "2.1.1",
+  "version": "2.1.2",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "llm-kosh",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "transport": {
         "type": "stdio"
       },

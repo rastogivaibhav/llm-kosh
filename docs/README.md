@@ -23,6 +23,7 @@ Start here when changing or operating `llm-kosh`.
 
 - [Developer guide](DEVELOPER_GUIDE.md)
 - [Developer FAQ](DEVELOPER_FAQ.md)
+- [GA handoff](GA_HANDOFF.md)
 - [MCP developer guide](MCP_DEVELOPER_GUIDE.md)
 - [Service developer guide](SERVICE_DEVELOPER_GUIDE.md)
 - [Desktop developer guide](DESKTOP_DEVELOPER_GUIDE.md)

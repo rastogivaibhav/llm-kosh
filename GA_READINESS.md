@@ -10,6 +10,9 @@ Date: 2026-06-23
 
 ## Verified locally
 
+These items were verified in the current work session and are no longer
+just aspirational:
+
 - Python suite: 588 passed, 6 explicitly skipped real-cartridge tests.
 - Windows concurrent ledger stress: 100 writes preserve one intact hash chain.
 - Portable wheel: `py3-none-any`, accepted by `twine check`, installed in a clean virtual environment.
@@ -21,7 +24,22 @@ Date: 2026-06-23
 - Frozen Windows sidecar: init, status, MCP self-test, and streamable HTTP passed.
 - Windows NSIS installer: built with the sidecar at `resources/bin/llm-kosh.exe` and tray icon at `resources/icon.png`.
 
+## Verified in this session
+
+These are the newest checks we completed while updating the repo:
+
+- Top-level README refresh and developer FAQ additions were committed and pushed.
+- Service runtime now supports configured external folder watching via
+  `[daemon].watched_directories`.
+- `python -m pytest tests/test_service_lifecycle.py tests/test_ga_lifecycle.py -q`
+  passed locally.
+- GitHub Actions publish workflows were run from the current branch and passed
+  for the Python package and MCP registry after the version bump to `2.1.2`.
+
 ## Remaining release gates
+
+These are still the true GA gaps. They are documented requirements, not
+historical assumptions:
 
 1. Let the expanded GitHub Actions matrix pass on Python 3.10-3.13 across Windows, macOS, and Linux.
 2. Configure a Windows code-signing certificate and verify Authenticode on the installer and bundled executables. The local test artifact is unsigned.
@@ -30,6 +48,10 @@ Date: 2026-06-23
 5. Review or accept the remaining npm audit findings: no high/critical findings remain; the reported findings are low/moderate development/test-tool dependencies.
 
 ## GitHub Actions release path
+
+This section describes the intended release path. The workflow definitions are
+current, but not every gate listed here has been exercised on every platform in
+this session:
 
 - `test.yml` exercises the Python matrix on pushes and pull requests.
 - `publish.yml` builds, wheel-smokes, validates, and publishes the PyPI package through trusted publishing.

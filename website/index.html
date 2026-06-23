@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LlmKosh - DevOps for LLM Context</title>
+    <title>llm-kosh - Local-First Memory for MCP Clients</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -48,7 +48,6 @@
         .logo-text { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent-start), var(--accent-end)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
         .nav-links a { color: var(--text-muted); text-decoration: none; margin-left: 2rem; font-weight: 500; transition: color 0.2s; }
         .nav-links a:hover { color: var(--text-main); }
-        
         .hero {
             padding: 8rem 5%;
             text-align: center;
@@ -57,7 +56,6 @@
         }
         .hero h1 { font-size: 4rem; line-height: 1.1; margin-bottom: 1.5rem; letter-spacing: -2px; color: #111827; }
         .hero p { font-size: 1.25rem; color: var(--text-muted); margin-bottom: 2.5rem; }
-        
         .cta-buttons { display: flex; gap: 1rem; justify-content: center; }
         .btn {
             padding: 0.75rem 1.5rem;
@@ -79,7 +77,6 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.05);
         }
         .btn-secondary:hover { border-color: #d1d5db; background-color: #f9fafb; }
-
         .terminal {
             background-color: #111827;
             border-radius: 12px;
@@ -93,7 +90,7 @@
             position: relative;
         }
         .terminal::before {
-            content: "• • •";
+            content: "...";
             position: absolute;
             top: 10px;
             left: 15px;
@@ -103,7 +100,6 @@
         }
         .terminal code { display: block; margin-top: 1rem; color: #d1d5db; }
         .prompt { color: var(--accent-start); }
-
         .features {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -122,7 +118,6 @@
         }
         .card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.05); border-color: #fdba74; }
         .card h3 { color: #111827; margin-bottom: 1rem; font-size: 1.5rem; }
-
         .download-section {
             padding: 5rem 5%;
             text-align: center;
@@ -177,8 +172,9 @@
             opacity: 0.7;
         }
         .os-icon {
-            font-size: 3rem;
+            font-size: 1.8rem;
             margin-bottom: 1rem;
+            font-weight: 700;
         }
         .download-card h3 {
             font-size: 1.5rem;
@@ -206,56 +202,55 @@
 
     <nav>
         <a href="index.html" class="brand">
-            <img src="logo.png" alt="LlmKosh Logo">
-            <span class="logo-text">LlmKosh</span>
+            <img src="logo.png" alt="llm-kosh logo">
+            <span class="logo-text">llm-kosh</span>
         </a>
         <div class="nav-links">
             <a href="docs.html">Documentation</a>
-            <a href="docs.html#receipts">Memory Receipts</a>
+            <a href="docs.html#receipts">Receipt Workflow</a>
             <a href="#download">Download</a>
             <a href="https://github.com/rastogivaibhav/llm-kosh">GitHub</a>
         </div>
     </nav>
 
     <section class="hero">
-        <h1>Your Local LLM Context Engine</h1>
-        <p>Stop copy-pasting code into ChatGPT. Compile your projects, prompts, and architecture decisions into secure, bootable context packs for any LLM.</p>
-        
+        <h1>Local-first memory for MCP-compatible AI clients</h1>
+        <p>Keep memory on your machine, expose it through a read-only-by-default MCP server, and manage context with a plain-file cartridge, local search, and a tamper-evident ledger.</p>
+
         <div class="cta-buttons">
-            <a href="docs.html" class="btn btn-primary">Get Started</a>
-            <a href="docs.html#receipts" class="btn btn-secondary">Learn about Receipts</a>
+            <a href="docs.html#quickstart" class="btn btn-primary">Get Started</a>
+            <a href="docs.html#receipts" class="btn btn-secondary">Receipt Workflow</a>
         </div>
 
         <div class="terminal">
-            <code><span class="prompt">$</span> llm-kosh pack "Backend Architecture" --for chatgpt --out context.zip</code>
-            <code>✓ Packed 14 files (12,400 tokens)</code>
-            <code>✓ Scanned for secrets (Safe)</code>
-            <code>✓ Ready for ChatGPT</code>
+            <code><span class="prompt">$</span> python -m pip install --upgrade llm-kosh</code>
+            <code><span class="prompt">$</span> llm-kosh install --yes</code>
+            <code><span class="prompt">$</span> llm-kosh status</code>
         </div>
     </section>
 
     <section id="download" class="download-section">
         <h2>Download llm-kosh Desktop</h2>
-        <p class="download-subtitle">Get the local desktop app with interactive UI, automatic sidecar daemon, and system tray management.</p>
+        <p class="download-subtitle">Use the desktop app for local service control, MCP status, and cartridge workflows. Public desktop GA still depends on platform signing and notarization.</p>
         <div class="download-grid">
             <div class="download-card primary-download">
-                <div class="os-icon">🪟</div>
+                <div class="os-icon">Windows</div>
                 <h3>Windows</h3>
                 <p>Windows 10 / 11 (64-bit)</p>
-                <a href="https://github.com/rastogivaibhav/llm-kosh/releases/download/v0.2.0-desktop/llm-kosh-Setup-0.2.0.exe" id="download-win-btn" class="btn btn-primary download-btn">Download Installer (.exe)</a>
-                <span class="download-meta">v0.2.0 | Standard Installer</span>
+                <a href="https://github.com/rastogivaibhav/llm-kosh/releases/latest/download/llm-kosh-desktop-windows.exe" id="download-win-btn" class="btn btn-primary download-btn">Download Latest Windows Build</a>
+                <span class="download-meta">Release artifact from GitHub Releases</span>
             </div>
             <div class="download-card disabled-download">
-                <div class="os-icon">🍎</div>
+                <div class="os-icon">macOS</div>
                 <h3>macOS</h3>
-                <p>Apple Silicon / Intel (Coming Soon)</p>
-                <button class="btn btn-secondary download-btn" disabled>Coming Soon</button>
+                <p>Apple Silicon and Intel builds exist, but public GA still requires Developer ID signing and notarization.</p>
+                <button class="btn btn-secondary download-btn" disabled>Release Candidate</button>
             </div>
             <div class="download-card disabled-download">
-                <div class="os-icon">🐧</div>
+                <div class="os-icon">Linux</div>
                 <h3>Linux</h3>
-                <p>Ubuntu / Debian / AppImage (Coming Soon)</p>
-                <button class="btn btn-secondary download-btn" disabled>Coming Soon</button>
+                <p>AppImage and deb build paths exist, but clean-host packaging validation is still pending.</p>
+                <button class="btn btn-secondary download-btn" disabled>Release Candidate</button>
             </div>
         </div>
     </section>
@@ -263,15 +258,15 @@
     <section class="features">
         <div class="card">
             <h3>Local-First</h3>
-            <p>Your files stay on your machine. Everything is backed by plain Markdown files and a local SQLite vector database. Zero cloud vendor lock-in.</p>
+            <p>Your files stay on your machine. Memory lives in plain files, local search stays local, and the cartridge remains inspectable and backup-friendly.</p>
         </div>
         <div class="card">
-            <h3>Secret Scanning</h3>
-            <p>Never accidentally upload your AWS keys to Claude again. LlmKosh statically analyzes your code before packing it.</p>
+            <h3>Capability-Gated MCP</h3>
+            <p>The MCP server starts read-only. Stronger write, mutation, and private-export capabilities must be enabled explicitly.</p>
         </div>
         <div class="card">
-            <h3>Memory Receipts</h3>
-            <p>When the LLM finishes a task, ask it for a <code>MEMORY_RECEIPT</code>. LlmKosh automatically parses this receipt into permanent, typed knowledge for the future.</p>
+            <h3>Receipt Workflow</h3>
+            <p>Capture structured AI output as a <code>MEMORY_RECEIPT</code>, validate it, review it, and absorb approved changes into durable cartridge memory.</p>
         </div>
     </section>
 

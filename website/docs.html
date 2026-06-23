@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LlmKosh Documentation</title>
+    <title>llm-kosh Documentation</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -48,7 +48,6 @@
         .logo-text { font-size: 1.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent-start), var(--accent-end)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; }
         nav a:not(.brand) { display: block; color: var(--text-muted); text-decoration: none; margin-bottom: 1rem; transition: color 0.2s, padding-left 0.2s; font-weight: 500; }
         nav a:not(.brand):hover, nav a.active { color: var(--accent-start); padding-left: 5px; }
-        
         main {
             flex: 1;
             padding: 4rem 8%;
@@ -58,7 +57,6 @@
         h2 { font-size: 2rem; margin-top: 3rem; margin-bottom: 1rem; color: #111827; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
         h3 { font-size: 1.5rem; margin-top: 2rem; margin-bottom: 1rem; color: #374151; }
         p { margin-bottom: 1.5rem; color: var(--text-muted); font-size: 1.1rem; }
-        
         pre {
             background-color: #111827;
             padding: 1.5rem;
@@ -70,7 +68,6 @@
             box-shadow: 0 10px 20px rgba(0,0,0,0.05);
         }
         code { font-family: monospace; }
-        
         .alert {
             background-color: var(--bg-card);
             border-left: 4px solid var(--accent-start);
@@ -89,43 +86,57 @@
 
     <nav>
         <a href="index.html" class="brand">
-            <img src="logo.png" alt="LlmKosh Logo">
-            <span class="logo-text">LlmKosh</span>
+            <img src="logo.png" alt="llm-kosh logo">
+            <span class="logo-text">llm-kosh</span>
         </a>
         <a href="#intro">Introduction</a>
         <a href="#quickstart">Quickstart</a>
         <a href="#receipts" class="active">Memory Receipts</a>
-        <a href="#daemon">Watchdog Daemon</a>
+        <a href="#service">Background Service</a>
     </nav>
 
     <main>
         <h1 id="intro">Documentation</h1>
-        <p>LlmKosh is a DevOps pipeline for your AI context. It treats your architectural decisions, prompts, and knowledge as source code.</p>
+        <p>llm-kosh is a local-first memory cartridge for MCP-compatible AI clients. It stores memory as plain files, exposes local retrieval through CLI and MCP, and records mutations in a tamper-evident ledger.</p>
+
+        <h2 id="quickstart">Quickstart</h2>
+        <p>Install the base package, create the default cartridge, and verify the local runtime:</p>
+
+        <pre><code>python -m pip install --upgrade llm-kosh
+llm-kosh install --yes
+llm-kosh status</code></pre>
 
         <h2 id="receipts">The Memory Receipt Concept</h2>
-        <p>A major problem with chat interfaces like ChatGPT or Claude is that once a conversation ends, the context is lost forever. You might have made 10 brilliant architectural decisions in a chat thread, but your codebase doesn't know about them.</p>
-        
+        <p>Receipts are the safe path for bringing useful AI output back into local memory. Instead of letting a chat session directly change cartridge state, you save structured output as a <code>MEMORY_RECEIPT</code>, then validate and review it before absorption.</p>
+
         <p><strong>The solution is the <code>MEMORY_RECEIPT</code>.</strong></p>
 
-        <p>When you use LlmKosh to generate a context pack for an LLM, you also give the LLM an instruction:</p>
-        
+        <p>When you work with an LLM, ask it to return a structured receipt of what was learned, proposed, or changed:</p>
+
         <div class="alert">
-            <p><em>"At the end of our work, you must return a MEMORY_RECEIPT detailing what we learned, what decisions we made, and what code was generated."</em></p>
+            <p><em>"At the end of our work, return a MEMORY_RECEIPT describing decisions, findings, and proposed changes."</em></p>
         </div>
 
         <h3>How it works</h3>
-        <p>The LLM will generate a markdown block formatted as a receipt. You simply save this output as a file (e.g., <code>MEMORY_RECEIPT.md</code>) in your local LlmKosh workspace, and run the absorb command:</p>
+        <p>Save the receipt to your workspace, validate it, inspect the diff, and then absorb it if it looks correct:</p>
 
-        <pre><code>$ llm-kosh absorb MEMORY_RECEIPT.md</code></pre>
+        <pre><code>llm-kosh validate-receipt MEMORY_RECEIPT.md
+llm-kosh review-receipt MEMORY_RECEIPT.md
+llm-kosh absorb MEMORY_RECEIPT.md</code></pre>
 
-        <p>LlmKosh parses the receipt, splits it into strongly-typed local files (<code>decisions/</code>, <code>notes/</code>, <code>projects/</code>), and links them cryptographically using provenance hashes. Next time you pack context for the LLM, the LLM will remember exactly what it did last time!</p>
+        <p>Approved receipts become typed local memory and future context for search, packing, and MCP-based retrieval.</p>
 
-        <h2 id="daemon">Automating with the Daemon</h2>
-        <p>Tired of manually absorbing receipts? LlmKosh comes with a background watcher.</p>
-        
-        <pre><code>$ llm-kosh watch</code></pre>
-        
-        <p>If you save any file matching <code>MEMORY_RECEIPT*.md</code> into your <code>receipts/</code> folder, the daemon will instantly detect it, parse it into knowledge, auto-resolve any architectural corrections, and archive the raw receipt into a processed folder safely.</p>
+        <h2 id="service">Automating with the Background Service</h2>
+        <p>The sustained service watches intake and receipt folders, maintains derived indexes, and exposes a local health surface.</p>
+
+        <pre><code>llm-kosh service start
+llm-kosh service status
+llm-kosh service stop</code></pre>
+
+        <p>MCP is included in the base installation and starts read-only by default:</p>
+
+        <pre><code>llm-kosh --root ./my-cartridge mcp-server
+llm-kosh --root ./my-cartridge mcp-test</code></pre>
     </main>
 
 </body>

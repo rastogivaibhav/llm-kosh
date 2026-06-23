@@ -127,5 +127,6 @@ the portable pure-Python fallback.
 - [Release engineering](docs/RELEASE_ENGINEERING.md)
 - [Documentation standards](docs/DOCUMENTATION_STANDARDS.md)
 - [GA readiness](GA_READINESS.md)
+- [Archived historical docs](docs/archive/README.md)
 
 Licensed under the MIT License.

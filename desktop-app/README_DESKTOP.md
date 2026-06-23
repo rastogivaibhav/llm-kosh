@@ -47,7 +47,6 @@ For Phase 7, we should explore packaging the Electron app into a standalone inst
 For instructions on how to build installers (`.exe`, `.dmg`, `.AppImage`) using `electron-builder`, see [DESKTOP_PACKAGING.md](DESKTOP_PACKAGING.md).
 
 ## Documentation Index
-- [UI Design Spec](./DESKTOP_UI_SPEC.md)
 - [Packaging Instructions](./DESKTOP_PACKAGING.md)
 - [Sidecar Bundle Architecture](../SIDECAR.md)
 - [Daemon & Auto-Start](./DESKTOP_DAEMON.md)

@@ -32,3 +32,7 @@ Start here when changing or operating `llm-kosh`.
 
 Product and research notes are useful context, but they should not override the
 GA gates, security model, or release runbooks above.
+
+## Archive
+
+- [Historical docs and reports](archive/README.md)

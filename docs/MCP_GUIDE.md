@@ -66,3 +66,6 @@ You can inspect registration without starting a transport:
 llm-kosh --root ./my-cartridge mcp-test
 llm-kosh --root ./my-cartridge mcp-tools
 ```
+
+For tool authoring, manifest validation, and release publishing notes, see
+[MCP developer guide](MCP_DEVELOPER_GUIDE.md).

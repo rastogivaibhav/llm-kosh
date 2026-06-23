@@ -1,68 +1,145 @@
-# Architecture Overview
+# Architecture
 
-`llm-kosh` is a self-contained operating system for AI interaction context. It is composed of highly decoupled layers that separate data ingestion from retrieval, background maintenance, and client interfaces.
+`llm-kosh` is a local memory runtime with four main responsibilities:
 
-## 1. Separation of Concerns
+1. Store typed memory in a cartridge directory.
+2. Index that memory for retrieval.
+3. Expose safe local interfaces for humans, tools, and MCP clients.
+4. Maintain an append-only ledger for auditability.
 
-1. **The Core Engine:** The source of truth. Handles the filesystem-backed storage of typed memories (e.g., `decision`, `project`, `prompt`). It enforces structural schema and handles transactional backups.
-2. **The Intake/Processor Pipeline:** The "Inbox". Raw files are dumped here. The control plane (`intake`) scans them, and declarative `processor` rules parse them to automatically suggest structured memory proposals.
-3. **The Search Indices (FTS & Vector):** Memories are indexed using standard Full-Text Search (`index`) and semantically embedded (`embed`) via TF-IDF or local `sentence-transformers` for deep query resolution.
-4. **The Background Service:** A background process running in `watchdog` or `polling` modes. It continuously audits the cartridge, self-heals broken links, updates search indices, and processes background jobs.
+The design goal is a small, inspectable system that can run on a developer
+machine without a hosted control plane.
 
-## 2. The Client Ecosystem
+## Component map
 
-While the CLI is the foundation, `llm-kosh` provides diverse UI surfaces that act as lightweight clients communicating with the Core Engine:
-- **The Electron Desktop App:** A graphical dashboard for controlling the service, configuring Watched Folders, and managing outbound packs and inbound receipts via secure IPC channels.
-- **The Local Workbench (`llm-kosh workbench`):** A browser-based interface served over local HTTP for rapid exploration and visualization of the memory map.
-- **The MCP Server (`llm-kosh mcp-server`):** A Model Context Protocol server that allows modern AI IDEs (like Claude Desktop) to connect directly to the cartridge via `stdio` or HTTP, enabling live context retrieval.
+```mermaid
+flowchart LR
+    User["User or local automation"]
+    CLI["Python CLI"]
+    Service["Background service"]
+    MCP["MCP server"]
+    Desktop["Electron desktop app"]
+    Cartridge["Cartridge directory"]
+    Ledger["Tamper-evident ledger"]
+    Search["SQLite FTS / optional semantic index"]
 
-## 3. The Storage Paradigm
+    User --> CLI
+    User --> Desktop
+    Desktop --> CLI
+    CLI --> Cartridge
+    Service --> Cartridge
+    MCP --> Cartridge
+    Cartridge --> Ledger
+    Cartridge --> Search
+```
 
-`llm-kosh` innovates by treating your local disk as a highly-structured database.
+## Cartridge storage
 
-- **Disk as Database:** All memory nodes are stored as flat Markdown files with strict YAML frontmatter. This means your AI memory is natively **version-controllable (Git-friendly)**, completely transparent, human-readable, and free from opaque vendor lock-in.
-- **The Event-Sourced Ledger:** Every single mutation (adding a memory, absorbing a receipt, healing a link) is appended to an immutable, append-only ledger (`verify-ledger`). This guarantees that all AI interactions and system changes are 100% auditable.
-- **Schema Evolution & Migrations:** Data structures evolve. The built-in migration engine (`llm-kosh migrate`) handles backwards compatibility and schema drift, ensuring zero-downtime upgrades for your local files when the `llm-kosh` standards update.
+A cartridge is a normal directory. The important properties are:
 
-## 4. The Context Loop (Pack & Absorb)
+- memory objects are represented as human-readable files;
+- structured metadata is stored with each object;
+- derived indexes can be rebuilt from source files;
+- mutations append events to the ledger;
+- backups and Git workflows can operate on the cartridge without a database
+  server.
 
-The core workflow relies on a bidirectional loop with the LLM, coupled with a live IDE integration.
+The ledger is not a replacement for backups or encryption. It records event
+order and hash continuity so corruption or unexpected mutation is easier to
+detect.
 
-> [!TIP]
-> **The Pack & Absorb Philosophy:** Never let an AI modify your code or context directly without an auditable paper trail. You `pack` what it needs, and you `absorb` its receipt.
+## Runtime surfaces
+
+### CLI
+
+The CLI is the primary interface. It owns cartridge initialization, memory
+creation, search, pack generation, receipt validation, ledger verification,
+MCP startup, and service control.
+
+### MCP server
+
+`llm-kosh mcp-server` exposes cartridge tools to MCP clients. The default mode
+is read-only. Write, mutation, and private-export operations are gated by
+explicit capability flags and policy checks.
+
+Supported transports:
+
+- `stdio` for desktop AI clients;
+- local streamable HTTP bound to `127.0.0.1` for local development and tests.
+
+### Background service
+
+`llm-kosh service` runs local maintenance work. It can watch intake and receipt
+folders when `watchdog` is installed, and falls back to polling otherwise. The
+service exposes a local health endpoint on `127.0.0.1`.
+
+### Desktop app
+
+The desktop app is a GUI client around the same CLI/service/MCP surfaces. The
+renderer is isolated from Node APIs. Filesystem and process operations go
+through explicit IPC handlers in the Electron main process.
+
+## Pack and receipt loop
+
+The safest collaboration path with an LLM is explicit export and explicit
+absorption:
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant IDE as MCP Server
-    participant Cartridge as Core Engine
-    participant Daemon as Daemon OS
+    participant CLI
+    participant Cartridge
     participant LLM
-    
-    %% Background Loop
-    loop Background
-        Daemon->>Cartridge: Watchdog audits, heals links, builds indices
-    end
 
-    %% Live IDE Loop
-    User->>IDE: Prompts in Claude Desktop
-    IDE-->>Cartridge: Reads context via stdio (Live)
-    
-    %% Pack Phase
-    User->>Cartridge: `llm-kosh pack --query "Optimize DB"`
-    Cartridge-->>User: Returns sanitized `context.zip`
-    User->>LLM: Uploads zip + prompt
-    
-    %% Absorb Phase
-    LLM-->>User: Generates `MEMORY_RECEIPT.md` (AI output)
-    User->>Cartridge: `llm-kosh absorb receipt.md`
-    Cartridge->>Cartridge: Validates, Reviews, Commits, and updates Ledger
+    User->>CLI: safe-pack query
+    CLI->>Cartridge: read selected memory
+    CLI-->>User: context pack
+    User->>LLM: provide pack and task
+    LLM-->>User: MEMORY_RECEIPT.md
+    User->>CLI: validate/review receipt
+    CLI->>Cartridge: absorb approved changes
+    CLI->>Cartridge: append ledger event
 ```
 
-## 5. Security Boundaries & Defensive Architecture
+This keeps generated changes reviewable before they become cartridge memory.
 
-> [!IMPORTANT]  
-> All exports (`pack`) pass through a rigid security layer that checks local `policy`, masks secrets (`redact`), and filters by visibility (`private` vs `shareable`).
+## Security boundaries
 
-**The Quarantine Airlock:** 
-Architecturally, `quarantine` acts as a Dead Letter Queue for AI hallucinations and secrets. If the `intake` pipeline or the self-healing engine detects anomalous, malformed, or highly sensitive outputs that violate export policies, it intercepts them and throws them into the Quarantine Zone (`llm-kosh quarantine`). This defensive boundary ensures the core memory graph is never corrupted by bad LLM outputs.
+- The MCP server is read-only unless capability flags are enabled.
+- Private context export is separated from normal read/write permissions.
+- Pack generation runs secret-pattern checks before producing shareable output.
+- Untrusted AI output should enter through receipt validation or intake review.
+- The desktop renderer cannot directly access arbitrary filesystem or process
+  APIs.
+- Local data is plaintext unless the host operating system encrypts the disk.
+
+## Packaging model
+
+The Python package is the canonical runtime. Desktop builds bundle a frozen
+sidecar executable produced from the same Python entry points. The sidecar is
+placed at `resources/bin/llm-kosh` or `resources/bin/llm-kosh.exe`.
+
+Public desktop GA releases require platform signing:
+
+- Windows: Authenticode signatures on installer and bundled executables.
+- macOS: Developer ID signing and notarization.
+- Linux: clean-host AppImage/deb smoke tests.
+
+## Operational checks
+
+Useful health checks:
+
+```bash
+llm-kosh status
+llm-kosh verify-ledger
+llm-kosh mcp-test
+llm-kosh service status
+```
+
+Useful developer checks:
+
+```bash
+python -m pytest -q
+python -m build
+python -m json.tool server.json
+```

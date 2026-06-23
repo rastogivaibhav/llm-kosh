@@ -90,6 +90,9 @@ developer builds and Windows installer smoke tests are supported. Public GA
 desktop distribution still requires verified Windows code signing and macOS
 Developer ID signing/notarization.
 
+For the current release posture across package, MCP, service, and desktop,
+see [GA_READINESS.md](GA_READINESS.md).
+
 ## Security model
 
 - Storage and search are local by default.

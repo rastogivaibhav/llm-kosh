@@ -14,8 +14,8 @@ Start here when changing or operating `llm-kosh`.
 ## Architecture and operations
 
 - [Architecture](ARCHITECTURE.md)
-- [Daemon guide](DAEMON_GUIDE.md)
-- [Daemon OS details](DAEMON_OS.md)
+- [Service guide](DAEMON_GUIDE.md)
+- [Service OS details](DAEMON_OS.md)
 - [Installer smoke-test matrix](INSTALLER_SMOKE_TEST_MATRIX.md)
 - [GA readiness](../GA_READINESS.md)
 

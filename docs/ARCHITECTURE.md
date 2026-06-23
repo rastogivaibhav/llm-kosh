@@ -71,7 +71,8 @@ Supported transports:
 
 `llm-kosh service` runs local maintenance work. It can watch intake and receipt
 folders when `watchdog` is installed, and falls back to polling otherwise. The
-service exposes a local health endpoint on `127.0.0.1`.
+service exposes a local health endpoint on `127.0.0.1`. The older `daemon`
+command name remains only as a compatibility alias.
 
 ### Desktop app
 

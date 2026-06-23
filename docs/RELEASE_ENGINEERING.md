@@ -15,6 +15,14 @@ As of the GA readiness review:
 
 See [GA_READINESS.md](../GA_READINESS.md).
 
+Hosted automation currently lives in these workflows:
+
+- `.github/workflows/test.yml` — cross-platform Python test matrix
+- `.github/workflows/publish.yml` — build, validate, and publish the PyPI package
+- `.github/workflows/publish-mcp.yml` — publish `server.json` to the MCP registry after PyPI succeeds
+- `.github/workflows/desktop.yml` — build CLI binaries and desktop artifacts
+- `.github/workflows/pages.yml` — deploy `website/` to GitHub Pages
+
 ## Python package
 
 Build and inspect distributions:
@@ -56,7 +64,8 @@ mcp-publisher publish server.json
 ```
 
 Publishing is an external release action. Do not run it from an unreviewed
-working tree.
+working tree. In GitHub Actions, publish `server.json` from the same commit SHA
+that produced the PyPI package artifact.
 
 ## CLI and service checks
 

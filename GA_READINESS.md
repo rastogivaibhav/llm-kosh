@@ -29,6 +29,18 @@ Date: 2026-06-23
 4. Build and smoke-test the Linux AppImage/deb on a clean Linux host.
 5. Review or accept the remaining npm audit findings: no high/critical findings remain; the reported findings are low/moderate development/test-tool dependencies.
 
+## GitHub Actions release path
+
+- `test.yml` exercises the Python matrix on pushes and pull requests.
+- `publish.yml` builds, wheel-smokes, validates, and publishes the PyPI package through trusted publishing.
+- `publish-mcp.yml` publishes `server.json` to the MCP registry after the PyPI workflow succeeds on `master`, or by manual dispatch.
+- `desktop.yml` builds CLI sidecars and desktop artifacts on release publish or manual dispatch.
+- `pages.yml` deploys the `website/` folder to GitHub Pages.
+
+The MCP publish workflow should always use the exact commit SHA that produced
+the published package so `server.json`, `pyproject.toml`, and the uploaded
+artifact version stay aligned.
+
 ## Desktop signing configuration
 
 The desktop packaging config no longer forces unsigned macOS builds, so release hosts can use Electron Builder's normal signing/notarization environment. Public GA artifacts should be produced only from release jobs where signing material is configured and the resulting installer/app signatures are verified.

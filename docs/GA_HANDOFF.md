@@ -12,6 +12,8 @@ note.
 - The CI matrix already spans Windows, macOS, and Linux.
 - The top-level README and release docs were refreshed to read more like a
   polished product README.
+- Core functionality is usable now; the remaining work is packaging and release
+  polish.
 
 ## What is still blocking true GA
 
@@ -30,6 +32,6 @@ note.
 
 ## Current judgment
 
-The package, MCP, and hosted CI path are in good shape, but the project is not
-yet fully GA because the platform-signing and clean-host smoke-test gates are
-still open.
+The package, MCP, and hosted CI path are in good shape, and the project is
+usable now. It is not yet fully GA because the platform-signing and clean-host
+smoke-test gates are still open.

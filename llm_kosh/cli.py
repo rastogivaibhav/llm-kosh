@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from llm_kosh.core.constants import APP_VERSION, KINDS, VISIBILITIES, DEFAULT_ROOT_NAME
@@ -17,7 +18,18 @@ except Exception:
     _DEFAULT_ROOT = str(Path.cwd() / DEFAULT_ROOT_NAME)
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=f"LlmKosh v{APP_VERSION}")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+    parser = argparse.ArgumentParser(
+        description=f"LlmKosh v{APP_VERSION}",
+        epilog=(
+            "Product path: setup -> remember -> recall -> context -> health. "
+            "Advanced engine commands remain available for automation."
+        ),
+    )
     parser.add_argument("--version", action="version", version=f"llm-kosh {APP_VERSION}")
     parser.add_argument("--root", default=_DEFAULT_ROOT, help="Cartridge root folder")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -42,6 +54,42 @@ def main() -> None:
                    help="Ingest each file whole instead of splitting markdown by heading")
 
     sub.add_parser("index", help="Rebuild search index")
+
+    p = sub.add_parser("setup", help="Product setup: initialise local memory and optionally configure integrations")
+    p.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
+    p.add_argument("--dry-run", action="store_true", help="Show what setup would do without changing files")
+    p.add_argument("--local", action="store_true", help="Only initialise the selected cartridge root")
+    p.add_argument("--clean", action="store_true", help="Remove local state before reinstalling")
+
+    p = sub.add_parser("remember", help="Save a memory with friendly defaults")
+    p.add_argument("text", help="Memory text to store")
+    p.add_argument("--kind", default="note", choices=sorted(KINDS), help="Memory type")
+    p.add_argument("--title", default="", help="Short title; defaults to the first line")
+    p.add_argument("--project", default="")
+    p.add_argument("--visibility", default="private", choices=VISIBILITIES)
+    p.add_argument("--inbox", action="store_true", help="Capture as an inbox note for later review")
+
+    p = sub.add_parser("recall", help="Search memory with friendly defaults")
+    p.add_argument("query", nargs="?", default="", help="Search query")
+    p.add_argument("--limit", type=int, default=5)
+    p.add_argument("--semantic", action="store_true", help="Use the vector index instead of FTS")
+    p.add_argument("--no-private", dest="include_private", action="store_false", default=True)
+    p.add_argument("--kind", default="", help="Comma-separated kinds to filter")
+    p.add_argument("--project", default="")
+    p.add_argument("--json", action="store_true", help="Output results as JSON")
+
+    p = sub.add_parser("context", help="Create budgeted context for an AI agent")
+    p.add_argument("query")
+    p.add_argument("--for", dest="target", default="codex", choices=list(PACK_PROFILES))
+    p.add_argument("--out", default="", help="Destination zip; defaults to exports/context-<query>.zip")
+    p.add_argument("--budget", default="small", choices=["small", "medium", "large"])
+    p.add_argument("--mode", default="private", choices=["private", "shareable"],
+                   help="private includes local private memory; shareable excludes it")
+    p.add_argument("--max-docs", type=int, default=None)
+    p.add_argument("--max-chars", type=int, default=None)
+    p.add_argument("--explain", action="store_true", help="Show pack contents after writing")
+
+    sub.add_parser("health", help="Run product health checks")
 
     p = sub.add_parser("query", help="Query the cartridge")
     p.add_argument("query", nargs="?", default="", help="Search query (empty for all)")
@@ -257,7 +305,7 @@ def main() -> None:
     root = Path(args.root).expanduser().resolve()
 
     # Auto-spawn daemon for commands that touch the cartridge
-    _NO_SPAWN_CMDS = {"init", "install", "repair-install", "clean-install", "uninstall", "service", "daemon", "desktop", "mcp-server", "mcp-tools", "mcp-test", "version"}
+    _NO_SPAWN_CMDS = {"init", "setup", "install", "repair-install", "clean-install", "uninstall", "service", "daemon", "desktop", "mcp-server", "mcp-tools", "mcp-test", "version"}
     if getattr(args, 'cmd', None) not in _NO_SPAWN_CMDS:
         try:
             from llm_kosh.service import maybe_spawn
@@ -267,6 +315,76 @@ def main() -> None:
 
     if args.cmd == "init":
         init_cartridge(root, args.owner)
+    elif args.cmd == "setup":
+        if args.dry_run:
+            print("llm-kosh setup would:")
+            print(f"  - initialise cartridge: {root}")
+            if args.local:
+                print("  - skip OS service and Claude Desktop integration (--local)")
+            else:
+                print("  - create ~/.llmkosh config if missing")
+                print("  - register the local service where supported")
+                print("  - patch Claude Desktop MCP config if present")
+            print("Run with --yes to apply.")
+            return
+        if args.local:
+            init_cartridge(root, os.environ.get("USER", "user"))
+            print("Local setup complete.")
+            print(f"Cartridge: {root}")
+            print("Next: llm-kosh remember \"something useful\"")
+            return
+        from llm_kosh.install import run_install
+        run_install(yes=getattr(args, "yes", False), clean=getattr(args, "clean", False))
+    elif args.cmd == "remember":
+        title = args.title or args.text.strip().split("\n", 1)[0][:80] or "Untitled memory"
+        if args.inbox:
+            inbox(root, capture=args.text, project=args.project)
+        else:
+            add_memory(root, args.kind, title, args.text, args.project, args.visibility)
+    elif args.cmd == "recall":
+        kinds = [k.strip() for k in args.kind.split(",") if k.strip()] or None
+        if args.semantic:
+            results = semantic_search(root, args.query, k=args.limit, kinds=kinds,
+                                      project=args.project)
+        else:
+            results = query_memory(root, args.query, args.limit, args.include_private,
+                                   kinds=kinds, project=args.project)
+        if args.json:
+            import json
+            print(json.dumps(results, indent=2))
+        else:
+            print_query_results(results)
+    elif args.cmd == "context":
+        if args.out:
+            out = Path(args.out).expanduser().resolve()
+        else:
+            ensure_root(root)
+            out = root / "exports" / f"context-{slugify(args.query) or 'pack'}.zip"
+        include_private = args.mode == "private"
+        manifest = pack_context(
+            root, args.query, args.target, out,
+            include_private=include_private, include_superseded=False,
+            redact=True, allow_secrets=False,
+            budget=args.budget, max_docs=args.max_docs, max_chars=args.max_chars,
+            allow_blocked=False, enforce_policy=(args.mode == "shareable"),
+        )
+        if args.mode == "shareable" and not manifest.get("docs_selected"):
+            print("No shareable context matched. Try --mode private for local-only memory.")
+        if args.explain:
+            explain_pack(out)
+    elif args.cmd == "health":
+        print("== llm-kosh health ==")
+        status(root)
+        print("")
+        verify_ledger(root)
+        print("")
+        try:
+            from llm_kosh.mcp_server import get_mcp_tools_schema
+            import json
+            tools = json.loads(get_mcp_tools_schema(root))
+            print(f"MCP: {len(tools)} tools registered.")
+        except Exception as exc:
+            print(f"MCP: unavailable ({exc})")
     elif args.cmd == "add":
         body = args.body
         if args.body_file:
@@ -528,7 +646,6 @@ def main() -> None:
             raise SystemExit(1)
         print(f"MCP self-test passed: {len(tools)} tools registered.")
     elif args.cmd == "reason":
-        import sys
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         from llm_kosh.engine.reasoning import ReasoningEngine
@@ -562,7 +679,6 @@ def main() -> None:
         else:
             print(format_narrative(result, args.query))
     elif args.cmd == "kosh-verify":
-        import sys
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         from llm_kosh.verify import KoshVerify, seed_incident_cartridge

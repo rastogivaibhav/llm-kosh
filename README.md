@@ -22,6 +22,18 @@ Think of it as a structured, inspectable memory layer for agents:
 - Connect MCP clients with minimal privilege by default.
 - Publish and verify the same artifact through GitHub Actions.
 
+## What works today
+
+The core project is usable now:
+
+- the CLI runs locally
+- the Python package installs and works
+- the MCP server runs locally
+- the service can watch intake folders
+- the GitHub Actions publish path is working
+
+The remaining work is release polish for Windows, macOS, and Linux packaging.
+
 ## Quick start
 
 Python 3.10 or newer is required.

@@ -4,8 +4,8 @@ Date: 2026-06-23
 
 ## Decision
 
-- Python package and MCP server: **release candidate / ready after hosted CI passes**.
-- Background service: **release candidate / ready after hosted cross-platform lifecycle checks**.
+- Python package and MCP server: **usable now; release polish remains for hosted CI and release automation**.
+- Background service: **usable now; release polish remains for hosted cross-platform lifecycle checks**.
 - Desktop installers: **not GA until Windows signing and macOS signing/notarization are configured and verified**.
 
 ## Verified locally
@@ -49,9 +49,9 @@ historical assumptions:
 
 ## GitHub Actions release path
 
-This section describes the intended release path. The workflow definitions are
-current, but not every gate listed here has been exercised on every platform in
-this session:
+This section describes the intended release path. The workflows are current,
+but not every gate listed here has been exercised on every platform in this
+session:
 
 - `test.yml` exercises the Python matrix on pushes and pull requests.
 - `publish.yml` builds, wheel-smokes, validates, and publishes the PyPI package through trusted publishing.
@@ -65,7 +65,10 @@ artifact version stay aligned.
 
 ## Desktop signing configuration
 
-The desktop packaging config no longer forces unsigned macOS builds, so release hosts can use Electron Builder's normal signing/notarization environment. Public GA artifacts should be produced only from release jobs where signing material is configured and the resulting installer/app signatures are verified.
+The desktop packaging config no longer forces unsigned macOS builds, so release
+hosts can use Electron Builder'"'"'s normal signing/notarization environment.
+Public GA artifacts should be produced only from release jobs where signing
+material is configured and the resulting installer/app signatures are verified.
 
 ## Supported install path
 

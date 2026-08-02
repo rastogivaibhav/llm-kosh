@@ -1,4 +1,5 @@
 import math
+import os
 import re
 import sqlite3
 import uuid
@@ -53,6 +54,13 @@ def corpus_fingerprint(root: Path) -> str:
 
 
 def rebuild_index(root: Path, force: bool = False) -> bool:
+    """Build a complete replacement index and atomically activate it.
+
+    The previous implementation dropped live tables before repopulating them.
+    A crash or lock failure could therefore leave a multi-gigabyte database
+    with zero documents. This implementation never mutates the active index
+    until a replacement passes integrity and cardinality checks.
+    """
     root.mkdir(parents=True, exist_ok=True)
     state_path = root / "indexes" / "index_state.json"
     db_path = root / "indexes" / "memory.sqlite"
@@ -62,11 +70,15 @@ def rebuild_index(root: Path, force: bool = False) -> bool:
         if prev.get("fingerprint") == fp:
             return False
 
-    conn = get_db(root)
-    conn.executescript(
-        """
-        DROP TABLE IF EXISTS documents;
-        DROP TABLE IF EXISTS documents_fts;
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    build_path = db_path.with_name(f".{db_path.name}.build-{uuid.uuid4().hex}.tmp")
+    source_files = list(iter_source_files(root))
+    conn = sqlite3.connect(str(build_path), timeout=30.0)
+    try:
+        conn.execute("PRAGMA journal_mode=DELETE")
+        conn.execute("PRAGMA synchronous=FULL")
+        conn.executescript(
+            """
         CREATE TABLE documents (
           id TEXT PRIMARY KEY, kind TEXT, title TEXT, project TEXT,
           visibility TEXT, status TEXT, path TEXT, body TEXT, hash TEXT,
@@ -81,34 +93,122 @@ def rebuild_index(root: Path, force: bool = False) -> bool:
           id UNINDEXED, title, project, kind, body, content=''
         );
         """
-    )
-    seen_index_ids = set()
-    for path in iter_source_files(root):
-        text = path.read_text(encoding="utf-8", errors="replace")
-        meta, body = parse_frontmatter(text)
-        doc_id = meta.get("id") or f"doc.{uuid.uuid4().hex}"
-        if doc_id in seen_index_ids:
-            doc_id = f"{doc_id}#dup-{uuid.uuid4().hex[:6]}"
-        seen_index_ids.add(doc_id)
-        conn.execute(
-            "INSERT INTO documents VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (doc_id, meta.get("type") or "note", meta.get("title") or path.stem,
-             meta.get("project", ""), meta.get("visibility", "private"),
-             meta.get("status", "active"), str(path.relative_to(root)), body,
-             sha256_file(path), meta.get("created", ""), meta.get("supersedes", ""),
-             meta.get("superseded_by", ""), meta.get("source_receipt", ""),
-             float(meta.get("M_sal") or meta.get("salience") or 1.0)),
         )
-        conn.execute(
-            "INSERT INTO documents_fts(rowid, id, title, project, kind, body) "
-            "VALUES ((SELECT rowid FROM documents WHERE id=?), ?, ?, ?, ?, ?)",
-            (doc_id, doc_id, meta.get("title") or path.stem, meta.get("project", ""),
-             meta.get("type") or "note", body),
-        )
-    conn.commit()
-    conn.close()
-    write_json(state_path, {"fingerprint": fp, "rebuilt_at": now_iso()})
+        seen_index_ids = set()
+        for path in source_files:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            meta, body = parse_frontmatter(text)
+            doc_id = meta.get("id") or f"doc.{uuid.uuid4().hex}"
+            if doc_id in seen_index_ids:
+                doc_id = f"{doc_id}#dup-{uuid.uuid4().hex[:6]}"
+            seen_index_ids.add(doc_id)
+            conn.execute(
+                "INSERT INTO documents VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (doc_id, meta.get("type") or "note", meta.get("title") or path.stem,
+                 meta.get("project", ""), meta.get("visibility", "private"),
+                 meta.get("status", "active"), str(path.relative_to(root)), body,
+                 sha256_file(path), meta.get("created", ""), meta.get("supersedes", ""),
+                 meta.get("superseded_by", ""), meta.get("source_receipt", ""),
+                 float(meta.get("M_sal") or meta.get("salience") or 1.0)),
+            )
+            conn.execute(
+                "INSERT INTO documents_fts(rowid, id, title, project, kind, body) "
+                "VALUES ((SELECT rowid FROM documents WHERE id=?), ?, ?, ?, ?, ?)",
+                (doc_id, doc_id, meta.get("title") or path.stem, meta.get("project", ""),
+                 meta.get("type") or "note", body),
+            )
+        conn.commit()
+        integrity = conn.execute("PRAGMA quick_check").fetchone()[0]
+        indexed = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+        fts_indexed = conn.execute("SELECT COUNT(*) FROM documents_fts").fetchone()[0]
+        if integrity != "ok" or indexed != len(source_files) or fts_indexed != indexed:
+            raise RuntimeError(
+                f"Replacement index validation failed: integrity={integrity}, "
+                f"documents={indexed}/{len(source_files)}, fts={fts_indexed}"
+            )
+    except Exception:
+        conn.close()
+        build_path.unlink(missing_ok=True)
+        raise
+    else:
+        conn.close()
+
+    if corpus_fingerprint(root) != fp:
+        build_path.unlink(missing_ok=True)
+        raise RuntimeError("Source changed while the index was building; active index was left untouched")
+
+    try:
+        if db_path.exists():
+            old = sqlite3.connect(str(db_path), timeout=5.0)
+            try:
+                old.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            finally:
+                old.close()
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(str(db_path) + suffix)
+            sidecar.unlink(missing_ok=True)
+        os.replace(str(build_path), str(db_path))
+    except Exception:
+        build_path.unlink(missing_ok=True)
+        raise
+
+    write_json(state_path, {
+        "fingerprint": fp,
+        "rebuilt_at": now_iso(),
+        "documents": len(source_files),
+        "build_mode": "atomic-replacement",
+    })
     return True
+
+
+def inspect_index(root: Path) -> dict:
+    """Read index health without creating, rebuilding, or mutating it."""
+    db_path = root / "indexes" / "memory.sqlite"
+    state = read_json(root / "indexes" / "index_state.json", {}) or {}
+    result = {
+        "exists": db_path.exists(),
+        "source_documents": sum(1 for _ in iter_source_files(root)),
+        "documents": 0,
+        "superseded": 0,
+        "by_kind": [],
+        "state": state,
+        "healthy": False,
+        "error": "",
+    }
+    if not db_path.exists():
+        result["error"] = "index not built"
+        return result
+    try:
+        uri = f"file:{db_path.as_posix()}?mode=ro"
+        conn = sqlite3.connect(uri, uri=True, timeout=5.0)
+        try:
+            result["documents"] = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+            result["superseded"] = conn.execute(
+                "SELECT COUNT(*) FROM documents WHERE status='superseded'"
+            ).fetchone()[0]
+            result["by_kind"] = conn.execute(
+                "SELECT kind,COUNT(*) FROM documents GROUP BY kind ORDER BY kind"
+            ).fetchall()
+            integrity_ok = conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+            stale = state.get("fingerprint") != corpus_fingerprint(root)
+            cardinality_ok = result["documents"] == result["source_documents"]
+            result["healthy"] = integrity_ok and cardinality_ok and not stale
+            if not result["healthy"]:
+                reasons = []
+                if not integrity_ok:
+                    reasons.append("integrity check failed")
+                if not cardinality_ok:
+                    reasons.append(
+                        f"cardinality mismatch: index={result['documents']} source={result['source_documents']}"
+                    )
+                if stale:
+                    reasons.append("source fingerprint changed")
+                result["error"] = "; ".join(reasons)
+        finally:
+            conn.close()
+    except sqlite3.Error as exc:
+        result["error"] = str(exc)
+    return result
 
 
 

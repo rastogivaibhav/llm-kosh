@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 
+MAX_FACT_CONTENT_CHARS = 8_000
+
+
 class EdgeType(str, Enum):
     ENABLES = "ENABLES"
     CAUSES = "CAUSES"
@@ -256,15 +259,17 @@ class CausalDAG:
     def _load_from_log(self) -> None:
         if not self._log_path.exists():
             return
-        for line in self._log_path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-                self._apply_event(entry["event"], entry["payload"])
-            except Exception:
-                pass
+        # Stream the append-only log instead of loading it all into memory.
+        with self._log_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    self._apply_event(entry["event"], entry["payload"])
+                except Exception:
+                    pass
 
     def save_snapshot(self) -> None:
         """Serialize hot layer to snapshot.json for faster startup."""
@@ -313,9 +318,9 @@ class CausalDAG:
 
         snap = {"nodes": nodes_out, "edges": edges_out, "hyperedges": hyperedges_out}
         snap_path = self.root / self.SNAPSHOT_FILE
-        snap_path.write_text(
-            _json.dumps(snap, ensure_ascii=False), encoding="utf-8"
-        )
+        temporary = snap_path.with_suffix(".json.tmp")
+        temporary.write_text(_json.dumps(snap, ensure_ascii=False), encoding="utf-8")
+        temporary.replace(snap_path)
 
     def _try_load_snapshot(self) -> bool:
         """Attempt to load hot layer from snapshot. Returns True on success."""
@@ -443,6 +448,19 @@ class CausalDAG:
         if fact_id not in self.nodes:
             raise ValueError(f"{label} does not exist: {fact_id}")
 
+    def _validate_fact_content(self, content: Any) -> str:
+        if not isinstance(content, str):
+            raise ValueError("fact content must be text")
+        normalized = content.strip()
+        if not normalized:
+            raise ValueError("fact content must not be empty")
+        if len(normalized) > MAX_FACT_CONTENT_CHARS:
+            raise ValueError(
+                f"fact content exceeds {MAX_FACT_CONTENT_CHARS} characters; "
+                "store the full source as evidence and ingest an atomic fact"
+            )
+        return normalized
+
     def _edge_provenance_or_default(
         self,
         provenance: Optional[EdgeProvenance],
@@ -515,7 +533,7 @@ class CausalDAG:
         if isinstance(content_or_fact, TemporalFact):
             fact = content_or_fact
             fact_id = fact.id if fact.id else "fact." + uuid.uuid4().hex[:12]
-            content = fact.content
+            content = self._validate_fact_content(fact.content)
             ingested_at_val = fact.ingested_at
             documented_at_val = fact.documented_at
             valid_from_val = fact.valid_from
@@ -531,7 +549,7 @@ class CausalDAG:
                     "(content, ingested_at, documented_at, valid_from, confidence, source) are required"
                 )
             fact_id = "fact." + uuid.uuid4().hex[:12]
-            content = content_or_fact
+            content = self._validate_fact_content(content_or_fact)
             ingested_at_val = ingested_at
             documented_at_val = documented_at
             valid_from_val = valid_from

@@ -44,6 +44,13 @@ from llm_kosh.engine.commands import verify_ledger
 from llm_kosh.engine.compiler import pack_context
 from llm_kosh.engine.intake import intake_scan, intake_list, processor_apply
 from llm_kosh.core.utils import append_ledger, read_json
+from llm_kosh.company_brain.context import compile_context as compile_brain_context
+from llm_kosh.company_brain.models import (
+    AccessPolicy, ContextRequest, EvidenceInput, EvidenceReference, MemoryInput, Principal,
+)
+from llm_kosh.company_brain.retrieval import search_memories as search_company_memories
+from llm_kosh.company_brain.store import CompanyBrainStore
+from llm_kosh.company_brain.understanding import understand_evidence
 
 # Global flags set during startup
 MCP_FLAGS = {
@@ -129,6 +136,434 @@ def get_daemon_status():
     except Exception as e:
         return f"Ledger verify failed: {e}"
 
+
+def _json_list(value: str) -> List[str]:
+    try:
+        parsed = json.loads(value or "[]")
+    except json.JSONDecodeError:
+        parsed = []
+    return [str(item) for item in parsed] if isinstance(parsed, list) else []
+
+
+def _brain_principal(
+    principal_id: str, tenant_id: str, groups_json: str,
+    projects_json: str, clearance: str,
+) -> Principal:
+    return Principal(
+        principal_id=principal_id,
+        tenant_id=tenant_id,
+        groups=_json_list(groups_json),
+        projects=_json_list(projects_json),
+        clearance=clearance,
+    )
+
+
+@mcp.tool()
+def company_memory_search(
+    query: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    project_id: str = "",
+    memory_types_json: str = "[]",
+    as_of: str = "",
+    limit: int = 10,
+    include_candidates: bool = False,
+):
+    """Permission-first hybrid search over atomic, evidence-backed company memory."""
+    store = CompanyBrainStore(WORKSPACE_PATH)
+    results = search_company_memories(
+        store,
+        query,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+        project_id=project_id,
+        memory_types=_json_list(memory_types_json) or None,
+        as_of=as_of,
+        limit=limit,
+        include_candidates=include_candidates,
+    )
+    return json.dumps(results, indent=2)
+
+
+@mcp.tool()
+def company_context_compile(
+    task: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    project_id: str = "",
+    memory_types_json: str = "[]",
+    as_of: str = "",
+    token_budget: int = 8000,
+    include_candidates: bool = False,
+):
+    """Compile structured, cited, token-budgeted context for an agent task."""
+    principal = _brain_principal(
+        principal_id, tenant_id, groups_json, projects_json, clearance
+    )
+    pack = compile_brain_context(
+        CompanyBrainStore(WORKSPACE_PATH),
+        ContextRequest(
+            task=task,
+            principal=principal,
+            project_id=project_id,
+            memory_types=_json_list(memory_types_json),
+            as_of=as_of,
+            token_budget=token_budget,
+        ),
+        include_candidates=include_candidates,
+    )
+    return json.dumps(pack, indent=2)
+
+
+@mcp.tool()
+def company_memory_get(
+    memory_id: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+):
+    """Get one authorized memory with its evidence references and lifecycle."""
+    memory = CompanyBrainStore(WORKSPACE_PATH).get_memory(
+        memory_id,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+    )
+    return json.dumps(memory, indent=2)
+
+
+@mcp.tool()
+def company_brain_health():
+    """Validate canonical company-brain storage and projection consistency."""
+    return json.dumps(CompanyBrainStore(WORKSPACE_PATH).health(), indent=2)
+
+
+@mcp.tool()
+def company_brain_evaluate():
+    """Run reference storage, citation, and projection acceptance checks."""
+    return json.dumps(CompanyBrainStore(WORKSPACE_PATH).evaluate(), indent=2)
+
+
+@mcp.tool()
+@require_capability("write")
+def company_session_understand(
+    evidence_id: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    dry_run: bool = False,
+    source_type: str = "session_jsonl",
+    session_native_id: str = "",
+    project_id: str = "",
+    max_events: int = 100000,
+):
+    """Build normalized sessions, episodes, and cited candidates from JSONL evidence."""
+    result = understand_evidence(
+        CompanyBrainStore(WORKSPACE_PATH), evidence_id,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+        dry_run=dry_run, source_type=source_type,
+        session_native_id=session_native_id, project_id=project_id,
+        max_events=max_events,
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def company_sessions_list(
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    project_id: str = "",
+    limit: int = 100,
+):
+    """List authorized normalized source sessions."""
+    result = CompanyBrainStore(WORKSPACE_PATH).list_sessions(
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+        project_id=project_id, limit=limit,
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def company_episodes_search(
+    query: str = "",
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    project_id: str = "",
+    limit: int = 20,
+):
+    """Search authorized goal-oriented work episodes and observed outcomes."""
+    store = CompanyBrainStore(WORKSPACE_PATH)
+    principal = _brain_principal(
+        principal_id, tenant_id, groups_json, projects_json, clearance,
+    )
+    result = (
+        store.search_episodes(query, principal, project_id=project_id, limit=limit)
+        if query else store.list_episodes(principal, project_id=project_id, limit=limit)
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def company_episode_get(
+    episode_id: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+):
+    """Get one authorized episode with ordered event and candidate provenance."""
+    result = CompanyBrainStore(WORKSPACE_PATH).get_episode(
+        episode_id,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@require_capability("write")
+def company_artifact_register(
+    file_path: str,
+    artifact_type: str = "",
+    source_native_id: str = "",
+    classification: str = "restricted",
+    tenant_id: str = "local",
+):
+    """Register an existing local artifact by fingerprint without copying its bytes."""
+    import mimetypes as _mimetypes
+    from llm_kosh.company_brain.artifacts import infer_artifact_type
+    path = Path(file_path).expanduser().resolve(strict=True)
+    mime_type = _mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    evidence_id = CompanyBrainStore(WORKSPACE_PATH).put_evidence(EvidenceInput(
+        tenant_id=tenant_id,
+        source_type="local_file",
+        source_locator=str(path),
+        source_native_id=source_native_id or str(path),
+        storage_mode="reference",
+        artifact_type=artifact_type or infer_artifact_type(path, mime_type),
+        mime_type=mime_type,
+        classification=classification,
+    ))
+    return json.dumps({
+        "evidence_id": evidence_id,
+        "storage_mode": "reference",
+        "copied_source_bytes": 0,
+    })
+
+
+@mcp.tool()
+def company_artifact_inspect(
+    evidence_id: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    native_locator_json: str = "{}",
+    max_text: int = 16000,
+    metadata_only: bool = False,
+):
+    """Verify and inspect a bounded region of an authorized registered artifact."""
+    try:
+        locator = json.loads(native_locator_json or "{}")
+    except json.JSONDecodeError as exc:
+        raise ValueError("native_locator_json must be a JSON object") from exc
+    if not isinstance(locator, dict):
+        raise ValueError("native_locator_json must be a JSON object")
+    result = CompanyBrainStore(WORKSPACE_PATH).inspect_evidence(
+        evidence_id,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+        strong=True,
+        native_locator=locator,
+        include_preview=not metadata_only,
+        max_text=max_text,
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@require_capability("write")
+def company_artifact_segment(
+    evidence_id: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    native_locator_json: str = "{}",
+    max_text: int = 16000,
+):
+    """Inspect an artifact and persist bounded derived segments with native citations."""
+    try:
+        locator = json.loads(native_locator_json or "{}")
+    except json.JSONDecodeError as exc:
+        raise ValueError("native_locator_json must be a JSON object") from exc
+    if not isinstance(locator, dict):
+        raise ValueError("native_locator_json must be a JSON object")
+    result = CompanyBrainStore(WORKSPACE_PATH).inspect_and_segment(
+        evidence_id,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+        native_locator=locator,
+        max_text=max_text,
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@require_capability("write")
+def company_artifact_snapshot(
+    evidence_id: str,
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+):
+    """Explicitly materialize an authorized artifact into immutable snapshot storage."""
+    snapshot_id = CompanyBrainStore(WORKSPACE_PATH).materialize_snapshot(
+        evidence_id,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+    )
+    return json.dumps({
+        "source_evidence_id": evidence_id,
+        "snapshot_evidence_id": snapshot_id,
+        "storage_mode": "snapshot",
+    })
+
+
+@mcp.tool()
+@require_capability("write")
+def company_memory_propose(
+    memory_type: str,
+    title: str,
+    statement: str,
+    evidence_content: str,
+    rationale: str = "",
+    project_id: str = "",
+    classification: str = "restricted",
+    tenant_id: str = "local",
+    source_locator: str = "mcp://proposal",
+    source_native_id: str = "",
+):
+    """Create immutable evidence and a non-authoritative candidate memory."""
+    import uuid as _uuid
+    store = CompanyBrainStore(WORKSPACE_PATH)
+    native_id = source_native_id or _uuid.uuid4().hex
+    evidence_id = store.put_evidence(EvidenceInput(
+        tenant_id=tenant_id,
+        source_type="mcp_proposal",
+        source_locator=source_locator,
+        source_native_id=native_id,
+        content=evidence_content.encode("utf-8"),
+        classification=classification,
+    ))
+    memory_id = store.add_memory(MemoryInput(
+        tenant_id=tenant_id,
+        memory_type=memory_type,
+        title=title,
+        statement=statement,
+        rationale=rationale,
+        project_id=project_id,
+        lifecycle="candidate",
+        confidence=0.5,
+        importance=0.5,
+        classification=classification,
+        evidence=[EvidenceReference(evidence_id=evidence_id, locator=source_locator)],
+        extractor={"kind": "mcp_proposal", "version": "company-brain-v1"},
+        source_native_id="mcp:" + native_id,
+    ))
+    return json.dumps({"memory_id": memory_id, "evidence_id": evidence_id, "lifecycle": "candidate"})
+
+
+@mcp.tool()
+@require_capability("write")
+def company_memory_propose_from_evidence(
+    evidence_id: str,
+    memory_type: str,
+    title: str,
+    statement: str,
+    segment_id: str = "",
+    native_locator: str = "",
+    rationale: str = "",
+    project_id: str = "",
+    principal_id: str = "local-user",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+    source_native_id: str = "",
+):
+    """Create a candidate semantic memory citing an existing registered artifact."""
+    import uuid as _uuid
+    store = CompanyBrainStore(WORKSPACE_PATH)
+    principal = _brain_principal(
+        principal_id, tenant_id, groups_json, projects_json, clearance
+    )
+    evidence = store.inspect_evidence(evidence_id, principal, strong=True)
+    if evidence["availability"]["status"] != "available":
+        raise ValueError("Evidence is not currently available and unchanged")
+    memory_id = store.add_memory(MemoryInput(
+        tenant_id=tenant_id,
+        memory_type=memory_type,
+        title=title,
+        statement=statement,
+        rationale=rationale,
+        project_id=project_id,
+        lifecycle="candidate",
+        confidence=0.5,
+        importance=0.5,
+        classification=evidence["classification"],
+        access_policy=AccessPolicy.from_dict(evidence["access_policy"]),
+        evidence=[EvidenceReference(
+            evidence_id=evidence_id,
+            segment_id=segment_id,
+            locator=native_locator,
+        )],
+        extractor={"kind": "mcp_existing_evidence", "version": "company-brain-v2"},
+        source_native_id=source_native_id or "mcp-evidence:" + _uuid.uuid4().hex,
+    ))
+    return json.dumps({
+        "memory_id": memory_id,
+        "evidence_id": evidence_id,
+        "segment_id": segment_id,
+        "lifecycle": "candidate",
+    })
+
+
+@mcp.tool()
+@require_capability("mutate")
+def company_memory_review(
+    memory_id: str,
+    to_lifecycle: str,
+    reason: str,
+    principal_id: str = "local-reviewer",
+    tenant_id: str = "local",
+    groups_json: str = "[]",
+    projects_json: str = "[]",
+    clearance: str = "restricted",
+):
+    """Apply a governed lifecycle transition to an authorized memory."""
+    result = CompanyBrainStore(WORKSPACE_PATH).transition_memory(
+        memory_id,
+        to_lifecycle,
+        _brain_principal(principal_id, tenant_id, groups_json, projects_json, clearance),
+        reason=reason,
+    )
+    return json.dumps(result, indent=2)
+
 # --- EXPORT OPERATIONS ---
 
 @mcp.tool()
@@ -200,6 +635,7 @@ def apply_intake_proposal(batch_id: str):
 # --- REASONING TOOLS ---
 
 @mcp.tool()
+@require_capability("write")
 def reasoning_ingest(
     content: str,
     documented_at: str,
@@ -209,7 +645,8 @@ def reasoning_ingest(
     causal_edges: str = "[]",
 ):
     """
-    Add a new fact to the Temporal Causal Reasoning Graph.
+    Add a bounded atomic fact to the Temporal Causal Reasoning Graph.
+    This is a write operation and requires --allow-write.
     documented_at and valid_from are ISO 8601 datetime strings.
     causal_edges: JSON array of {"target_id": str, "edge_type": str, "confidence": float}.
     Returns the new fact_id.

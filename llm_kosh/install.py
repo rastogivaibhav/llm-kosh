@@ -347,9 +347,31 @@ def unregister_os_service() -> bool:
             return False
     elif sys.platform == "win32":
         try:
-            subprocess.run(["schtasks", "/Delete", "/TN", "llm-kosh-service", "/F"], check=False, capture_output=True)
-            print("  [ok] Windows Task Scheduler task removed: llm-kosh-service")
-            return True
+            all_ok = True
+            # Both task names have shipped. End each task before deleting its
+            # registration so uninstall cannot leave a live orphan process.
+            for task_name in ("llm-kosh-service", "llm-kosh-daemon"):
+                subprocess.run(
+                    ["schtasks", "/End", "/TN", task_name],
+                    check=False, capture_output=True, text=True,
+                )
+                result = subprocess.run(
+                    ["schtasks", "/Delete", "/TN", task_name, "/F"],
+                    check=False, capture_output=True, text=True,
+                )
+                output = (result.stderr or result.stdout or "").lower()
+                missing = "cannot find" in output or "does not exist" in output
+                if result.returncode == 0:
+                    print(f"  [ok] Windows Task Scheduler task removed: {task_name}")
+                elif missing:
+                    print(f"  [skip] Windows Task Scheduler task not present: {task_name}")
+                else:
+                    all_ok = False
+                    print(
+                        f"  [warn] Could not remove scheduled task {task_name}: "
+                        f"{(result.stderr or result.stdout or '').strip()}"
+                    )
+            return all_ok
         except FileNotFoundError:
             print("  [warn] schtasks not found; Task Scheduler removal skipped")
             return False
@@ -561,12 +583,13 @@ def run_install(yes: bool = False, clean: bool = False) -> None:
 def run_uninstall(yes: bool = False) -> None:
     """Reverse the install flow as cleanly as possible."""
     print("=== llm-kosh uninstall ===")
-    uninstall_python_package()
+    # Service cleanup depends on installed entry points, so it must happen first.
     unregister_os_service()
     try:
         unpatch_claude_desktop_config()
     except Exception as exc:
         print(f"  [warn] Claude Desktop config cleanup failed: {exc}")
+    uninstall_python_package()
     print("=== Uninstall complete ===")
 
 

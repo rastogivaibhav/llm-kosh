@@ -201,17 +201,12 @@ def job_sync_reasoning_graph(root: Path):
                 continue
 
             # Fix 4 — prefer full body from source file over 200-char snippet
-            content = mem.get("snippet") or mem.get("title") or ""
-            source_path = root / mem.get("path", "")
-            if source_path.exists():
-                try:
-                    from llm_kosh.core.utils import parse_frontmatter
-                    raw = source_path.read_text(encoding="utf-8")
-                    _, body_text = parse_frontmatter(raw)
-                    if body_text and body_text.strip():
-                        content = body_text.strip()
-                except Exception:
-                    pass  # fall back to snippet
+            # Keep the graph atomic. Full documents stay in the evidence layer;
+            # copying them into the log and snapshot previously caused multi-GB
+            # graph files and made startup scale with raw document size.
+            title = (mem.get("title") or "").strip()
+            snippet = (mem.get("snippet") or "").strip()
+            content = ": ".join(part for part in (title, snippet) if part)[:8_000]
 
             created_str = mem.get("created", "")
             try:

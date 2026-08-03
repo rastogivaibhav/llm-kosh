@@ -16,7 +16,7 @@ def init_cartridge(root: Path, owner: str) -> None:
         "source/prompts", "source/notes", "source/generated-files", "source/intake", "source/conversations",
         "source/receipts", "source/corrections", "source/gaps", "source/suggestions",
         "ledger", "indexes", "exports", "quarantine", "reports", "attachments/imports",
-        "reasoning",
+        "reasoning", "brain", "evidence",
     ]:
         (root / rel).mkdir(parents=True, exist_ok=True)
 

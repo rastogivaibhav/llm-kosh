@@ -14,6 +14,11 @@ Think of it as a structured, inspectable memory layer for agents:
 - a background service for intake and maintenance
 - a CLI for local control and automation
 
+The experimental company-brain foundation adds reference-first multimodal evidence,
+session and episode understanding, atomic evidence-backed memories, review
+lifecycles, permission-first retrieval, and structured cited context packs. See
+[Company brain foundation](docs/COMPANY_BRAIN.md).
+
 ## Why teams use it
 
 - Keep AI context local and auditable.
@@ -62,6 +67,34 @@ If you want to work in a custom cartridge location, set the root explicitly:
 llm-kosh --root ./my-cartridge init --owner "Local User"
 llm-kosh --root ./my-cartridge add --kind note --title "First memory" --body "Hello"
 llm-kosh --root ./my-cartridge query "Hello"
+```
+
+To migrate a cartridge into governed company memory:
+
+```bash
+llm-kosh --root ./my-cartridge brain migrate --dry-run
+llm-kosh --root ./my-cartridge brain migrate
+llm-kosh --root ./my-cartridge brain health
+llm-kosh --root ./my-cartridge brain context "Prepare the next project decision"
+```
+
+Register existing screenshots, documents, worksheets or HTML without copying
+their source bytes:
+
+```bash
+llm-kosh --root ./my-cartridge brain register ./report.xlsx --artifact-type worksheet
+llm-kosh --root ./my-cartridge brain inspect <evidence-id> \
+  --locator '{"sheet":"Summary","range":"A1:F25"}'
+llm-kosh --root ./my-cartridge brain evaluate
+```
+
+Build a replayable session/episode graph from a registered JSONL export:
+
+```bash
+llm-kosh --root ./my-cartridge brain register ./session.jsonl --artifact-type structured_data
+llm-kosh --root ./my-cartridge brain understand <evidence-id> --dry-run
+llm-kosh --root ./my-cartridge brain understand <evidence-id>
+llm-kosh --root ./my-cartridge brain episodes --query "what was implemented"
 ```
 
 ## Core concepts

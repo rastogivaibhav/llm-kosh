@@ -301,19 +301,18 @@ def main() -> None:
     p_uninstall.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
     sub.add_parser("desktop", help="Configure and start the service used by the separately installed desktop app")
 
+    from llm_kosh.company_brain.cli import add_brain_parser
+    add_brain_parser(sub)
+
     args = parser.parse_args()
     root = Path(args.root).expanduser().resolve()
 
-    # Auto-spawn daemon for commands that touch the cartridge
-    _NO_SPAWN_CMDS = {"init", "setup", "install", "repair-install", "clean-install", "uninstall", "service", "daemon", "desktop", "mcp-server", "mcp-tools", "mcp-test", "version"}
-    if getattr(args, 'cmd', None) not in _NO_SPAWN_CMDS:
-        try:
-            from llm_kosh.service import maybe_spawn
-            maybe_spawn(root)
-        except Exception:
-            pass  # never break the CLI due to spawn failure
-
-    if args.cmd == "init":
+    # CLI commands are direct and side-effect bounded. The sustained service is
+    # started only through `service start`, never implicitly by status/search.
+    if args.cmd == "brain":
+        from llm_kosh.company_brain.cli import run_brain_command
+        run_brain_command(root, args)
+    elif args.cmd == "init":
         init_cartridge(root, args.owner)
     elif args.cmd == "setup":
         if args.dry_run:

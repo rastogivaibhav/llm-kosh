@@ -429,17 +429,21 @@ def memory_map(root: Path, quiet: bool = False) -> Path:
     return out
 
 def status(root: Path) -> None:
-    ensure_root(root)
-    rebuild_index(root)
-    conn = get_db(root)
-    counts = conn.execute("SELECT kind, COUNT(*) FROM documents GROUP BY kind ORDER BY kind").fetchall()
-    total = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    superseded = conn.execute("SELECT COUNT(*) FROM documents WHERE status='superseded'").fetchone()[0]
-    conn.close()
+    if not root.exists():
+        print(f"LlmKosh v{APP_VERSION}: {root}")
+        print("Cartridge status: not initialized")
+        return
+    index = inspect_index(root)
+    counts = index["by_kind"]
+    total = index["documents"]
+    superseded = index["superseded"]
     ledger_path = root / "ledger" / "events.jsonl"
     events = sum(1 for _ in ledger_path.open("r", encoding="utf-8")) if ledger_path.exists() else 0
     print(f"LlmKosh v{APP_VERSION}: {root}")
-    print(f"Total source documents: {total}  (superseded: {superseded})")
+    print(f"Source documents: {index['source_documents']}")
+    print(f"Indexed documents: {total}  (superseded: {superseded})")
+    if not index["healthy"]:
+        print(f"Index status: unhealthy ({index['error'] or 'integrity check failed'}); run `llm-kosh index`")
     print(f"Ledger events: {events}")
     for kind, count in counts:
         print(f"- {kind}: {count}")

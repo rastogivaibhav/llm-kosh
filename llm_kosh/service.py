@@ -125,7 +125,13 @@ class _ExternalFolderHandler(_FSEventHandler):  # type: ignore[misc]
         src = Path(getattr(event, "src_path", ""))
         if not src.name or src.name.startswith("."):
             return
-        if src.suffix.lower() in {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}:
+        lower_name = src.name.lower()
+        ignored_endings = {
+            ".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log",
+            ".db-wal", ".db-shm", ".sqlite-wal", ".sqlite-shm", ".journal",
+            ".lock", ".partial", ".crdownload",
+        }
+        if any(lower_name.endswith(ending) for ending in ignored_endings):
             return
         try:
             from llm_kosh.engine.intake import intake_file_or_dir

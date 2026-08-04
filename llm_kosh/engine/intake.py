@@ -89,12 +89,18 @@ def intake_scan(root: Path) -> List[dict]:
     
     return new_records
 
-def intake_list(root: Path) -> List[dict]:
+def intake_list(root: Path, status: Optional[str] = None) -> List[dict]:
     ensure_root(root)
     ensure_intake_dirs(root)
+    statuses = ["pending", "validated", "reviewed", "applied", "rejected", "quarantined"]
+    if status:
+        status = status.strip().lower()
+        if status not in statuses:
+            raise ValueError(f"Unsupported intake status: {status}")
+        statuses = [status]
     records = []
-    for status in ["pending", "validated", "reviewed", "applied", "rejected", "quarantined"]:
-        d = root / "intake" / status
+    for current_status in statuses:
+        d = root / "intake" / current_status
         if d.exists():
             for p in d.glob("*.json"):
                 records.append(read_json(p))
@@ -243,7 +249,7 @@ def processor_apply(root: Path, batch_id: str) -> dict:
     return {"added": added, "superseded": superseded}
 
 def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: str = "private") -> dict:
-    from llm_kosh.intake.converters import MarkItDownAdapter
+    from llm_kosh.intake.converters import convert_to_memory
     from llm_kosh.core.memory import add_memory, parse_frontmatter, supersede
     from llm_kosh.engine.search import rebuild_index, iter_source_files
     
@@ -251,8 +257,6 @@ def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: st
     if not path.exists():
         raise FileNotFoundError(f"Path not found: {path}")
         
-    adapter = MarkItDownAdapter(root_dir=root)
-    
     if path.is_file():
         targets = [path]
     else:
@@ -262,7 +266,7 @@ def intake_file_or_dir(root: Path, path: Path, project: str = "", visibility: st
     
     for p in targets:
         try:
-            mem = adapter.convert_to_memory(p)
+            mem = convert_to_memory(p)
             
             # Find existing active memories referencing this file
             old_ids = []

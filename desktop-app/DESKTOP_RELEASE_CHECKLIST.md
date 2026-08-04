@@ -12,10 +12,13 @@ Before tagging and building a release for `llm-kosh` desktop, perform the follow
 - [ ] Launch the app. Verify the Onboarding screen appears.
 - [ ] Verify "CLI Not Found" appears if the path is explicitly broken.
 - [ ] Verify "Create New Cartridge" properly initializes a root.
+- [ ] Verify onboarding labels **Cartridge root** separately from **Source folder(s)**.
+- [ ] Add an existing source folder and verify it is marked reference-only; the source file is not copied.
 
 ## 3. Core Functionality
 - [ ] **Home:** Verify Daemon status updates correctly. Toggle the daemon on and off.
 - [ ] **Watched Folders:** Add a folder, verify the daemon restart prompt appears.
+- [ ] **Company Brain:** Start MCP and verify the generated client config exposes `company_context_compile` and cited artifact tools.
 - [ ] **Generate Pack:** Generate a safe-pack. Verify the Output directory opens when clicking "Reveal".
 - [ ] **Generate Pack (Private):** Toggle "Include Private Context" and verify the warning modal appears.
 - [ ] **Receipts:** Load a valid receipt. Verify "Approve & Absorb" is disabled until "Validate Receipt" is clicked.
@@ -30,6 +33,8 @@ Before tagging and building a release for `llm-kosh` desktop, perform the follow
 - [ ] Run `npm run package:win` (or appropriate OS command).
 - [ ] Verify the installer artifact is generated in `dist-electron/`.
 - [ ] Install and launch the packaged app.
+- [ ] Verify Desktop and Start Menu shortcuts exist and clicking either opens a visible app window.
+- [ ] Verify installation does not silently start the background service.
 - [ ] Verify the Onboarding screen appears correctly.
 - [ ] Verify Settings persist across restarts.
 - [ ] Verify the "CLI Missing" state is clear if the path is invalid.

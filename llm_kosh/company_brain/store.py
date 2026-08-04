@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mimetypes
 import os
 import sqlite3
 import tempfile
@@ -516,6 +517,37 @@ class CompanyBrainStore:
                 )
             conn.commit()
         return evidence_id
+
+    def register_local_file(
+        self,
+        path: Path,
+        *,
+        artifact_type: str = "",
+        classification: str = "restricted",
+        tenant_id: str = "local",
+        source_native_id: str = "",
+    ) -> Dict[str, Any]:
+        """Register an existing local file without copying its bytes."""
+        resolved = Path(path).expanduser().resolve(strict=True)
+        if not resolved.is_file():
+            raise ValueError(f"source is not a regular file: {resolved}")
+        mime_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
+        evidence_id = self.put_evidence(EvidenceInput(
+            tenant_id=tenant_id,
+            source_type="local_file",
+            source_locator=str(resolved),
+            source_native_id=source_native_id or str(resolved),
+            storage_mode="reference",
+            artifact_type=artifact_type or infer_artifact_type(resolved, mime_type),
+            mime_type=mime_type,
+            classification=classification,
+        ))
+        return {
+            "evidence_id": evidence_id,
+            "storage_mode": "reference",
+            "copied_source_bytes": 0,
+            "source_locator": str(resolved),
+        }
 
     def read_evidence(self, evidence_id: str, principal: Principal) -> bytes:
         if not self.db_path.exists():
@@ -1219,6 +1251,23 @@ class CompanyBrainStore:
         with self.read_connect() as conn:
             rows = conn.execute(sql, params).fetchall()
         return [self._memory_dict(row) for row in rows if self._row_authorized(row, principal)]
+
+    def list_accessible_evidence(
+        self,
+        principal: Principal,
+        *,
+        limit: int = 500,
+    ) -> List[Dict[str, Any]]:
+        """List evidence rows visible to a principal before content inspection."""
+        if not self.db_path.exists():
+            return []
+        with self.read_connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM evidence WHERE tenant_id=? "
+                "ORDER BY observed_at DESC, created_at DESC LIMIT ?",
+                (principal.tenant_id, max(1, min(limit, 5000))),
+            ).fetchall()
+        return [dict(row) for row in rows if self._row_authorized(row, principal)]
 
     def fts_ranks(self, query: str, allowed_ids: Iterable[str]) -> Dict[str, float]:
         """Return FTS ranks only for IDs authorized before retrieval."""

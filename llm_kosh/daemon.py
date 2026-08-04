@@ -2,13 +2,8 @@ import time
 import shutil
 import json
 import zipfile
+import os
 from pathlib import Path
-try:
-    from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler
-    HAS_WATCHDOG = True
-except ImportError:
-    HAS_WATCHDOG = False
 
 from llm_kosh.engine.healing import absorb_receipt, resolve
 from llm_kosh.engine.commands import heal_safe as do_heal_safe, audit, memory_map
@@ -246,7 +241,8 @@ def job_sync_reasoning_graph(root: Path):
 
 
 def job_poll_watched_folders(root: Path):
-    from llm_kosh.engine.intake import intake_file_or_dir
+    from llm_kosh.company_brain.store import CompanyBrainStore
+
     pol = load_policy(root)
     watched_dirs = pol.get("daemon", {}).get("watched_directories", [])
     if not watched_dirs:
@@ -261,6 +257,7 @@ def job_poll_watched_folders(root: Path):
     processed = 0
     failed = 0
     updated_ledger = {}
+    store = CompanyBrainStore(root)
     
     # Supported file extensions (or just scan all files except skipped ones)
     skipped_extensions = {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}
@@ -287,17 +284,19 @@ def job_poll_watched_folders(root: Path):
                 key = str(file_path.resolve())
                 
                 # Check if file has changed or is new
-                last_seen_mtime = ledger.get(key)
-                if last_seen_mtime is None or mtime > last_seen_mtime:
-                    res = intake_file_or_dir(root, file_path)
-                    if res.get("added", 0) > 0:
-                        processed += 1
-                        log_daemon_event(root, "watched_file_ingested", {"file": str(file_path)})
-                    else:
-                        failed += 1
-                        log_daemon_event(root, "watched_file_skipped", {"file": str(file_path)})
-                
-                updated_ledger[key] = mtime
+                previous = ledger.get(key)
+                last_seen_mtime = previous.get("mtime") if isinstance(previous, dict) else previous
+                if last_seen_mtime is None or mtime != last_seen_mtime:
+                    result = store.register_local_file(file_path)
+                    processed += 1
+                    log_daemon_event(root, "watched_file_referenced", {
+                        "file": str(file_path),
+                        "evidence_id": result["evidence_id"],
+                        "storage_mode": result["storage_mode"],
+                    })
+                    updated_ledger[key] = mtime
+                else:
+                    updated_ledger[key] = previous
             except Exception as e:
                 failed += 1
                 log_daemon_event(root, "watched_file_error", {"file": str(file_path), "error": str(e)})
@@ -305,7 +304,7 @@ def job_poll_watched_folders(root: Path):
     write_json(ledger_path, updated_ledger)
     
     if processed or failed:
-        return True, f"Watched Folders: Ingested {processed} files, failed/skipped {failed}."
+        return True, f"Watched Folders: Referenced {processed} files, failed/skipped {failed}."
     return True, "Watched Folders: No updates found."
 
 JOBS = {
@@ -366,97 +365,26 @@ def daemon_status(root: Path):
         print(f"  Message:  {s['message']}")
 
 def daemon_start(root: Path, mode: str):
+    """Compatibility entry point; sustained watchdog mode lives in service.py."""
     ensure_root(root)
-    pol = load_policy(root)
-    interval = pol.get("daemon", {}).get("poll_interval_seconds", 10)
-    
-    print(f"Starting LlmKosh Daemon (Mode: {mode})")
-    
-    observer = None
-    if mode in ["watchdog", "auto"]:
-        if not HAS_WATCHDOG:
-            print("Watchdog library missing. Please install it using 'pip install llm_kosh[watch]' or run in polling mode.")
-            if mode == "watchdog":
-                return
-        else:
-            class ReceiptHandler(FileSystemEventHandler):
-                def on_created(self, event):
-                    if not event.is_directory and event.src_path.endswith(".md"):
-                        if "MEMORY_RECEIPT" in Path(event.src_path).name and "processed" not in Path(event.src_path).parts:
-                            daemon_once(root)
-                def on_modified(self, event):
-                    if not event.is_directory and event.src_path.endswith(".md"):
-                        if "MEMORY_RECEIPT" in Path(event.src_path).name and "processed" not in Path(event.src_path).parts:
-                            daemon_once(root)
-
-            class IntakeFolderHandler(FileSystemEventHandler):
-                def on_created(self, event):
-                    self._handle(event)
-                def on_modified(self, event):
-                    self._handle(event)
-                def _handle(self, event):
-                    if event.is_directory:
-                        return
-                    src = Path(event.src_path)
-                    if src.name.startswith(".") or "processed" in src.parts:
-                        return
-                    if str(src.parent.resolve()).lower() != str(intake_dir.resolve()).lower():
-                        return
-                    daemon_run_job(root, "process_intake_folder")
-                            
-            class ExternalFolderHandler(FileSystemEventHandler):
-                def on_created(self, event):
-                    self._handle(event)
-                def on_modified(self, event):
-                    self._handle(event)
-                def _handle(self, event):
-                    if event.is_directory:
-                        return
-                    src = Path(event.src_path)
-                    if src.name.startswith("."): return
-                    if src.suffix.lower() in {".tmp", ".pyc", ".db", ".sqlite", ".zip", ".exe", ".dll", ".log"}:
-                        return
-                    try:
-                        from llm_kosh.engine.intake import intake_file_or_dir
-                        intake_file_or_dir(root, src)
-                        daemon_once(root)
-                    except Exception as e:
-                        print(f"Error processing external file {src}: {e}")
-                            
-            observer = Observer()
-            receipts_dir = root / "receipts"
-            receipts_dir.mkdir(exist_ok=True)
-            observer.schedule(ReceiptHandler(), str(receipts_dir), recursive=False)
-            print(f"Watchdog active on {receipts_dir}")
-            
-            intake_dir = root / "intake"
-            intake_dir.mkdir(parents=True, exist_ok=True)
-            observer.schedule(IntakeFolderHandler(), str(intake_dir), recursive=False)
-            print(f"Watchdog active on {intake_dir}")
-            
-            watched_dirs = pol.get("daemon", {}).get("watched_directories", [])
-            for d in watched_dirs:
-                if Path(d).exists() and Path(d).is_dir():
-                    try:
-                        observer.schedule(ExternalFolderHandler(), str(d), recursive=True)
-                        print(f"Watchdog active on external folder: {d}")
-                    except Exception as e:
-                        print(f"Could not watch {d}: {e}")
-            
-            observer.start()
-
-    try:
-        if mode in ["polling", "auto"]:
-            print(f"Polling active. Interval: {interval}s")
+    if mode == "polling":
+        interval = load_policy(root).get("daemon", {}).get("poll_interval_seconds", 10)
+        print(f"Starting LlmKosh Daemon (Mode: {mode})")
+        try:
             while True:
                 daemon_once(root)
                 time.sleep(interval)
-        else:
-            while True:
-                time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nStopping daemon...")
+        except KeyboardInterrupt:
+            print("\nStopping daemon...")
+        return
+
+    from llm_kosh.service import ServiceRunner
+    previous_root = os.environ.get("LLMKOSH_ROOT")
+    os.environ["LLMKOSH_ROOT"] = str(root)
+    try:
+        ServiceRunner().run()
     finally:
-        if observer:
-            observer.stop()
-            observer.join()
+        if previous_root is None:
+            os.environ.pop("LLMKOSH_ROOT", None)
+        else:
+            os.environ["LLMKOSH_ROOT"] = previous_root

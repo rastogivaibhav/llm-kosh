@@ -1,53 +1,84 @@
-; Custom NSIS sections injected by electron-builder via nsis.include
-; Runs after all files are installed — wires up the daemon, MCP, and cartridge.
+!include nsDialogs.nsh
+!include LogicLib.nsh
+
+Var SourceFolder
+Var DestinationFolder
+Var SourceInput
+Var DestinationInput
+
+Function SelectSourceFolder
+  nsDialogs::SelectFolderDialog "Select the folder containing your work" "$DOCUMENTS"
+  Pop $SourceFolder
+  ${If} $SourceFolder != ""
+    ${NSD_SetText} $SourceInput $SourceFolder
+  ${EndIf}
+FunctionEnd
+
+Function SelectDestinationFolder
+  nsDialogs::SelectFolderDialog "Select where LLM-Kosh stores its local data" "$DOCUMENTS"
+  Pop $DestinationFolder
+  ${If} $DestinationFolder != ""
+    ${NSD_SetText} $DestinationInput $DestinationFolder
+  ${EndIf}
+FunctionEnd
+
+Function ConfigPageCreate
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+
+  ${NSD_CreateLabel} 0 0 100% 18u "Choose the folder containing your work and the folder where LLM-Kosh stores its local index."
+  Pop $0
+  ${NSD_CreateLabel} 0 30u 100% 14u "Work folder (files stay here)"
+  Pop $0
+  ${NSD_CreateText} 0 46u 78% 14u ""
+  Pop $SourceInput
+  ${NSD_CreateButton} 80% 46u 20% 14u "Browse..."
+  Pop $0
+  ${NSD_OnClick} $0 SelectSourceFolder
+
+  ${NSD_CreateLabel} 0 76u 100% 14u "LLM-Kosh data folder (index and citations)"
+  Pop $0
+  ${NSD_CreateText} 0 92u 78% 14u ""
+  Pop $DestinationInput
+  ${NSD_CreateButton} 80% 92u 20% 14u "Browse..."
+  Pop $0
+  ${NSD_OnClick} $0 SelectDestinationFolder
+  nsDialogs::Show
+FunctionEnd
+
+Function ConfigPageLeave
+  ${NSD_GetText} $SourceInput $SourceFolder
+  ${NSD_GetText} $DestinationInput $DestinationFolder
+  ${If} $SourceFolder == ""
+    MessageBox MB_ICONEXCLAMATION "Choose a work folder to continue."
+    Abort
+  ${EndIf}
+  ${If} $DestinationFolder == ""
+    MessageBox MB_ICONEXCLAMATION "Choose an LLM-Kosh data folder to continue."
+    Abort
+  ${EndIf}
+  ${If} $SourceFolder == $DestinationFolder
+    MessageBox MB_ICONEXCLAMATION "The work folder and LLM-Kosh data folder must be different."
+    Abort
+  ${EndIf}
+FunctionEnd
+
+Page custom ConfigPageCreate ConfigPageLeave
 
 !macro customInstall
-  ; Run llm-kosh install using the bundled sidecar binary
-  ; The sidecar is placed at $INSTDIR\resources\bin\llm-kosh.exe by electron-builder
-  DetailPrint "Configuring llm-kosh service and MCP registration..."
-
-  ; Try bundled sidecar first
-  IfFileExists "$INSTDIR\resources\bin\llm-kosh.exe" useSidecar useSystemPath
-
-  useSidecar:
-    ExecWait '"$INSTDIR\resources\bin\llm-kosh.exe" install --yes' $0
-    Goto installDone
-
-  useSystemPath:
-    ; Fall back to system PATH (pip-installed version)
-    ExecWait '"llm-kosh" install --yes' $0
-
-  installDone:
-  DetailPrint "llm-kosh install exited with code $0"
-
-  ; Start the daemon immediately (don't wait for next login)
-  IfFileExists "$INSTDIR\resources\bin\llm-kosh.exe" startSidecarDaemon startSystemDaemon
-
-  startSidecarDaemon:
-    Exec '"$INSTDIR\resources\bin\llm-kosh.exe" service start'
-    Goto daemonDone
-
-  startSystemDaemon:
-    Exec '"llm-kosh" service start'
-
-  daemonDone:
+  CreateDirectory "$INSTDIR\resources"
+  FileOpen $0 "$INSTDIR\resources\llm-kosh-install.conf" w
+  FileWrite $0 "source=$SourceFolder$\r$\n"
+  FileWrite $0 "destination=$DestinationFolder$\r$\n"
+  FileClose $0
+  DetailPrint "LLM-Kosh source and destination folders configured."
 !macroend
 
 !macro customUninstall
-  ; Stop daemon on uninstall
-  IfFileExists "$INSTDIR\resources\bin\llm-kosh.exe" stopSidecarDaemon stopSystemDaemon
-
-  stopSidecarDaemon:
+  IfFileExists "$INSTDIR\resources\bin\llm-kosh.exe" 0 +3
     ExecWait '"$INSTDIR\resources\bin\llm-kosh.exe" service stop'
-    Goto daemonStopped
-
-  stopSystemDaemon:
-    ExecWait '"llm-kosh" service stop'
-
-  daemonStopped:
-
-  ; Remove the startup folder bat file
-  Delete "$APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\llm-kosh-daemon.bat"
-
-  DetailPrint "llm-kosh daemon stopped and startup entry removed."
+    ExecWait '"$INSTDIR\resources\bin\llm-kosh.exe" uninstall --yes'
 !macroend

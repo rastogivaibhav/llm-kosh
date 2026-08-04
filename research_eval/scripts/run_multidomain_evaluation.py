@@ -11,6 +11,7 @@ from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import gettempdir
 from typing import Any, Callable
 
 # Allow running from repo root or from this script path
@@ -571,7 +572,9 @@ def score_output(task: dict[str, Any], found: set[str], edges: list[dict[str, st
 
 
 def run_benchmark(out_dir: Path, include_details: bool = True) -> dict[str, Any]:
-    root = Path(os.environ.get("THEHYPOKOSH_EVAL_CART", "/tmp/thehypokosh_multidomain_holdout"))
+    root = Path(os.environ.get(
+        "THEHYPOKOSH_EVAL_CART", str(Path(gettempdir()) / "thehypokosh_multidomain_holdout")
+    ))
     engine, facts, tasks = build_corpus(root)
 
     results: list[dict[str, Any]] = []
@@ -695,7 +698,9 @@ def write_markdown_report(pack: dict[str, Any], path: Path) -> None:
 # ---------------- ablations ----------------
 
 def run_ablation(out_dir: Path) -> dict[str, Any]:
-    root = Path("/tmp/thehypokosh_ablation_holdout")
+    root = Path(os.environ.get(
+        "THEHYPOKOSH_ABLATION_CART", str(Path(gettempdir()) / "thehypokosh_ablation_holdout")
+    ))
     engine, facts, tasks = build_corpus(root)
 
     def full(task: dict[str, Any]) -> tuple[set[str], list[dict[str, str]], str, bool]:

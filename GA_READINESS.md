@@ -1,12 +1,21 @@
 # GA Readiness Review
 
-Date: 2026-06-23
+Date: 2026-08-03
 
-## Decision
+## Decision by product profile
 
-- Python package and MCP server: **usable now; release polish remains for hosted CI and release automation**.
-- Background service: **usable now; release polish remains for hosted cross-platform lifecycle checks**.
-- Desktop installers: **not GA until Windows signing and macOS signing/notarization are configured and verified**.
+- **Personal mode:** the Python package, classic MCP path, receipts, safe packs,
+  and local service are suitable for a controlled pilot. This is the default
+  profile and does not enable external source-folder watching.
+- **Company Brain mode:** the governed evidence and cited-context path is still
+  pilot-only until the source-folder-to-context acceptance flow passes on a
+  clean install with a real MCP client.
+- **Desktop installers:** not public GA until Windows signing, macOS
+  signing/notarization, and clean-host install checks are configured and
+  verified. Company Brain desktop mode has the additional governed-context
+  acceptance gate above.
+
+The package is shared; the mode is stored per cartridge in `LLM_KOSH.json`.
 
 ## Verified locally
 
@@ -23,6 +32,15 @@ just aspirational:
 - Desktop: 42 Jest tests, strict lint, Vite production build, and 2 Electron Playwright flows passed.
 - Frozen Windows sidecar: init, status, MCP self-test, and streamable HTTP passed.
 - Windows NSIS installer: built with the sidecar at `resources/bin/llm-kosh.exe` and tray icon at `resources/icon.png`.
+
+The 588-test figure above is a historical baseline. The current engineering
+pass adds explicit profile and direct-evidence coverage; record its exact suite
+result in the release candidate report rather than carrying this number
+forward.
+
+Current engineering pass: **621 passed, 6 skipped**, with one non-failing
+warning (FastAPI/httpx deprecation; local pytest cache permission was avoided
+in this run).
 
 ## Verified in this session
 
@@ -42,10 +60,11 @@ These are still the true GA gaps. They are documented requirements, not
 historical assumptions:
 
 1. Let the expanded GitHub Actions matrix pass on Python 3.10-3.13 across Windows, macOS, and Linux.
-2. Configure a Windows code-signing certificate and verify Authenticode on the installer and bundled executables. The local test artifact is unsigned.
-3. Configure Apple Developer ID signing and notarization; validate the DMG on a clean macOS host.
-4. Build and smoke-test the Linux AppImage/deb on a clean Linux host.
-5. Review or accept the remaining npm audit findings: no high/critical findings remain; the reported findings are low/moderate development/test-tool dependencies.
+2. For Company Brain mode, prove external source registration -> bounded evidence retrieval -> cited `company_context_compile` output on a clean install and real MCP client.
+3. Configure a Windows code-signing certificate and verify Authenticode on the installer and bundled executables. The local test artifact is unsigned.
+4. Configure Apple Developer ID signing and notarization; validate the DMG on a clean macOS host.
+5. Build and smoke-test the Linux AppImage/deb on a clean Linux host.
+6. Review or accept the remaining npm audit findings: no high/critical findings remain; the reported findings are low/moderate development/test-tool dependencies.
 
 ## GitHub Actions release path
 

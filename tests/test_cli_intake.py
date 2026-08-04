@@ -92,6 +92,8 @@ def test_intake_list_and_status(intake_workspace):
     
     items = intake_list(root)
     assert len(items) == 1
-    
+    assert len(intake_list(root, status="pending")) == 1
+    assert intake_list(root, status="applied") == []
+
     stats = intake_status(root)
     assert stats["pending"] == 1

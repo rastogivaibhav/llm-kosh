@@ -36,6 +36,10 @@ def main() -> None:
 
     p = sub.add_parser("init", help="Create a new cartridge")
     p.add_argument("--owner", default=os.environ.get("USER", "user"))
+    p.add_argument(
+        "--mode", choices=["personal", "company-brain"], default="personal",
+        help="Cartridge profile: personal memory (default) or governed Company Brain",
+    )
 
     p = sub.add_parser("add", help="Add a memory item")
     p.add_argument("--kind", required=True, choices=sorted(KINDS))
@@ -295,6 +299,10 @@ def main() -> None:
     p_install = sub.add_parser("install", help="One-click setup after pip install: cartridge + service + MCP")
     p_install.add_argument("--yes", "-y", action="store_true", help="Non-interactive mode")
     p_install.add_argument("--clean", action="store_true", help="Remove local state before reinstalling")
+    p_install.add_argument(
+        "--mode", choices=["personal", "company-brain"], default="personal",
+        help="Cartridge profile: personal memory (default) or governed Company Brain",
+    )
     sub.add_parser("repair-install", help="Repair the local Python installation from the current workspace")
     sub.add_parser("clean-install", help="Reset local state and run setup again")
     p_uninstall = sub.add_parser("uninstall", help="Remove service registration and desktop integration")
@@ -314,6 +322,9 @@ def main() -> None:
         run_brain_command(root, args)
     elif args.cmd == "init":
         init_cartridge(root, args.owner)
+        if args.mode == "company-brain":
+            from llm_kosh.core.profile import set_cartridge_mode
+            set_cartridge_mode(root, "company_brain")
     elif args.cmd == "setup":
         if args.dry_run:
             print("llm-kosh setup would:")
@@ -333,7 +344,11 @@ def main() -> None:
             print("Next: llm-kosh remember \"something useful\"")
             return
         from llm_kosh.install import run_install
-        run_install(yes=getattr(args, "yes", False), clean=getattr(args, "clean", False))
+        run_install(
+            yes=getattr(args, "yes", False),
+            clean=getattr(args, "clean", False),
+            mode=getattr(args, "mode", "personal").replace("-", "_"),
+        )
     elif args.cmd == "remember":
         title = args.title or args.text.strip().split("\n", 1)[0][:80] or "Untitled memory"
         if args.inbox:

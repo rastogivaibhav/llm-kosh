@@ -264,6 +264,7 @@ def test_cli_runs_understanding_graph_and_queries_episodes(tmp_path, runner):
 @pytest.mark.asyncio
 async def test_mcp_exposes_understanding_and_episode_reads(tmp_path):
     from llm_kosh.core.memory import init_cartridge
+    from llm_kosh.core.profile import set_cartridge_mode
     from llm_kosh.mcp_server import mcp, start_server
 
     cartridge = tmp_path / "cartridge"
@@ -273,6 +274,7 @@ async def test_mcp_exposes_understanding_and_episode_reads(tmp_path):
         "content": "Plan to update the release process", "project": "release",
     }), encoding="utf-8")
     init_cartridge(cartridge, "MCP understanding test")
+    set_cartridge_mode(cartridge, "company_brain")
     start_server(
         cartridge, stdio=False, http=False,
         allow_write=True, allow_mutate=False, allow_private=False,

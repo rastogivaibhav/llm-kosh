@@ -1,7 +1,10 @@
 const bridge = window.llmKosh || {
   selectCartridgeRoot: async () => 'C:\\mock\\root',
+  selectSourceFolder: async () => 'C:\\mock\\source',
+  configureInstall: async (sourceFolder, destinationFolder) => ({ ok: true, configured: true, config: { cartridgeRoot: destinationFolder, sourceFolder, destinationFolder, sourceFolders: [sourceFolder], cartridgeMode: 'personal' } }),
   createCartridgeRoot: async () => ({ ok: true, folder: 'C:\\mock\\root' }),
   getStatus: async () => ({ ok: true, stdout: 'Mock status' }),
+  getSourceStatus: async () => ({ ok: true, status: 'Ready', filesDiscovered: 0, filesIndexed: 0, filesRemaining: 0 }),
   selectExecutable: async () => 'C:\\mock\\llm-kosh',
   readConfig: async () => ({ cartridgeRoot: 'C:\\mock\\root' }),
   writeConfig: async (cfg) => cfg,
@@ -48,7 +51,10 @@ const bridge = window.llmKosh || {
 
 export const api = {
   ...bridge,
+  selectSourceFolder: async () => bridge.selectSourceFolder(),
+  configureInstall: async (sourceFolder, destinationFolder) => bridge.configureInstall(sourceFolder, destinationFolder),
   getServiceStatus: async (rootPath) => bridge.getServiceStatus(rootPath),
+  getSourceStatus: async (rootPath, sourcePath) => bridge.getSourceStatus(rootPath, sourcePath),
   getDaemonStatus: async (rootPath) => bridge.getDaemonStatus(rootPath),
   getLocalServiceDetails: async () => bridge.getLocalServiceDetails(),
   getLocalDaemonDetails: async () => bridge.getLocalDaemonDetails(),

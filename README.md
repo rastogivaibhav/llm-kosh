@@ -53,6 +53,21 @@ That installs the package, creates the default cartridge at
 `~/.llmkosh/cartridge`, configures local defaults, and registers the supported
 desktop integration where possible.
 
+This is **Personal mode**: classic local memory, optional reference-only source
+folders, receipts, safe packs, and read-only MCP. It does not create a governed
+Company Brain automatically.
+
+For a governed organizational cartridge, opt in explicitly during setup:
+
+```bash
+llm-kosh install --yes --mode company-brain
+```
+
+Company Brain mode adds permission-aware retrieval, lifecycle review, and
+governed cited context on top of the same reference-first source evidence.
+The mode is stored per cartridge, so one installation can own both personal
+and company cartridges.
+
 To manage the background service:
 
 ```bash

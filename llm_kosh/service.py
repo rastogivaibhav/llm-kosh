@@ -134,11 +134,9 @@ class _ExternalFolderHandler(_FSEventHandler):  # type: ignore[misc]
         if any(lower_name.endswith(ending) for ending in ignored_endings):
             return
         try:
-            from llm_kosh.engine.intake import intake_file_or_dir
-            intake_file_or_dir(self._root, src)
-            from llm_kosh.daemon import daemon_once
-            daemon_once(self._root)
-            self._log.info("External file ingested by watchdog: %s", src)
+            from llm_kosh.company_brain.store import CompanyBrainStore
+            result = CompanyBrainStore(self._root).register_local_file(src)
+            self._log.info("External file referenced by watchdog: %s (%s)", src, result["evidence_id"])
         except Exception as exc:
             self._log.warning("external file event failed for %s: %s", src, exc)
 
@@ -292,7 +290,9 @@ class ServiceRunner:
         intake_obs.start()
         self._observers.append(intake_obs)
 
-        watched_dirs = self._config.get("daemon", {}).get("watched_directories", [])
+        from llm_kosh.engine.safety import load_policy
+        policy = load_policy(root)
+        watched_dirs = policy.get("daemon", {}).get("watched_directories", [])
         for watched in watched_dirs:
             watched_path = Path(watched).expanduser()
             if not watched_path.exists() or not watched_path.is_dir():

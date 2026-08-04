@@ -11,6 +11,14 @@ from llm_kosh.core.utils import (
 )
 def init_cartridge(root: Path, owner: str) -> None:
     root.mkdir(parents=True, exist_ok=True)
+    existing_config = read_json(root / "LLM_KOSH.json", {})
+    existing_policy = read_json(root / "LLM_KOSH_POLICY.json", {})
+    if not existing_policy:
+        existing_policy = read_json(root / "CARTRIDGE_POLICY.json", {})
+    from llm_kosh.core.profile import normalize_mode
+    cartridge_mode = normalize_mode(
+        existing_config.get("mode") or existing_policy.get("mode")
+    )
     for rel in [
         "source/identity", "source/preferences", "source/projects", "source/decisions",
         "source/prompts", "source/notes", "source/generated-files", "source/intake", "source/conversations",
@@ -23,6 +31,7 @@ def init_cartridge(root: Path, owner: str) -> None:
     config = {
         "schema": "llm_kosh.v0",
         "version": APP_VERSION,
+        "mode": cartridge_mode,
         "koush_id": "cart_" + uuid.uuid4().hex[:12],
         "owner": owner,
         "created_at": now_iso(),
@@ -38,6 +47,7 @@ def init_cartridge(root: Path, owner: str) -> None:
     write_json(root / "LLM_KOSH.json", config)
     
     policy = {
+        "mode": cartridge_mode,
         "mcp": {
             "read_only_default": True,
             "allow_private_exports": False,

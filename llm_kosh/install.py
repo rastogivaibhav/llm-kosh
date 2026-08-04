@@ -543,8 +543,15 @@ def check_path_variable() -> None:
 # Top-level orchestrator
 # ---------------------------------------------------------------------------
 
-def run_install(yes: bool = False, clean: bool = False) -> None:
+def run_install(
+    yes: bool = False,
+    clean: bool = False,
+    mode: str = "personal",
+) -> None:
     """Configure a package that has already been installed by pip/pipx."""
+    from llm_kosh.core.profile import normalize_mode, set_cartridge_mode
+
+    mode = normalize_mode(mode)
     print("=== llm-kosh setup ===")
 
     if clean:
@@ -559,6 +566,9 @@ def run_install(yes: bool = False, clean: bool = False) -> None:
 
     print("\n3. Initialising default cartridge...")
     init_default_cartridge()
+    if mode != "personal":
+        set_cartridge_mode(get_default_cartridge_root(), mode)
+        print(f"  [ok] Cartridge mode: {mode}")
 
     print("\n4. Registering OS service...")
     service_ok = register_os_service()

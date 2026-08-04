@@ -453,6 +453,9 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
                 The MCP server exposes your local cartridge directly to Claude Desktop, Cursor, and any MCP-compatible AI. 
                 Paste the generated config into <code className="bg-brand-surface px-1 py-0.5 rounded text-brand-accent">%APPDATA%\Claude\claude_desktop_config.json</code> and restart Claude.
               </p>
+              <p className="text-xs text-brand-accent mt-2 max-w-lg">
+                Company Brain context is served through <code>company_context_compile</code>, with cited evidence available through <code>company_memory_search</code> and <code>company_artifact_inspect</code>.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               {mcpStatus.running ? (
@@ -515,7 +518,7 @@ export default function Settings({ config, setConfig, setStatusMessage }) {
 
               <div className="relative">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-bold text-brand-muted uppercase">Claude Desktop Config JSON</span>
+                  <span className="text-xs font-bold text-brand-muted uppercase">MCP client config JSON</span>
                   <button
                     onClick={handleCopyConfig}
                     className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all ${

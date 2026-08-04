@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:/Users/vrast/Documents/Codex/2026-08-02/che/work/llm-kosh/.venv/Scripts/graphify.exe hook-check"
+          }
+        ]
+      }
+    ]
+  }
+}

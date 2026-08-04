@@ -355,7 +355,6 @@ def _episode_status(events: Sequence[Dict[str, Any]]) -> str:
 
 
 def _episode_from_events(
-    store: CompanyBrainStore,
     events: Sequence[Dict[str, Any]],
     session_id: str,
     boundary_signals: Sequence[str],
@@ -449,14 +448,14 @@ def segment_events(
                     signals.append("post_completion_request")
             if signals and current:
                 episodes.append(_episode_from_events(
-                    store, current, session_id, start_signals + signals, pipeline_version,
+                    current, session_id, start_signals + signals, pipeline_version,
                 ))
                 current = []
                 start_signals = signals
             current.append(event)
         if current:
             episodes.append(_episode_from_events(
-                store, current, session_id, start_signals, pipeline_version,
+                current, session_id, start_signals, pipeline_version,
             ))
     return episodes
 

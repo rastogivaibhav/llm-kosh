@@ -1,5 +1,17 @@
 # Architecture
 
+## Cartridge profiles
+
+The package has two explicit runtime profiles stored per cartridge:
+
+- `personal` is the backwards-compatible default. It uses classic file-backed
+  memory and receipt workflows, and can reference configured source folders;
+  governed Company Brain MCP tools remain disabled.
+- `company_brain` enables the canonical evidence database, reference-first
+  external sources, lifecycle/permission checks, and cited context retrieval.
+
+The profile is a policy boundary, not a second package or database engine.
+
 `llm-kosh` is a local memory runtime with four main responsibilities:
 
 1. Store typed memory in a cartridge directory.

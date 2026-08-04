@@ -228,7 +228,7 @@ export default function Intake({ config, setStatusMessage }) {
             <Inbox className="text-brand-accent" size={28} />
             Intake Hub
           </h1>
-          <p className="text-brand-muted mt-1">Capture raw thoughts and process external files.</p>
+          <p className="text-brand-muted mt-1">Capture raw thoughts and process explicit intake files.</p>
         </div>
       </div>
 
@@ -297,7 +297,7 @@ export default function Intake({ config, setStatusMessage }) {
           </div>
           
           <p className="text-xs text-brand-muted mb-4">
-            This pulls raw files from `intake/` and watched folders, classifying them into the memory index via `processor` rules.
+            This scans the cartridge `intake/` folder and applies `processor` rules. Reference-only source folders are handled by the Company Brain watcher.
           </p>
 
           <div className="flex-1 bg-[#1C1917] p-4 rounded-xl border border-[#2D1B14] font-mono text-xs overflow-auto text-brand-accent whitespace-pre-wrap shadow-inner">

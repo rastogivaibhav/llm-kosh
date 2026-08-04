@@ -311,7 +311,7 @@ export default function Explorer({ config, setStatusMessage }) {
 
             <div className="flex flex-col gap-2">
               {watchedFolders.length === 0 ? (
-                <span className="text-xs text-brand-muted italic px-2">No watched folders configured.</span>
+                <span className="text-xs text-brand-muted italic px-2">No source folders configured.</span>
               ) : (
                 watchedFolders.map(folder => {
                   const folderNode = {
@@ -437,7 +437,7 @@ export default function Explorer({ config, setStatusMessage }) {
             </div>
             <h2 className="text-xl font-bold text-brand-text mb-2">Workspace & Watched Folder Explorer</h2>
             <p className="text-sm text-brand-muted text-center max-w-md mb-8 leading-relaxed">
-              Explore memory vault items inside your active project, manage watched folders, and inspect converted files.
+              Explore memory vault items, reference-only source folders, and inspected evidence.
             </p>
             <div className="grid grid-cols-2 gap-4 max-w-md w-full">
               <div className="bg-brand-panel p-4 rounded-xl border border-brand-border/60 flex flex-col items-center text-center">

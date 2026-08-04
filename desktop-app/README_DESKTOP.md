@@ -1,6 +1,36 @@
 # llm-kosh Desktop (Phase 1)
 
+## Installer-led first run
+
+The packaged Windows installer asks for two folders before completing:
+
+- **Work folder** — existing files remain in place and are referenced.
+- **LLM-Kosh data folder** — local index, metadata, citations, and configuration.
+
+The installer writes a one-time handoff. On first launch Electron initializes
+the destination, configures the source, starts the local service, and shows the
+source/index data flow on the Home screen. The normal user does not need to run
+the CLI or configure a watcher manually.
+
+Run the desktop acceptance flow in Docker with:
+
+```bash
+docker compose -f docker-compose.playwright.yml up --build --abort-on-container-exit
+```
+
 This is the minimal Electron desktop shell for the `llm-kosh` system.
+
+## Cartridge modes
+
+Onboarding makes the cartridge profile explicit:
+
+- **Personal** is the default and keeps the classic local-memory workflow.
+- **Company Brain** enables governed reference evidence, external source
+  folders, and cited context retrieval.
+
+The profile is stored per cartridge. The desktop app does not silently convert
+a personal cartridge into a Company Brain; selecting Company Brain runs the
+explicit `brain init` transition.
 
 ## Architecture
 
@@ -12,7 +42,7 @@ This is the minimal Electron desktop shell for the `llm-kosh` system.
 
 This desktop shell acts as a thin wrapper around the local Python CLI. To prevent RCE and shell injection:
 - The `spawn` command is strictly used with an array of arguments. The `shell: false` option is enforced.
-- **Phase 5 Command Allowlist**: The main process ONLY executes `status`, `init`, `pack`, `safe-pack`, `validate-pack`, `validate-receipt`, `absorb`, and `daemon`. All file system access (like selecting watched folders) is safely routed through specific IPC handlers, keeping the renderer isolated.
+- **Command Allowlist**: The main process exposes only the commands used by the UI (status, search, intake, audit, pack, receipt, and service commands). Arbitrary Python or shell execution is rejected. All file system access (like selecting watched folders) is safely routed through specific IPC handlers, keeping the renderer isolated.
 - The `--allow-secrets` flag is explicitly blocked by the UI security policy.
 - No external CDNs are loaded.
 - No telemetry or cloud syncing.
@@ -35,12 +65,11 @@ A Jest test suite validates the security model of the IPC command builder and co
 npm run test
 ```
 
-## Known Limitations (Phase 6)
-- The UI is restricted to Home (with Daemon and Watched Folders controls), Prompt Library, Settings, Generate Pack, and Receipt Inbox views.
-- App discovery automation is not yet implemented.
-
-## Next Phase Recommendation
-For Phase 7, we should explore packaging the Electron app into a standalone installer, and building out the app discovery automation feature.
+## Current packaging behavior
+The electron-builder installer creates normal Desktop and Start Menu shortcuts.
+The configured source and destination are handed to Electron on first launch;
+the local service starts automatically so the Home screen immediately shows
+the source/index data flow.
 
 ## Packaging
 

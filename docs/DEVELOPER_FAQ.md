@@ -4,6 +4,20 @@ This page answers the questions that come up most often when wiring up a
 cartridge, debugging the MCP server, or deciding whether to use the service or
 daemon runtime.
 
+## 0. Which product mode am I using?
+
+Each cartridge has an explicit mode:
+
+- **Personal** (the default): classic local memory, receipts, safe packs, and
+  read-only MCP. External source-folder watching is disabled.
+- **Company Brain**: governed reference-first evidence, external source-folder
+  watching, principal-aware retrieval, lifecycle review, and cited context.
+
+Check the mode in `LLM_KOSH.json`. Set it during setup with
+`llm-kosh install --mode company-brain`, or initialise an existing cartridge
+with `llm-kosh --root ./cartridge brain init`. The Python package is shared;
+the mode is stored per cartridge.
+
 ## 1. What is the root repo?
 
 The root repo is the Git checkout you are working in now:
@@ -51,12 +65,17 @@ of the root directory.
 Yes.
 
 The service watches the cartridge’s own intake folders, and it can also watch
-extra folders listed in `[daemon].watched_directories` when `watchdog` is
-available. That is the right place to point editor export folders, automation
-drop zones, or other external sources you want ingested automatically.
+extra folders listed in `daemon.watched_directories` in
+`LLM_KOSH_POLICY.json`. External files are registered as Company Brain
+reference evidence: the source file stays in place and no classic copy is
+created. Use `intake` or an explicit snapshot when you intentionally want
+conversion or copied content.
 
-If you are using the legacy foreground daemon, the same watched-folder concept
-is available there too.
+The modern service is the canonical watcher. The legacy foreground daemon is
+kept only as a compatibility entry point.
+
+External source-folder watching is enabled only for cartridges whose
+`LLM_KOSH.json` mode is `company_brain`; Personal mode ignores those folders.
 
 ## 5. How do I feed information into the system?
 
@@ -68,9 +87,10 @@ Common ingestion paths are:
 - `llm-kosh intake`
 - `llm-kosh receipt`
 
-From MCP, the corresponding receipt and intake tools are the preferred way to
-submit memory. The important idea is that everything should land in a traceable
-receipt or intake record so the ledger stays auditable.
+From MCP, use `company_context_compile` for cited developer context,
+`company_memory_search` for governed memory lookup, and
+`company_artifact_inspect` for source evidence. Receipt and intake tools remain
+available when you explicitly want classic conversion or memory submission.
 
 ## 6. How do I configure daemons for this project?
 

@@ -1,12 +1,12 @@
 import importlib
 import importlib.util
-import os
-import sys
 import uuid
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Callable
-from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Any
+from dataclasses import asdict, dataclass, field
+
+from llm_kosh.core.utils import write_json
 
 @dataclass
 class ProposalRecord:
@@ -33,27 +33,7 @@ class ProposalRecord:
     review_state: str = "pending"
 
     def to_dict(self):
-        return {
-            "proposal_id": self.proposal_id,
-            "source_intake_id": self.source_intake_id,
-            "source_type": self.source_type,
-            "source_path": self.source_path,
-            "processor": self.processor,
-            "action": self.action,
-            "proposed_kind": self.proposed_kind,
-            "title": self.title,
-            "body": self.body,
-            "project": self.project,
-            "visibility": self.visibility,
-            "target_ids": self.target_ids,
-            "supersedes": self.supersedes,
-            "confidence": self.confidence,
-            "requires_review": self.requires_review,
-            "evidence": self.evidence,
-            "safety": self.safety,
-            "apply_plan": self.apply_plan,
-            "review_state": self.review_state
-        }
+        return asdict(self)
 
 @dataclass
 class ProposalBatch:
@@ -63,15 +43,7 @@ class ProposalBatch:
     proposals: List[ProposalRecord] = field(default_factory=list)
 
     def to_dict(self):
-        return {
-            "schema": "llm_kosh.proposal_batch.v1",
-            "batch_id": self.batch_id,
-            "intake_id": self.intake_id,
-            "processor": self.processor,
-            "proposals": [p.to_dict() for p in self.proposals]
-        }
-
-from llm_kosh.core.utils import write_json, read_json
+        return {"schema": "llm_kosh.proposal_batch.v1", **asdict(self)}
 
 class ProcessorBase:
     name: str = "base_processor"
@@ -107,6 +79,109 @@ class ProcessorBase:
             proposals=[rec]
         )
 
+
+class FilenameProcessor(ProcessorBase):
+    """Declarative processor for the built-in filename conventions."""
+
+    def __init__(self, name: str, description: str, *, keyword: str = "", suffix: str = ".md",
+                 kind: str = "note", project: str = "", title_prefix: str = "",
+                 source_type: str = "", content_format: str = "text") -> None:
+        self.name = name
+        self.description = description
+        self.keyword = keyword
+        self.suffix = suffix
+        self.kind = kind
+        self.project = project
+        self.title_prefix = title_prefix
+        self.source_type = source_type
+        self.content_format = content_format
+
+    def inspect(self, intake_record_or_file: Dict[str, Any], file_path: Path) -> bool:
+        if self.source_type:
+            return (intake_record_or_file.get("source_type") == self.source_type
+                    if isinstance(intake_record_or_file, dict) else True)
+        return file_path.suffix.lower() == self.suffix and self.keyword in file_path.name.lower()
+
+    def generate_proposal(self, intake_record_or_file: Dict[str, Any], file_path: Path) -> ProposalBatch:
+        intake = intake_record_or_file if isinstance(intake_record_or_file, dict) else {}
+        intake_id = intake.get("intake_id")
+        source_type = intake.get("source_type", "file")
+        content = file_path.read_text(encoding="utf-8", errors="replace")
+
+        if self.content_format == "receipt":
+            from llm_kosh.engine.healing import parse_receipt
+            proposals = []
+            parsed = parse_receipt(content)
+            for section, action in (
+                ("decision", "create"), ("correction", "supersede"), ("file", "create"),
+                ("gap", "create"), ("suggestion", "create"),
+            ):
+                for item in parsed.get(section, []):
+                    proposals.append(ProposalRecord(
+                        proposal_id=f"prop_{uuid.uuid4().hex[:12]}",
+                        source_intake_id=intake_id,
+                        source_type=source_type,
+                        source_path=str(file_path),
+                        processor=self.name,
+                        action=action,
+                        proposed_kind=section,
+                        title=item["title"],
+                        body=item["body"],
+                        project=item.get("project", ""),
+                        supersedes=item.get("ref", "") if section == "correction" else "",
+                    ))
+        else:
+            title = f"{self.title_prefix}{file_path.stem}"
+            body = content
+            if self.content_format == "json":
+                try:
+                    parsed = json.loads(content)
+                    title = parsed.get("title", file_path.stem)
+                    body = json.dumps(parsed, indent=2)
+                except Exception:
+                    title, body = file_path.stem, "Failed to parse conversation json."
+            proposals = [ProposalRecord(
+                proposal_id=f"prop_{uuid.uuid4().hex[:12]}",
+                source_intake_id=intake_id,
+                source_type=source_type,
+                source_path=str(file_path),
+                processor=self.name,
+                action="create",
+                proposed_kind=self.kind,
+                title=title,
+                body=body,
+                project=self.project,
+            )]
+
+        return ProposalBatch(
+            batch_id=f"batch_{uuid.uuid4().hex[:12]}",
+            intake_id=intake_id,
+            processor=self.name,
+            proposals=proposals,
+        )
+
+
+BUILTIN_PROCESSOR_RULES = (
+    dict(name="conversation_processor", description="Parses conversation logs (JSON) into memory proposals",
+         keyword="conversation", suffix=".json", project="conversations", content_format="json"),
+    dict(name="decision_processor", description="Extracts decision memories from intake items",
+         keyword="decision", kind="decision"),
+    dict(name="gap_processor", description="Extracts open knowledge gaps from intake items",
+         keyword="gap", kind="gap"),
+    dict(name="generated_file_processor", description="Fallback processor for generic text files",
+         source_type="generic_file"),
+    dict(name="handover_processor", description="Parses agent handover documents into project context",
+         keyword="handover", project="handovers", title_prefix="Handover: "),
+    dict(name="project_processor", description="Extracts project memories from intake items",
+         keyword="project", kind="project"),
+    dict(name="prompt_processor", description="Extracts prompt memories from intake items",
+         keyword="prompt", kind="prompt"),
+    dict(name="receipt_processor", description="Parses MEMORY_RECEIPT.md files into proposals",
+         keyword="receipt", content_format="receipt"),
+    dict(name="safety_processor", description="Detects safety issues or security policies in intake items",
+         keyword="safety", kind="decision", project="security", title_prefix="Safety Policy: "),
+)
+
 def _load_processors_from_dir(d: Path) -> List[ProcessorBase]:
     processors = []
     if not d.exists():
@@ -124,8 +199,7 @@ def _load_processors_from_dir(d: Path) -> List[ProcessorBase]:
     return processors
 
 def get_builtin_processors() -> List[ProcessorBase]:
-    base_dir = Path(__file__).parent / "builtin"
-    return _load_processors_from_dir(base_dir)
+    return [FilenameProcessor(**rule) for rule in BUILTIN_PROCESSOR_RULES]
 
 def get_user_processors(root: Path) -> List[ProcessorBase]:
     user_dir = root / "processors" / "user"

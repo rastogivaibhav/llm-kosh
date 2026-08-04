@@ -165,3 +165,73 @@ def search_memories(
 
     results.sort(key=lambda item: (item["score"], item["confidence"], item["updated_at"]), reverse=True)
     return results[:max(1, limit)]
+
+
+def search_evidence(
+    store: CompanyBrainStore,
+    query: str,
+    principal: Principal,
+    *,
+    limit: int = 8,
+    max_text: int = 8_000,
+) -> List[Dict[str, Any]]:
+    """Search registered evidence directly without creating a classic copy.
+
+    This is intentionally separate from memory retrieval. Company Brain can
+    cite a newly watched source before a reviewer promotes an extracted claim
+    into governed memory; the source bytes remain at their original path.
+    """
+    query_tokens = _tokens(query)
+    results: List[Dict[str, Any]] = []
+    for row in store.list_accessible_evidence(principal):
+        evidence_id = row["evidence_id"]
+        try:
+            inspection = store.inspect_evidence(
+                evidence_id,
+                principal,
+                strong=True,
+                include_preview=True,
+                max_text=max_text,
+            )
+        except (KeyError, PermissionError, OSError):
+            continue
+        if inspection.get("availability", {}).get("status") != "available":
+            continue
+
+        source_label = " ".join((row.get("source_locator", ""), row.get("artifact_type", "")))
+        segments = (inspection.get("inspection") or {}).get("segments") or []
+        candidates = segments or [{"text": source_label, "native_locator": {}}]
+        best = None
+        for segment in candidates:
+            text = str(segment.get("text", ""))
+            document_tokens = _tokens(" ".join((source_label, text)))
+            semantic = _cosine(query_tokens, document_tokens) if query_tokens else 0.0
+            overlap = (
+                len(set(query_tokens) & set(document_tokens)) / len(set(query_tokens))
+                if query_tokens else 0.0
+            )
+            score = 0.70 * semantic + 0.30 * overlap
+            candidate = (score, text, segment.get("native_locator") or {})
+            if best is None or candidate[0] > best[0]:
+                best = candidate
+        assert best is not None
+        score, quote, native_locator = best
+        if query_tokens and score <= 0:
+            continue
+        results.append({
+            "evidence_id": evidence_id,
+            "source_locator": row["source_locator"],
+            "source_type": row["source_type"],
+            "artifact_type": row["artifact_type"],
+            "mime_type": row["mime_type"],
+            "storage_mode": row["storage_mode"],
+            "content_hash": row["content_hash"],
+            "native_locator": native_locator,
+            "quote": quote[:max_text],
+            "availability": inspection["availability"],
+            "score": round(score, 6),
+            "delivery": "reference",
+        })
+
+    results.sort(key=lambda item: (item["score"], item["evidence_id"]), reverse=True)
+    return results[:max(1, limit)]

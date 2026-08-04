@@ -5,6 +5,7 @@ import { Activity, Folder, Terminal, Play, Square, Settings, RefreshCcw } from '
 export default function Home({ config, setConfig, setStatusMessage }) {
   const [root, setRoot] = useState(config?.cartridgeRoot || '');
   const [statusOutput, setStatusOutput] = useState(null);
+  const [sourceStatus, setSourceStatus] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Service state
@@ -100,14 +101,27 @@ export default function Home({ config, setConfig, setStatusMessage }) {
     }
   }, [root]);
 
+  const handleRefreshSourceStatus = useCallback(async (path = root) => {
+    if (!path) return;
+    const result = await api.getSourceStatus(path, config?.sourceFolder || config?.sourceFolders?.[0]);
+    setSourceStatus(result);
+  }, [config?.sourceFolder, config?.sourceFolders, root]);
+
   useEffect(() => {
     if (config?.cartridgeRoot) {
       setRoot(config.cartridgeRoot);
       handleRefresh(config.cartridgeRoot);
       handleRefreshService(config.cartridgeRoot);
+      handleRefreshSourceStatus(config.cartridgeRoot);
     }
     loadWatchedFolders();
-  }, [config?.cartridgeRoot, handleRefresh, handleRefreshService, loadWatchedFolders]);
+  }, [config?.cartridgeRoot, handleRefresh, handleRefreshService, handleRefreshSourceStatus, loadWatchedFolders]);
+
+  useEffect(() => {
+    if (!root) return undefined;
+    const timer = setInterval(() => handleRefreshSourceStatus(root), 2000);
+    return () => clearInterval(timer);
+  }, [handleRefreshSourceStatus, root]);
 
   const handleToggleService = async () => {
     if (!root) return;
@@ -187,6 +201,12 @@ export default function Home({ config, setConfig, setStatusMessage }) {
           <div className="bg-brand-surface p-4 rounded-xl border border-brand-border font-mono text-sm break-all text-brand-text mb-4 flex-1">
             {root || <span className="text-brand-muted italic">No cartridge selected</span>}
           </div>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-semibold text-brand-muted uppercase">Cartridge mode</span>
+            <span className="text-xs font-bold text-brand-text">
+              {(config?.cartridgeMode || 'personal') === 'company_brain' ? 'Company Brain' : 'Personal'}
+            </span>
+          </div>
           <div className="flex justify-between items-center mt-auto">
              <span className="text-xs font-semibold text-brand-muted uppercase">Health Status</span>
              <button 
@@ -241,10 +261,10 @@ export default function Home({ config, setConfig, setStatusMessage }) {
           </div>
 
           <div className="mt-auto">
-            <h3 className="text-xs font-semibold text-brand-muted uppercase mb-2">Background Watched Folders</h3>
+            <h3 className="text-xs font-semibold text-brand-muted uppercase mb-2">Reference-only source folders</h3>
              <div className="flex flex-wrap gap-2">
                {watchedFolders.length === 0 ? (
-                 <span className="text-xs text-brand-muted italic">No external folders watched.</span>
+                 <span className="text-xs text-brand-muted italic">No source folders configured.</span>
                ) : (
                  watchedFolders.map(f => (
                    <div key={f} className="group flex items-center gap-2 bg-brand-surface border border-brand-border px-3 py-1.5 rounded-lg text-xs font-mono text-brand-text">
@@ -299,6 +319,24 @@ export default function Home({ config, setConfig, setStatusMessage }) {
               {isMcpRunning ? <><Square size={16} fill="currentColor" /> Stop Server</> : <><Play size={16} fill="currentColor" /> Start Server</>}
             </button>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-brand-panel p-6 rounded-2xl border border-brand-border shadow-sm mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-bold tracking-widest uppercase text-brand-muted">Data flow</h2>
+            <p className="text-sm text-brand-muted mt-1">Your configured source is being indexed locally.</p>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${sourceStatus?.status === 'Ready' ? 'text-brand-success bg-brand-success/10' : 'text-brand-accent bg-brand-accent/10'}`}>
+            {sourceStatus?.status || 'Preparing'}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div><span className="text-brand-muted">Source folder</span><div className="font-mono text-brand-text break-all">{sourceStatus?.sourceFolder || config?.sourceFolder || 'Not configured'}</div></div>
+          <div><span className="text-brand-muted">LLM-Kosh data folder</span><div className="font-mono text-brand-text break-all">{sourceStatus?.destinationFolder || config?.destinationFolder || root || 'Not configured'}</div></div>
+          <div><span className="text-brand-muted">Files discovered</span><div className="font-bold text-brand-text">{sourceStatus?.filesDiscovered ?? 0}</div></div>
+          <div><span className="text-brand-muted">Files indexed</span><div className="font-bold text-brand-text">{sourceStatus?.filesIndexed ?? 0} <span className="font-normal text-brand-muted">({sourceStatus?.filesRemaining ?? 0} remaining)</span></div></div>
         </div>
       </div>
 

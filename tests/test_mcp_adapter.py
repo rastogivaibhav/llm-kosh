@@ -22,6 +22,12 @@ async def test_search_memory(mcp_cartridge):
     res = await mcp.call_tool("search_memory", {"query": "test"})
     assert "No results found" in str(res)
 
+
+@pytest.mark.asyncio
+async def test_list_intake_status_filter(mcp_cartridge):
+    res = await mcp.call_tool("list_intake", {"status": "pending"})
+    assert "[]" in str(res)
+
 @pytest.mark.asyncio
 async def test_write_blocked_by_default(mcp_cartridge):
     with pytest.raises(Exception, match="requires write capability"):
@@ -44,6 +50,12 @@ async def test_private_export_blocked(mcp_cartridge):
     start_server(mcp_cartridge, stdio=False, http=False, allow_write=False, allow_mutate=False, allow_private=False)
     with pytest.raises(Exception, match="requires private context capability"):
         await mcp.call_tool("create_private_context_pack", {"query": "test", "target": "test"})
+
+
+@pytest.mark.asyncio
+async def test_company_brain_tools_require_company_profile(mcp_cartridge):
+    with pytest.raises(Exception, match="personal mode"):
+        await mcp.call_tool("company_brain_health", {})
 
 @pytest.mark.asyncio
 async def test_policy_override(mcp_cartridge):

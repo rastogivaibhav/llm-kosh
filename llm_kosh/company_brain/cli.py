@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_kosh.core.memory import ensure_root
+from llm_kosh.core.profile import set_cartridge_mode
 
 from .context import compile_context
 from .migration import migrate_legacy_cartridge
@@ -164,6 +165,7 @@ def run_brain_command(root: Path, args: Any) -> None:
     store = CompanyBrainStore(root)
     action = args.brain_action
     if action == "init":
+        set_cartridge_mode(root, "company_brain")
         store.initialize()
         print(json.dumps(store.health(), indent=2))
     elif action == "migrate":
@@ -179,21 +181,13 @@ def run_brain_command(root: Path, args: Any) -> None:
         print(json.dumps(store.evaluate(), indent=2))
     elif action == "register":
         evidence_path = Path(args.path).expanduser().resolve(strict=True)
-        mime_type = mimetypes.guess_type(evidence_path.name)[0] or "application/octet-stream"
-        evidence_id = store.put_evidence(EvidenceInput(
+        print(json.dumps(store.register_local_file(
+            evidence_path,
             tenant_id=args.tenant,
-            source_type="local_file",
-            source_locator=str(evidence_path),
-            source_native_id=args.source_native_id or str(evidence_path),
-            storage_mode="reference",
-            artifact_type=args.artifact_type or infer_artifact_type(evidence_path, mime_type),
-            mime_type=mime_type,
+            source_native_id=args.source_native_id,
+            artifact_type=args.artifact_type,
             classification=args.classification,
-        ))
-        print(json.dumps({
-            "evidence_id": evidence_id, "storage_mode": "reference",
-            "copied_source_bytes": 0,
-        }, indent=2))
+        ), indent=2))
     elif action == "inspect":
         locator = json.loads(args.locator)
         print(json.dumps(store.inspect_evidence(

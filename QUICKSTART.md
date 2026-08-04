@@ -15,6 +15,18 @@ llm-kosh status
 `install` creates the default cartridge and registers a read-only MCP entry for
 supported desktop clients where possible.
 
+The default is **Personal mode**. It keeps the simple file-backed memory and
+receipt workflow and can reference a configured source folder without copying
+its files. Choose the governed Company Brain profile explicitly when setting up
+a company cartridge:
+
+```bash
+llm-kosh install --yes --mode company-brain
+```
+
+Company Brain mode adds permission-aware retrieval, lifecycle review, and
+governed cited context packs on top of the same reference-first evidence path.
+
 ## 1. Use a custom cartridge (optional)
 
 ```bash

@@ -5,14 +5,35 @@ const e2eMode = process.env.LLM_KOSH_E2E_MODE || '';
 const e2eBridge = e2eMode
   ? {
       selectCartridgeRoot: async () => 'C:\\e2e\\root',
+      selectSourceFolder: async () => 'C:\\e2e\\source',
+      configureInstall: async () => ({ ok: true, configured: true, config: {
+        cartridgeRoot: 'C:\\e2e\\root',
+        destinationFolder: 'C:\\e2e\\root',
+        sourceFolder: 'C:\\e2e\\source',
+        sourceFolders: ['C:\\e2e\\source'],
+        cartridgeMode: 'personal',
+      } }),
       createCartridgeRoot: async () => ({ ok: true, folder: 'C:\\e2e\\root' }),
       getStatus: async () => ({ ok: true, stdout: 'E2E status ok' }),
+      getSourceStatus: async () => ({
+        ok: true,
+        status: 'Ready',
+        sourceFolder: 'C:\\e2e\\source',
+        destinationFolder: 'C:\\e2e\\root',
+        filesDiscovered: 12,
+        filesIndexed: 12,
+        filesRemaining: 0,
+        serviceRunning: true,
+      }),
       selectExecutable: async () => 'llm-kosh',
       readConfig: async () => (
         e2eMode === 'onboarding'
           ? {}
           : {
               cartridgeRoot: 'C:\\e2e\\root',
+              destinationFolder: 'C:\\e2e\\root',
+              sourceFolder: 'C:\\e2e\\source',
+              sourceFolders: ['C:\\e2e\\source'],
               executablePath: 'llm-kosh',
               cliMode: 'Auto',
               daemonMode: 'auto',
@@ -89,8 +110,11 @@ function subscribe(channel, callback) {
 
 const liveBridge = {
   selectCartridgeRoot: () => ipcRenderer.invoke('select-cartridge-root'),
-  createCartridgeRoot: (ownerName) => ipcRenderer.invoke('create-cartridge-root', ownerName),
+  selectSourceFolder: () => ipcRenderer.invoke('select-source-folder'),
+  configureInstall: (sourceFolder, destinationFolder) => ipcRenderer.invoke('configure-install', sourceFolder, destinationFolder),
+  createCartridgeRoot: (ownerName, mode) => ipcRenderer.invoke('create-cartridge-root', ownerName, mode),
   getStatus: (rootPath) => ipcRenderer.invoke('get-status', rootPath),
+  getSourceStatus: (rootPath, sourcePath) => ipcRenderer.invoke('get-source-status', rootPath, sourcePath),
   selectExecutable: () => ipcRenderer.invoke('select-executable'),
   setLoginItem: (enable) => ipcRenderer.invoke('set-login-item', enable),
   readConfig: () => ipcRenderer.invoke('read-config'),

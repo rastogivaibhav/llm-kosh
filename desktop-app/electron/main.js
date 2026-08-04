@@ -14,6 +14,12 @@ const readConfig = () => rc(configPath);
 const writeConfig = (cfg) => wc(configPath, cfg);
 
 const { daemonManager } = require('./daemon-manager');
+const {
+  readInstallHandoff,
+  validateInstallFolders,
+  writeSourcePolicy,
+  removeInstallHandoff,
+} = require('./install-handoff');
 const commandLogs = []; // Ring buffer for logs
 
 function addLog(entry) {
@@ -204,6 +210,45 @@ function createQuickCaptureWindow() {
   });
 }
 
+async function configureInstallFolders(handoff, consumeHandoff = false) {
+  const validation = validateInstallFolders(handoff.sourceFolder, handoff.destinationFolder);
+  if (!validation.ok) {
+    addLog({ ok: false, command: 'installer-handoff', args: [], stdout: '', stderr: validation.error });
+    return { ok: false, configured: false, error: validation.error };
+  }
+
+  const init = await runLlmKosh('init', [
+    '--root', handoff.destinationFolder,
+    '--owner', 'user',
+    '--mode', 'personal',
+  ]);
+  if (!init.ok) {
+    addLog({ ok: false, command: 'installer-handoff', args: [], stdout: init.stdout, stderr: init.stderr });
+    return { ok: false, configured: false, error: init.stderr || 'Could not initialise the destination folder.' };
+  }
+
+  writeSourcePolicy(handoff.destinationFolder, handoff.sourceFolder);
+  const configured = writeConfig({
+    ...readConfig(),
+    cartridgeRoot: handoff.destinationFolder,
+    destinationFolder: handoff.destinationFolder,
+    sourceFolder: handoff.sourceFolder,
+    sourceFolders: [handoff.sourceFolder],
+    cartridgeMode: 'personal',
+    autoStartDaemon: true,
+    setupComplete: true,
+  });
+  if (consumeHandoff && handoff.handoffPath) removeInstallHandoff(handoff.handoffPath);
+  addLog({ ok: true, command: 'installer-handoff', args: [], stdout: 'Source and destination configured.', stderr: '' });
+  return { ok: true, configured: true, config: configured };
+}
+
+async function prepareInstallerHandoff() {
+  const handoff = readInstallHandoff(process.resourcesPath);
+  if (!handoff) return { ok: true, configured: false };
+  return configureInstallFolders(handoff, true);
+}
+
 // IPC: renderer can close the quick capture window after submit
 ipcMain.on('close-quick-capture', () => {
   if (quickCaptureWindow && !quickCaptureWindow.isDestroyed()) {
@@ -246,7 +291,8 @@ async function updateTrayMenu() {
   tray.setContextMenu(contextMenu);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  await prepareInstallerHandoff();
   createWindow();
 
   // Setup Tray
@@ -315,14 +361,16 @@ ipcMain.handle('select-cartridge-root', async () => {
   return result.filePaths[0] || null;
 });
 
-ipcMain.handle('create-cartridge-root', async (event, ownerName) => {
+ipcMain.handle('create-cartridge-root', async (event, ownerName, mode = 'personal') => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory'],
     title: 'Select Folder for New Cartridge'
   });
   const folder = result.filePaths[0];
   if (folder) {
-    const res = await runLlmKosh('init', ['--root', folder, '--owner', ownerName || 'user']);
+    const res = await runLlmKosh('init', [
+      '--root', folder, '--owner', ownerName || 'user', '--mode', mode,
+    ]);
     return { ok: res.ok, folder, ...res };
   }
   return { ok: false, folder: null, stderr: 'Cancelled' };
@@ -635,6 +683,13 @@ ipcMain.handle('add-watched-folder', async () => {
     const selected = result.filePaths[0];
     const config = readConfig();
     if (!config.cartridgeRoot) return { success: false, folders: [] };
+    const rootResolved = path.resolve(config.cartridgeRoot).toLowerCase();
+    const selectedResolved = path.resolve(selected).toLowerCase();
+    const rootPrefix = rootResolved.endsWith(path.sep) ? rootResolved : `${rootResolved}${path.sep}`;
+    const selectedPrefix = selectedResolved.endsWith(path.sep) ? selectedResolved : `${selectedResolved}${path.sep}`;
+    if (selectedResolved === rootResolved || selectedResolved.startsWith(rootPrefix) || rootResolved.startsWith(selectedPrefix)) {
+      return { success: false, folders: [], error: 'The cartridge root cannot be used as a source folder.' };
+    }
     const policyPath = path.join(config.cartridgeRoot, 'LLM_KOSH_POLICY.json');
     let pol = {};
     try {
@@ -668,6 +723,69 @@ ipcMain.handle('remove-watched-folder', (event, folderPath) => {
   pol.daemon.watched_directories = pol.daemon.watched_directories.filter(f => f !== folderPath);
   fs.writeFileSync(policyPath, JSON.stringify(pol, null, 2));
   return { success: true, folders: pol.daemon.watched_directories };
+});
+
+ipcMain.handle('select-source-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+    title: 'Select the folder containing your work',
+  });
+  return result.filePaths[0] || null;
+});
+
+ipcMain.handle('configure-install', async (event, sourceFolder, destinationFolder) => {
+  const result = await configureInstallFolders({ sourceFolder, destinationFolder });
+  if (result.ok && !(await daemonManager.getStatus()).running) {
+    daemonManager.start(configPath, process.resourcesPath, destinationFolder, 'auto');
+  }
+  return result;
+});
+
+function countSourceFiles(folderPath) {
+  const ignored = new Set(['.tmp', '.pyc', '.db', '.sqlite', '.zip', '.exe', '.dll', '.log']);
+  let count = 0;
+  const walk = (current) => {
+    let entries;
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch (_) { return; }
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const child = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(child);
+      else if (entry.isFile() && !ignored.has(path.extname(entry.name).toLowerCase())) count += 1;
+    }
+  };
+  walk(folderPath);
+  return count;
+}
+
+ipcMain.handle('get-source-status', async (event, rootPath, sourcePath) => {
+  const config = readConfig();
+  const sourceFolder = sourcePath || config.sourceFolder || config.sourceFolders?.[0] || '';
+  const destinationFolder = rootPath || config.destinationFolder || config.cartridgeRoot || '';
+  if (!sourceFolder || !destinationFolder) {
+    return {
+      ok: true, status: 'Not configured', sourceFolder, destinationFolder,
+      filesDiscovered: 0, filesIndexed: 0, filesRemaining: 0,
+    };
+  }
+  const health = await runLlmKosh('brain', ['--root', destinationFolder, 'health']);
+  let healthJson = {};
+  try { healthJson = JSON.parse(health.stdout || '{}'); } catch (_) { /* status remains useful */ }
+  const filesDiscovered = countSourceFiles(sourceFolder);
+  const filesIndexed = Number(healthJson.references || 0);
+  const filesRemaining = Math.max(0, filesDiscovered - filesIndexed);
+  const serviceStatus = await daemonManager.getStatus();
+  return {
+    ok: health.ok,
+    status: filesRemaining > 0 ? 'Indexing' : 'Ready',
+    sourceFolder,
+    destinationFolder,
+    filesDiscovered,
+    filesIndexed,
+    filesRemaining,
+    serviceRunning: serviceStatus.running,
+    error: health.ok ? '' : (health.stderr || 'Could not read source status.'),
+  };
 });
 
 ipcMain.handle('run-smoke-test', async () => {

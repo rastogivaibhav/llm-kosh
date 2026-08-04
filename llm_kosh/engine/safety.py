@@ -50,6 +50,10 @@ def policy_path(root) -> str:
 def load_policy(root) -> dict:
     from llm_kosh.core.utils import read_json
     p = policy_path(root)
+    if not p.exists():
+        legacy = root / "CARTRIDGE_POLICY.json"
+        if legacy.exists():
+            p = legacy
     if p.exists():
         pol = dict(DEFAULT_POLICY)
         pol.update(read_json(p, {}))

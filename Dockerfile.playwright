@@ -1,0 +1,26 @@
+FROM mcr.microsoft.com/playwright:v1.61.0-noble
+
+WORKDIR /app
+ENV CI=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+COPY . .
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3-pip python3-venv xvfb \
+    && rm -rf /var/lib/apt/lists/* \
+    && python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN python -m pip install --no-cache-dir -e ".[server,watch,ingest]" \
+    && python -m pip install --no-cache-dir pytest pytest-asyncio
+
+RUN npm ci --prefix desktop-app
+
+# npm's Electron postinstall is intentionally quiet in the Playwright base image;
+# fetch and unpack the Linux runtime explicitly so Playwright can launch Electron.
+RUN node -e "(async()=>{const {downloadArtifact}=require('./desktop-app/node_modules/@electron/get'); const fs=require('fs'); const pkg=require('./desktop-app/node_modules/electron/package.json'); const root='./desktop-app/node_modules/electron'; const zip=await downloadArtifact({version:pkg.version,artifactName:'electron',platform:'linux',arch:'x64',checksums:require(root+'/checksums.json')}); fs.copyFileSync(zip,'/tmp/electron.zip')})().catch(err=>{console.error(err);process.exit(1)})"
+RUN python -c "import os, pathlib, zipfile; root=pathlib.Path('desktop-app/node_modules/electron'); zipfile.ZipFile('/tmp/electron.zip').extractall(root/'dist'); os.chmod(root/'dist/electron',0o755); (root/'path.txt').write_text('electron'); os.remove('/tmp/electron.zip')"
+RUN test -x desktop-app/node_modules/electron/dist/electron
+
+CMD ["sh", "-c", "pytest -q -p no:cacheprovider; status=$?; if [ $status -ne 0 ]; then exit $status; fi; Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp >/tmp/xvfb.log 2>&1 & xvfb_pid=$!; sleep 1; export DISPLAY=:99; npm run test:e2e --prefix desktop-app; status=$?; kill $xvfb_pid 2>/dev/null || true; wait $xvfb_pid 2>/dev/null || true; exit $status"]

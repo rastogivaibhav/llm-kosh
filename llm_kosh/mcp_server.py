@@ -4,46 +4,14 @@ from pathlib import Path
 from functools import wraps
 from typing import Dict, Any, List
 
-try:
-    from mcp.server.fastmcp import FastMCP  # type: ignore
-    _HAS_MCP = True
-except ModuleNotFoundError:  # pragma: no cover - exercised in minimal CI/sandbox
-    _HAS_MCP = False
-    class _FallbackTool:
-        def __init__(self, name, func):
-            self.name = name
-            self.description = (func.__doc__ or "").strip()
-            self.func = func
-
-    class _FallbackToolManager:
-        def __init__(self):
-            self._tools = {}
-
-    class FastMCP:  # minimal test/dev fallback when optional mcp package is absent
-        def __init__(self, name: str, dependencies=None):
-            self.name = name
-            self.dependencies = dependencies or []
-            self._tool_manager = _FallbackToolManager()
-
-        def tool(self):
-            def decorator(func):
-                self._tool_manager._tools[func.__name__] = _FallbackTool(func.__name__, func)
-                return func
-            return decorator
-
-        async def call_tool(self, name: str, arguments=None):
-            arguments = arguments or {}
-            tool = self._tool_manager._tools[name]
-            return tool.func(**arguments)
-
-        def run(self):
-            return None
+from mcp.server.fastmcp import FastMCP
 
 from llm_kosh.engine.search import query_memory, semantic_search, get_memory_map, get_project_context
 from llm_kosh.engine.commands import verify_ledger
 from llm_kosh.engine.compiler import pack_context
 from llm_kosh.engine.intake import intake_scan, intake_list, processor_apply
-from llm_kosh.core.utils import append_ledger, read_json
+from llm_kosh.engine.safety import load_policy
+from llm_kosh.core.utils import append_ledger
 from llm_kosh.company_brain.context import compile_context as compile_brain_context
 from llm_kosh.company_brain.models import (
     AccessPolicy, ContextRequest, EvidenceInput, EvidenceReference, MemoryInput, Principal,
@@ -68,9 +36,7 @@ def require_capability(cap: str):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            # Check policy if exists
-            policy_path = WORKSPACE_PATH / "CARTRIDGE_POLICY.json"
-            policy = read_json(policy_path) if policy_path.exists() else {}
+            policy = load_policy(WORKSPACE_PATH)
             mcp_policy = policy.get("mcp", {})
             
             # Write operations
@@ -158,7 +124,23 @@ def _brain_principal(
     )
 
 
+def company_brain_only(func):
+    """Keep the governed API explicit on personal cartridges."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        from llm_kosh.core.profile import is_company_brain
+        if not is_company_brain(WORKSPACE_PATH):
+            raise PermissionError(
+                "This cartridge is in personal mode. "
+                "Select Company Brain mode before using company_* tools "
+                "(for example: llm-kosh --root <cartridge> brain init)."
+            )
+        return func(*args, **kwargs)
+    return wrapper
+
+
 @mcp.tool()
+@company_brain_only
 def company_memory_search(
     query: str,
     principal_id: str = "local-user",
@@ -188,6 +170,7 @@ def company_memory_search(
 
 
 @mcp.tool()
+@company_brain_only
 def company_context_compile(
     task: str,
     principal_id: str = "local-user",
@@ -221,6 +204,7 @@ def company_context_compile(
 
 
 @mcp.tool()
+@company_brain_only
 def company_memory_get(
     memory_id: str,
     principal_id: str = "local-user",
@@ -238,18 +222,21 @@ def company_memory_get(
 
 
 @mcp.tool()
+@company_brain_only
 def company_brain_health():
     """Validate canonical company-brain storage and projection consistency."""
     return json.dumps(CompanyBrainStore(WORKSPACE_PATH).health(), indent=2)
 
 
 @mcp.tool()
+@company_brain_only
 def company_brain_evaluate():
     """Run reference storage, citation, and projection acceptance checks."""
     return json.dumps(CompanyBrainStore(WORKSPACE_PATH).evaluate(), indent=2)
 
 
 @mcp.tool()
+@company_brain_only
 @require_capability("write")
 def company_session_understand(
     evidence_id: str,
@@ -276,6 +263,7 @@ def company_session_understand(
 
 
 @mcp.tool()
+@company_brain_only
 def company_sessions_list(
     principal_id: str = "local-user",
     tenant_id: str = "local",
@@ -294,6 +282,7 @@ def company_sessions_list(
 
 
 @mcp.tool()
+@company_brain_only
 def company_episodes_search(
     query: str = "",
     principal_id: str = "local-user",
@@ -317,6 +306,7 @@ def company_episodes_search(
 
 
 @mcp.tool()
+@company_brain_only
 def company_episode_get(
     episode_id: str,
     principal_id: str = "local-user",
@@ -334,6 +324,7 @@ def company_episode_get(
 
 
 @mcp.tool()
+@company_brain_only
 @require_capability("write")
 def company_artifact_register(
     file_path: str,
@@ -343,28 +334,19 @@ def company_artifact_register(
     tenant_id: str = "local",
 ):
     """Register an existing local artifact by fingerprint without copying its bytes."""
-    import mimetypes as _mimetypes
-    from llm_kosh.company_brain.artifacts import infer_artifact_type
     path = Path(file_path).expanduser().resolve(strict=True)
-    mime_type = _mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    evidence_id = CompanyBrainStore(WORKSPACE_PATH).put_evidence(EvidenceInput(
-        tenant_id=tenant_id,
-        source_type="local_file",
-        source_locator=str(path),
-        source_native_id=source_native_id or str(path),
-        storage_mode="reference",
-        artifact_type=artifact_type or infer_artifact_type(path, mime_type),
-        mime_type=mime_type,
+    result = CompanyBrainStore(WORKSPACE_PATH).register_local_file(
+        path,
+        artifact_type=artifact_type,
         classification=classification,
-    ))
-    return json.dumps({
-        "evidence_id": evidence_id,
-        "storage_mode": "reference",
-        "copied_source_bytes": 0,
-    })
+        tenant_id=tenant_id,
+        source_native_id=source_native_id,
+    )
+    return json.dumps(result)
 
 
 @mcp.tool()
+@company_brain_only
 def company_artifact_inspect(
     evidence_id: str,
     principal_id: str = "local-user",
@@ -395,6 +377,7 @@ def company_artifact_inspect(
 
 
 @mcp.tool()
+@company_brain_only
 @require_capability("write")
 def company_artifact_segment(
     evidence_id: str,
@@ -423,6 +406,7 @@ def company_artifact_segment(
 
 
 @mcp.tool()
+@company_brain_only
 @require_capability("write")
 def company_artifact_snapshot(
     evidence_id: str,
@@ -445,6 +429,7 @@ def company_artifact_snapshot(
 
 
 @mcp.tool()
+@company_brain_only
 @require_capability("write")
 def company_memory_propose(
     memory_type: str,
@@ -489,6 +474,7 @@ def company_memory_propose(
 
 
 @mcp.tool()
+@company_brain_only
 @require_capability("write")
 def company_memory_propose_from_evidence(
     evidence_id: str,
@@ -544,6 +530,7 @@ def company_memory_propose_from_evidence(
 
 
 @mcp.tool()
+@company_brain_only
 @require_capability("mutate")
 def company_memory_review(
     memory_id: str,
@@ -804,9 +791,6 @@ def start_server(root: Path, stdio: bool = True, http: bool = False, port: int =
     # mode for embedding and tests.
     if not stdio and not http:
         return
-
-    if not _HAS_MCP:
-        raise RuntimeError("MCP runtime is not installed. Reinstall with `pip install -U llm-kosh`.")
 
     from llm_kosh.core.utils import ensure_root
     ensure_root(WORKSPACE_PATH)

@@ -21,6 +21,7 @@ from llm_kosh.company_brain.models import (
 )
 from llm_kosh.company_brain.retrieval import search_memories
 from llm_kosh.company_brain.store import CompanyBrainStore
+from llm_kosh.core.profile import set_cartridge_mode
 
 
 def _reference(store, path, *, artifact_type="plain_text", native_id="local-source"):
@@ -54,6 +55,29 @@ def test_reference_mode_stores_no_source_copy_and_detects_change(tmp_path):
     assert inspection["availability"]["status"] == "changed"
     with pytest.raises(ReferenceChangedError):
         store.read_evidence(evidence_id, principal)
+
+
+def test_context_can_cite_fresh_reference_evidence_before_memory_promotion(tmp_path):
+    source = tmp_path / "release-plan.md"
+    source.write_text(
+        "Release plan: Windows signing must complete before public launch.",
+        encoding="utf-8",
+    )
+    store = CompanyBrainStore(tmp_path / "cartridge")
+    evidence_id = store.register_local_file(source)["evidence_id"]
+
+    context = compile_context(store, ContextRequest(
+        task="What is required before the public launch?",
+        principal=Principal("reader"),
+        token_budget=512,
+    ))
+
+    assert context["selected_items"] == 0
+    assert context["selected_evidence"] == 1
+    assert context["direct_evidence"][0]["evidence_id"] == evidence_id
+    assert "Windows signing" in context["direct_evidence"][0]["quote"]
+    assert context["artifact_attachments"][0]["storage_mode"] == "reference"
+    assert not store.blob_dir.exists()
 
 
 def test_same_directory_rename_is_reported_as_moved_not_trusted_implicitly(tmp_path):
@@ -292,6 +316,7 @@ async def test_mcp_artifact_register_inspect_and_snapshot_are_explicit(tmp_path)
     source.write_text("Visible source", encoding="utf-8")
     cartridge = tmp_path / "cartridge"
     init_cartridge(cartridge, "MCP test")
+    set_cartridge_mode(cartridge, "company_brain")
     start_server(
         cartridge, stdio=False, http=False,
         allow_write=True, allow_mutate=False, allow_private=False,

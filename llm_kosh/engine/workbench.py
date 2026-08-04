@@ -4,6 +4,7 @@ import json
 import shutil
 import webbrowser
 import zipfile
+from html import escape
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 
@@ -12,7 +13,7 @@ from llm_kosh.core.memory import ensure_root
 from llm_kosh.engine.search import rebuild_index, get_db
 
 def _html_escape(s: str) -> str:
-    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return escape(s or "", quote=True)
 
 _CSS = """
 :root{--bg:#0f1115;--card:#181b22;--ink:#e6e8ee;--mut:#9aa3b2;--acc:#6ea8fe;--line:#262a33}

@@ -11,6 +11,46 @@ describe('Command Builder Security Validation', () => {
     expect(result).toEqual(['--root', '/foo', 'init', '--owner', 'user']);
   });
 
+  test('allows explicit Company Brain initialization', () => {
+    const result = buildCommandArgs('brain', ['init', '--root', '/foo']);
+    expect(result).toEqual(['--root', '/foo', 'brain', 'init']);
+  });
+
+  test('allows the read-only brain health check', () => {
+    const result = buildCommandArgs('brain', ['health', '--root', '/foo']);
+    expect(result).toEqual(['--root', '/foo', 'brain', 'health']);
+  });
+
+  test('allows selecting a cartridge mode during init', () => {
+    const result = buildCommandArgs('init', ['--root', '/foo', '--mode', 'company-brain']);
+    expect(result).toEqual(['--root', '/foo', 'init', '--mode', 'company-brain']);
+  });
+
+  test.each([
+    ['query', ['hello', '--semantic']],
+    ['embed', []],
+    ['inbox', ['capture', '--project', 'demo']],
+    ['intake', ['scan']],
+    ['processor', ['run']],
+    ['audit', []],
+    ['heal', ['--safe']],
+    ['quarantine', ['--list']],
+  ])('allows the desktop command %s', (command, args) => {
+    expect(() => buildCommandArgs(command, args)).not.toThrow();
+  });
+
+  test('rejects arbitrary renderer process execution', () => {
+    expect(() => buildCommandArgs('python', ['-c', 'print(1)'])).toThrow(/Security Violation/);
+  });
+
+  test('rejects a missing cartridge root value', () => {
+    expect(() => buildCommandArgs('status', ['--root'])).toThrow(/--root requires/);
+  });
+
+  test('rejects unsafe options on an otherwise allowed command', () => {
+    expect(() => buildCommandArgs('query', ['hello', '--include-private'])).toThrow(/Security Violation/);
+  });
+
   test('rejects arbitrary commands like malicious-cmd', () => {
     expect(() => {
       buildCommandArgs('malicious-cmd', ['something']);
@@ -90,6 +130,11 @@ describe('Command Builder Security Validation', () => {
 
     const r2 = buildCommandArgs('daemon', ['status', '--root', '/foo']);
     expect(r2).toEqual(['--root', '/foo', 'daemon', 'status']);
+  });
+
+  test('allows selecting a mode during install', () => {
+    const result = buildCommandArgs('install', ['--mode', 'company-brain']);
+    expect(result).toEqual(['install', '--mode', 'company-brain']);
   });
 
   test('rejects unknown daemon subcommand', () => {

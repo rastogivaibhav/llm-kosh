@@ -1,5 +1,11 @@
 # Company brain foundation
 
+Company Brain is an explicit cartridge profile, not the default behaviour of a
+personal install. New cartridges start in `personal` mode. Select the governed
+profile with `llm-kosh install --mode company-brain`, or initialise an existing
+cartridge with `llm-kosh --root ./cartridge brain init` before configuring
+external source folders and Company Brain MCP tools.
+
 The company-brain layer turns a cartridge from a collection of searchable files
 into governed organizational memory. It is additive: legacy source files remain
 readable and can be migrated idempotently without deleting or rewriting them.

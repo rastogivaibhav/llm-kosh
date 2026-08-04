@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from llm_kosh.core.utils import now_iso
 
 from .models import ContextRequest
-from .retrieval import search_memories
+from .retrieval import search_evidence, search_memories
 from .store import CompanyBrainStore
 
 
@@ -157,6 +157,43 @@ def compile_context(
     selected = usable
     used = sum(_memory_cost(item) for item in selected)
 
+    # Company Brain may have fresh reference evidence that has not yet become
+    # a reviewed atomic memory. Surface bounded, cited source excerpts without
+    # copying the source bytes or weakening memory lifecycle rules.
+    direct_evidence: List[Dict[str, Any]] = []
+    for evidence_item in search_evidence(
+        store, request.task, request.principal, limit=min(8, request.limit),
+    ):
+        if evidence_item["evidence_id"] in source_index:
+            continue
+        cost = _tokens(evidence_item.get("quote", "")) + 40
+        if used + cost > available:
+            continue
+        direct_evidence.append(evidence_item)
+        used += cost
+        source_index[evidence_item["evidence_id"]] = {
+            "evidence_id": evidence_item["evidence_id"],
+            "source_locator": evidence_item["source_locator"],
+            "source_type": evidence_item["source_type"],
+            "artifact_type": evidence_item["artifact_type"],
+            "mime_type": evidence_item["mime_type"],
+            "storage_mode": evidence_item["storage_mode"],
+            "native_locator": evidence_item["native_locator"],
+            "quote": evidence_item["quote"],
+            "availability": evidence_item["availability"],
+            "delivery": "reference",
+        }
+        artifact_attachments[evidence_item["evidence_id"]] = {
+            "evidence_id": evidence_item["evidence_id"],
+            "artifact_type": evidence_item["artifact_type"],
+            "mime_type": evidence_item["mime_type"],
+            "storage_mode": evidence_item["storage_mode"],
+            "source_locator": evidence_item["source_locator"],
+            "native_locator": evidence_item["native_locator"],
+            "availability": evidence_item["availability"],
+            "delivery": "reference",
+        }
+
     # Episodes are observed work narratives, not verified organizational truth.
     # They complement atomic memory while retaining evidence IDs and ACLs.
     episode_context: List[Dict[str, Any]] = []
@@ -215,7 +252,9 @@ def compile_context(
             item["outcome_summary"] or item["goal"] for item in episode_context[:2]
         ]
     if not brief_parts:
-        brief = "No authorized, current memory supports this task."
+        brief_parts = [item["quote"] for item in direct_evidence[:2] if item.get("quote")]
+    if not brief_parts:
+        brief = "No authorized, current memory or source evidence supports this task."
     else:
         brief = " ".join(brief_parts)
 
@@ -227,6 +266,7 @@ def compile_context(
         request.as_of,
         ",".join(item["memory_id"] for item in selected),
         ",".join(item["episode_id"] for item in episode_context),
+        ",".join(item["evidence_id"] for item in direct_evidence),
     ))
     context_id = "ctx_" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
 
@@ -246,10 +286,12 @@ def compile_context(
         "warnings": warnings,
         "source_index": list(source_index.values()),
         "artifact_attachments": list(artifact_attachments.values()),
+        "direct_evidence": direct_evidence,
         "episode_context": episode_context,
         "token_budget": request.token_budget,
         "estimated_tokens": used + _tokens(brief),
         "selected_items": len(selected),
+        "selected_evidence": len(direct_evidence),
         "omitted_relevant_items": max(0, len(candidates) - len(selected)),
-        "retrieval_build": "company-brain-v2-memory-episode-hybrid",
+        "retrieval_build": "company-brain-v3-memory-evidence-episode-hybrid",
     }

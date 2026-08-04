@@ -1,0 +1,7 @@
+services:
+  desktop-e2e:
+      build:
+        context: .
+        dockerfile: Dockerfile.playwright
+      environment:
+        CI: "1"

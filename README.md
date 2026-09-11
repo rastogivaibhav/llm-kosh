@@ -1,60 +1,97 @@
-# llm-kosh
+<div align="center">
+  <img src="./llm-kosh-icon.PNG" alt="LLM-Kosh" width="128" />
+  <h1>LLM-Kosh</h1>
+  <p><strong>Local-first durable memory for AI agents.</strong></p>
+  <p>Give Claude, Cursor, and other MCP-compatible clients persistent, inspectable memory without handing your workspace to a hosted memory service.</p>
+  <p>
+    <a href="https://pypi.org/project/llm-kosh/"><img src="https://img.shields.io/pypi/v/llm-kosh.svg" alt="PyPI" /></a>
+    <a href="https://pypi.org/project/llm-kosh/"><img src="https://img.shields.io/pypi/pyversions/llm-kosh.svg" alt="Python" /></a>
+    <a href="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml"><img src="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml/badge.svg" alt="Tests" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+    <a href="https://github.com/rastogivaibhav/llm-kosh/stargazers"><img src="https://img.shields.io/github/stars/rastogivaibhav/llm-kosh?style=flat" alt="GitHub stars" /></a>
+  </p>
+  <p>
+    <a href="#60-second-quickstart">Quickstart</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="#use-with-mcp-clients">MCP</a> ·
+    <a href="#security-model">Security</a> ·
+    <a href="CONTRIBUTING.md">Contributing</a>
+  </p>
+</div>
 
 <!-- mcp-name: io.github.rastogivaibhav/llm-kosh -->
 
-[![PyPI](https://img.shields.io/pypi/v/llm-kosh.svg)](https://pypi.org/project/llm-kosh/)
-[![Python](https://img.shields.io/pypi/pyversions/llm-kosh.svg)](https://pypi.org/project/llm-kosh/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+---
 
-`llm-kosh` is a local-first memory cartridge for MCP-compatible AI clients.
-It gives your agents durable memory without handing your workspace to a hosted
-memory service.
+## Why this exists
 
-Think of it as a structured, inspectable memory layer for agents:
+AI agents can reason across increasingly long workflows, but their memory is often either ephemeral or delegated to opaque hosted services.
 
-- plain files you can back up, diff, and review
-- a tamper-evident ledger for every mutation
-- a read-only-by-default MCP server
-- a background service for intake and maintenance
-- a CLI for local control and automation
+**LLM-Kosh treats memory as local infrastructure:** inspectable, portable, auditable, permissioned, and usable across MCP-compatible clients.
 
-The experimental company-brain foundation adds reference-first multimodal evidence,
-session and episode understanding, atomic evidence-backed memories, review
-lifecycles, permission-first retrieval, and structured cited context packs. See
-[Company brain foundation](docs/COMPANY_BRAIN.md).
+It gives agents a durable memory layer built from ordinary local files plus structured indexes and governance controls:
 
-## Why teams use it
+- **Local-first** — your cartridge stays on your machine by default.
+- **Inspectable** — memory remains readable, backupable, diffable, and reviewable.
+- **Auditable** — mutations are recorded in a tamper-evident ledger.
+- **Permissioned** — MCP starts read-only; write, mutation, and private export require explicit opt-in.
+- **Portable** — one cartridge can support multiple compatible AI clients and workflows.
+- **Automation-ready** — CLI, background service, MCP server, and packaging are part of the same project.
 
-- Keep AI context local and auditable.
-- Separate the cartridge root from the repository root.
-- Drop receipts or intake files into watched folders and let the service absorb them.
-- Connect MCP clients with minimal privilege by default.
-- Publish and verify the same artifact through GitHub Actions.
+> **Install it:** `python -m pip install --upgrade llm-kosh`
 
-## Open source and maintenance
+## What makes LLM-Kosh different
 
-`llm-kosh` is an open-source project licensed under the [MIT License](LICENSE) and
-maintained in this repository. The Python package is published as `llm-kosh` on PyPI.
-Bug reports, focused pull requests, interoperability improvements, tests, and
-documentation contributions are welcome.
+| Capability | LLM-Kosh |
+| --- | --- |
+| Local-first persistent memory | ✅ |
+| MCP-native access | ✅ |
+| Human-inspectable storage | ✅ |
+| Tamper-evident mutation ledger | ✅ |
+| Read-only-by-default agent access | ✅ |
+| Secret-aware context export | ✅ |
+| Evidence-backed context packs | ✅ |
+| Hosted memory service required | ❌ |
+| Automatic cloud sync required | ❌ |
 
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing substantial changes.
-- Follow [SECURITY.md](SECURITY.md) for the current threat model and vulnerability-reporting guidance.
-- Use GitHub Issues for reproducible, non-sensitive bugs and feature proposals.
+## Architecture
 
-## What works today
+```mermaid
+flowchart TB
+    A[AI client / agent] -->|MCP| R[Access layer]
+    M[CLI] --> R
+    N[Background service] --> R
+    O[Local HTTP MCP - optional] --> R
 
-The core project is usable now:
+    subgraph KOSH[LLM-Kosh]
+      R
+      C[Memory]
+      D[Evidence]
+      E[Search]
+      F[Policy]
+      G[Ledger]
+      H[Context packs]
 
-- the CLI runs locally
-- the Python package installs and works
-- the MCP server runs locally
-- the service can watch intake folders
-- the GitHub Actions publish path is working
+      R --> C
+      R --> D
+      R --> F
+      C --> E
+      C --> G
+      C --> H
+    end
 
-The remaining work is release polish for Windows, macOS, and Linux packaging.
+    C --> I[(Local cartridge)]
+    D --> I
+    E --> I
+    G --> I
+    I --> J[Plain files]
+    I --> K[SQLite / FTS]
+    I --> L[Audit ledger]
+```
 
-## Quick start
+The **repository root** contains the code. The **cartridge root** contains the live memory store. Watched **intake folders** can feed new material into the cartridge without mixing runtime data into the source checkout.
+
+## 60-second quickstart
 
 Python 3.10 or newer is required.
 
@@ -64,19 +101,9 @@ llm-kosh install --yes
 llm-kosh status
 ```
 
-That installs the package, creates the default cartridge at
-`~/.llmkosh/cartridge`, configures local defaults, and registers the supported
-desktop integration where possible.
+That installs the package, creates the default cartridge at `~/.llmkosh/cartridge`, configures local defaults, and registers supported desktop integration where possible.
 
-To manage the background service:
-
-```bash
-llm-kosh service start
-llm-kosh service status
-llm-kosh service stop
-```
-
-If you want to work in a custom cartridge location, set the root explicitly:
+Create and query a custom cartridge:
 
 ```bash
 llm-kosh --root ./my-cartridge init --owner "Local User"
@@ -84,7 +111,61 @@ llm-kosh --root ./my-cartridge add --kind note --title "First memory" --body "He
 llm-kosh --root ./my-cartridge query "Hello"
 ```
 
-To migrate a cartridge into governed company memory:
+Manage the background service:
+
+```bash
+llm-kosh service start
+llm-kosh service status
+llm-kosh service stop
+```
+
+## What works today
+
+The core project is usable now:
+
+- Python package published as [`llm-kosh`](https://pypi.org/project/llm-kosh/)
+- local CLI for creating, searching, importing, packing, and verifying cartridges
+- local MCP server
+- background service for intake and maintenance jobs
+- plain-file, inspectable storage with local indexes
+- tamper-evident mutation ledger
+- GitHub Actions test and publishing workflows
+- experimental company-brain foundation for evidence-backed memory and cited context
+
+The remaining release work is primarily desktop packaging polish and signing across Windows, macOS, and Linux.
+
+## Use with MCP clients
+
+Start the MCP server against a cartridge:
+
+```bash
+llm-kosh --root ./my-cartridge mcp-server
+```
+
+The MCP server starts **read-only**.
+
+Grant stronger capabilities only to clients that should have them:
+
+```bash
+llm-kosh --root ./my-cartridge mcp-server --allow-write
+llm-kosh --root ./my-cartridge mcp-server --allow-write --allow-mutate
+llm-kosh --root ./my-cartridge mcp-server --allow-private
+```
+
+MCP can also run over local HTTP:
+
+```bash
+llm-kosh --root ./my-cartridge mcp-server --http --port 8000
+# endpoint: http://127.0.0.1:8000/mcp
+```
+
+Treat HTTP transport as a real network boundary if you expose it beyond loopback.
+
+## Company-brain foundation
+
+The experimental company-brain layer extends the cartridge beyond simple note recall. It introduces reference-first evidence, session and episode understanding, evidence-backed memories, review lifecycles, permission-first retrieval, and structured cited context packs.
+
+Migrate an existing cartridge:
 
 ```bash
 llm-kosh --root ./my-cartridge brain migrate --dry-run
@@ -93,8 +174,7 @@ llm-kosh --root ./my-cartridge brain health
 llm-kosh --root ./my-cartridge brain context "Prepare the next project decision"
 ```
 
-Register existing screenshots, documents, worksheets or HTML without copying
-their source bytes:
+Register existing files without copying their source bytes:
 
 ```bash
 llm-kosh --root ./my-cartridge brain register ./report.xlsx --artifact-type worksheet
@@ -103,7 +183,7 @@ llm-kosh --root ./my-cartridge brain inspect <evidence-id> \
 llm-kosh --root ./my-cartridge brain evaluate
 ```
 
-Build a replayable session/episode graph from a registered JSONL export:
+Build a replayable session or episode graph from a registered JSONL export:
 
 ```bash
 llm-kosh --root ./my-cartridge brain register ./session.jsonl --artifact-type structured_data
@@ -112,62 +192,53 @@ llm-kosh --root ./my-cartridge brain understand <evidence-id>
 llm-kosh --root ./my-cartridge brain episodes --query "what was implemented"
 ```
 
+See [Company brain foundation](docs/COMPANY_BRAIN.md).
+
 ## Core concepts
 
-There are three folders worth knowing:
+Three locations matter:
 
-- the repository root: the code checkout you are reading now
-- the cartridge root: the live memory store selected by `--root` or `LLMKOSH_ROOT`
-- watched intake folders: `receipts/`, `intake/`, and any configured external drop folders
+1. **Repository root** — the source checkout.
+2. **Cartridge root** — the live memory store selected by `--root` or `LLMKOSH_ROOT`.
+3. **Watched intake folders** — `receipts/`, `intake/`, and configured external drop folders.
 
-If you drop files into the cartridge’s intake areas, the service can process
-them asynchronously. If you configure external folders through
-`[daemon].watched_directories`, the service can absorb those too.
-
-## Use with MCP clients
-
-```bash
-llm-kosh --root ./my-cartridge mcp-server
-```
-
-The MCP server starts read-only.
-
-Enable stronger capabilities only for clients that should be allowed to write,
-mutate, or export private context:
-
-```bash
-llm-kosh --root ./my-cartridge mcp-server --allow-write
-llm-kosh --root ./my-cartridge mcp-server --allow-write --allow-mutate
-llm-kosh --root ./my-cartridge mcp-server --allow-private
-```
-
-You can also run MCP over local HTTP:
-
-```bash
-llm-kosh --root ./my-cartridge mcp-server --http --port 8000
-# endpoint: http://127.0.0.1:8000/mcp
-```
-
-## What’s included
-
-- Python CLI for creating, searching, packing, importing, and verifying cartridges
-- read-only-by-default MCP server
-- local background service for intake and maintenance jobs
-- optional desktop packaging with a bundled CLI sidecar
-- plain-file storage that stays inspectable, backupable, and Git-friendly
-- optional extras for filesystem watching, service integration, semantic search, and ingest helpers
+If files are dropped into cartridge intake areas, the service can process them asynchronously. External folders can also be watched through `[daemon].watched_directories`.
 
 ## Optional features
 
 ```bash
 python -m pip install "llm-kosh[watch]"     # filesystem events
 python -m pip install "llm-kosh[server]"    # FastAPI service
-python -m pip install "llm-kosh[semantic]"  # local vector search
+python -m pip install "llm-kosh[semantic]"  # local semantic search
 python -m pip install "llm-kosh[ingest]"    # document conversion helpers
 python -m pip install "llm-kosh[all]"       # all optional features
 ```
 
 MCP support is included in the base installation.
+
+## Security model
+
+LLM-Kosh is intentionally conservative around agent privilege and export boundaries:
+
+- storage and search are local by default
+- there is no automatic cloud sync or package telemetry
+- MCP starts read-only
+- write, mutation, and private-export capabilities require explicit opt-in
+- optional HTTP transport is a real network boundary and should be configured accordingly
+- exported context is checked for common secret patterns before sharing
+- cartridge files are plaintext by design, so use operating-system disk encryption when local data at rest requires encryption
+
+See [SECURITY.md](SECURITY.md) for the canonical threat model, reporting guidance, and current security boundaries.
+
+## Project status
+
+LLM-Kosh is actively maintained open-source infrastructure for durable agent memory.
+
+The Python package, CLI, MCP server, local service, test workflow, and publishing path are operational. Current work focuses on interoperability, packaging, governed memory, evidence-backed retrieval, and making the project easier for external contributors to extend safely.
+
+The Electron desktop app is packaged separately from the Python package. Local developer builds and Windows installer smoke tests are supported; public GA desktop distribution still requires verified Windows code signing and macOS Developer ID signing/notarization.
+
+See [GA_READINESS.md](GA_READINESS.md) for the detailed release posture.
 
 ## Developer workflow
 
@@ -176,63 +247,54 @@ python -m pip install -e ".[server,watch,ingest]"
 python -m pytest -q
 ```
 
-If you are changing packaging or release behavior, also run:
+For packaging or release changes:
 
 ```bash
 python -m build
 python -m twine check dist/*
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and review expectations.
+Native C++ math acceleration is optional. Set `LLM_KOSH_BUILD_NATIVE=1` and install `pybind11` before building to test it. Release wheels use the portable pure-Python fallback.
 
-## Security model
+## Contributing
 
-- Storage and search are local by default.
-- There is no automatic cloud sync or telemetry in the Python package.
-- MCP starts read-only.
-- Write, mutation, and private-export capabilities require explicit opt-in.
-- HTTP transport is optional and should be treated as a real network boundary when enabled.
-- Context exports are checked for common secret patterns before sharing.
-- Cartridge files are plaintext; use operating-system disk encryption if local
-  data at rest needs encryption.
+Contributions are welcome, especially around:
 
-See [SECURITY.md](SECURITY.md) for the canonical threat model, reporting guidance,
-and current security boundaries.
+- MCP interoperability
+- tests and regression coverage
+- packaging and cross-platform reliability
+- documentation
+- local-first memory workflows
+- security hardening
+- evidence and retrieval quality
 
-## Desktop app status
-
-The Electron desktop app is packaged separately from the Python package. Local
-developer builds and Windows installer smoke tests are supported. Public GA
-desktop distribution still requires verified Windows code signing and macOS
-Developer ID signing/notarization.
-
-For the current release posture across package, MCP, service, and desktop,
-see [GA_READINESS.md](GA_READINESS.md).
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing substantial changes. Use GitHub Issues for reproducible, non-sensitive bugs and feature proposals, and follow [SECURITY.md](SECURITY.md) for security-sensitive reports.
 
 ## Documentation
 
-- [Quickstart](QUICKSTART.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [CLI reference](docs/CLI_REFERENCE.md)
-- [MCP guide](docs/MCP_GUIDE.md)
-- [Developer guide](docs/DEVELOPER_GUIDE.md)
-- [Developer FAQ](docs/DEVELOPER_FAQ.md)
-- [MCP developer guide](docs/MCP_DEVELOPER_GUIDE.md)
-- [Service developer guide](docs/SERVICE_DEVELOPER_GUIDE.md)
-- [Desktop developer guide](docs/DESKTOP_DEVELOPER_GUIDE.md)
-- [Release engineering](docs/RELEASE_ENGINEERING.md)
-- [Documentation standards](docs/DOCUMENTATION_STANDARDS.md)
-- [Contributing](CONTRIBUTING.md)
-- [Security](SECURITY.md)
-- [GA readiness](GA_READINESS.md)
-- [Archived historical docs](docs/archive/README.md)
+| Guide | Purpose |
+| --- | --- |
+| [Quickstart](QUICKSTART.md) | First installation and local use |
+| [Architecture](docs/ARCHITECTURE.md) | System structure and design |
+| [CLI reference](docs/CLI_REFERENCE.md) | Command reference |
+| [MCP guide](docs/MCP_GUIDE.md) | MCP setup and usage |
+| [Developer guide](docs/DEVELOPER_GUIDE.md) | Development workflow |
+| [MCP developer guide](docs/MCP_DEVELOPER_GUIDE.md) | MCP internals |
+| [Service developer guide](docs/SERVICE_DEVELOPER_GUIDE.md) | Background service internals |
+| [Desktop developer guide](docs/DESKTOP_DEVELOPER_GUIDE.md) | Desktop packaging |
+| [Release engineering](docs/RELEASE_ENGINEERING.md) | Build and release process |
+| [Security](SECURITY.md) | Threat model and reporting |
+| [GA readiness](GA_READINESS.md) | Current release posture |
+| [Archived historical docs](docs/archive/README.md) | Historical material |
 
-## Native acceleration
+## Open source
 
-Native C++ math acceleration is optional. Set `LLM_KOSH_BUILD_NATIVE=1` and
-install `pybind11` before building if you want to test it. Release wheels use
-the portable pure-Python fallback.
+LLM-Kosh is maintained in the open under the [MIT License](LICENSE).
 
-## License
+Bug reports, focused pull requests, interoperability improvements, tests, and documentation contributions are welcome.
 
-Licensed under the [MIT License](LICENSE).
+---
+
+<div align="center">
+  <strong>Memory should make agents more capable without making your workspace less yours.</strong>
+</div>

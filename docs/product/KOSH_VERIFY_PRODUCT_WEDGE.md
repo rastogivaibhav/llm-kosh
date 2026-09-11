@@ -18,7 +18,7 @@ Kosh Verify is not a new speculative layer bolted on from outside. It is a produ
 - The provenance model already separates observed, discovered, inferred, reinforced, and hypothetical relationships.
 - The temporal-evidence layer already handles exact, approximate, relative, versioned, inferred, and unknown time.
 
-This work package adds a product-facing API and demo that make those capabilities easy to use.
+This work package adds product-facing API, CLI, MCP, and demo surfaces that make those capabilities easier to use.
 
 ## What it does
 
@@ -113,12 +113,13 @@ report = kv.verify(
 print(report.to_json(indent=2))
 ```
 
+The current source tree also composes the standard MCP server with a read-only `kosh_verify` tool through `llm_kosh.mcp_verify_server`. This reuses the existing server's capability gates instead of creating a second permission model.
+
 ## Next product build
 
 1. Add visual timeline/path explorer.
 2. Add importers for incident markdown, changelogs, and postmortems.
-3. Add MCP tool `kosh_verify`.
-4. Add LangGraph/CrewAI adapter.
-5. Add hosted local demo script.
-6. Add official benchmark adapters.
-7. Add Rust kernel path for million-node runtime.
+3. Add LangGraph/CrewAI adapter.
+4. Add hosted local demo script.
+5. Add official benchmark adapters with frozen datasets and published methodology.
+6. Add Rust kernel path for million-node runtime.

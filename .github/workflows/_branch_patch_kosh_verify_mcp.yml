@@ -1,0 +1,46 @@
+name: Branch Patch - Kosh Verify MCP
+
+on:
+  push:
+    branches: [feat/kosh-verify-mcp]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[mcp-bridge-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/kosh-verify-mcp
+          fetch-depth: 0
+
+      - name: Apply deterministic MCP bridge patch
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("llm_kosh/mcp_server.py")
+          text = path.read_text(encoding="utf-8")
+          if "def kosh_verify(" in text:
+              raise SystemExit(0)
+
+          marker = "\n\n@mcp.tool()\ndef reasoning_critique(fact_ids: List[str]):\n"
+          if marker not in text:
+              raise SystemExit("Expected reasoning_critique insertion marker not found")
+
+          tool = '''\n\n@mcp.tool()\ndef kosh_verify(\n    query: str,\n    temporal_context: str = "",\n    depth: int = 4,\n    dialectic: bool = True,\n):\n    """\n    Verify a question against the local temporal/causal evidence graph.\n\n    This is a read-only tool. It returns a structured Kosh Verify report with\n    supporting facts, causal paths, contradictions, inference boundaries,\n    missing evidence, stability, and abstention state. It does not consult the\n    internet, seed demo data, write memory, or make an imported source trusted.\n    """\n    from llm_kosh.verify import KoshVerify\n\n    report = KoshVerify(WORKSPACE_PATH).verify(\n        query,\n        temporal_context=temporal_context or None,\n        depth=depth,\n        dialectic=dialectic,\n    )\n    return report.to_json(indent=2)\n'''
+          path.write_text(text.replace(marker, tool + marker, 1), encoding="utf-8")
+
+      - name: Commit bridge
+        run: |
+          if git diff --quiet -- llm_kosh/mcp_server.py; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add llm_kosh/mcp_server.py
+          git commit -m "Expose Kosh Verify as a read-only MCP tool [mcp-bridge-applied]"
+          git push origin HEAD:feat/kosh-verify-mcp

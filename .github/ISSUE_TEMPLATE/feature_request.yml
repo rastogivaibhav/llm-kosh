@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose a focused improvement to LLM-Kosh
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the user or maintainer problem before describing a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What is the smallest useful change that would solve the problem?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Memory and retrieval
+        - Kosh Verify / provenance
+        - MCP interoperability
+        - Intake and import
+        - Security and permissions
+        - Packaging / cross-platform
+        - Documentation
+        - Developer experience
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence or reproducible use case
+      description: Link a public example, test case, benchmark methodology, or describe a concrete workflow. Avoid sensitive data.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This proposal does not require publishing credentials, private memories, customer data, or proprietary documents.
+          required: true

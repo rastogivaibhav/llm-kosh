@@ -3,15 +3,18 @@
   <h1>LLM-Kosh</h1>
   <p><strong>Local-first durable memory for AI agents.</strong></p>
   <p>Give Claude, Cursor, and other MCP-compatible clients persistent, inspectable memory without handing your workspace to a hosted memory service.</p>
+  <p><strong>Kosh Verify makes that memory show its work:</strong> evidence, timing, causal paths, contradictions, inference boundaries, missing evidence, and abstention.</p>
   <p>
     <a href="https://pypi.org/project/llm-kosh/"><img src="https://img.shields.io/pypi/v/llm-kosh.svg" alt="PyPI" /></a>
     <a href="https://pypi.org/project/llm-kosh/"><img src="https://img.shields.io/pypi/pyversions/llm-kosh.svg" alt="Python" /></a>
     <a href="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml"><img src="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml/badge.svg" alt="Tests" /></a>
+    <a href="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/quality.yml"><img src="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/quality.yml/badge.svg" alt="Quality" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
     <a href="https://github.com/rastogivaibhav/llm-kosh/stargazers"><img src="https://img.shields.io/github/stars/rastogivaibhav/llm-kosh?style=flat" alt="GitHub stars" /></a>
   </p>
   <p>
     <a href="#60-second-quickstart">Quickstart</a> ·
+    <a href="#kosh-verify-memory-that-can-show-its-work">Kosh Verify</a> ·
     <a href="#architecture">Architecture</a> ·
     <a href="#use-with-mcp-clients">MCP</a> ·
     <a href="#security-model">Security</a> ·
@@ -36,9 +39,36 @@ It gives agents a durable memory layer built from ordinary local files plus stru
 - **Auditable** — mutations are recorded in a tamper-evident ledger.
 - **Permissioned** — MCP starts read-only; write, mutation, and private export require explicit opt-in.
 - **Portable** — one cartridge can support multiple compatible AI clients and workflows.
-- **Automation-ready** — CLI, background service, MCP server, and packaging are part of the same project.
+- **Evidence-aware** — Kosh Verify can distinguish support, contradiction, inference, evidence gaps, and absence.
 
 > **Install it:** `python -m pip install --upgrade llm-kosh`
+
+## Kosh Verify: memory that can show its work
+
+Long-lived memory creates a different failure mode from a one-off bad answer: a weak or misunderstood memory can be recalled again in later sessions.
+
+Kosh Verify is LLM-Kosh's evidence-aware verification surface. Given the evidence already present in a cartridge, it can produce a structured report containing temporal context, supporting facts, causal paths, contradictions, inferred-but-not-discovered relationships, missing evidence, stability information, and an explicit abstention state when there is not enough evidence.
+
+It is **not a universal truth oracle** and it does not make an imported source trustworthy simply because it was stored. The aim is to preserve the difference between what the cartridge observed, what it inferred, what conflicts, and what it cannot support.
+
+Try the deterministic synthetic incident demo:
+
+```bash
+llm-kosh --root ./kosh-demo kosh-verify \
+  "Why did checkout fail and what evidence contradicts the explanation?" \
+  --when "2026-05-01T13:30:00+00:00" \
+  --depth 5 \
+  --demo-seed \
+  --json
+```
+
+`--demo-seed` writes synthetic incident evidence into the selected root, so use a disposable directory. The same behavior is covered by automated tests and a network-free acceptance harness:
+
+```bash
+python scripts/kosh_verify_acceptance.py
+```
+
+See [Kosh Verify](docs/KOSH_VERIFY.md) for the contract, boundaries, API example, and reproducible checks.
 
 ## What makes LLM-Kosh different
 
@@ -49,8 +79,10 @@ It gives agents a durable memory layer built from ordinary local files plus stru
 | Human-inspectable storage | ✅ |
 | Tamper-evident mutation ledger | ✅ |
 | Read-only-by-default agent access | ✅ |
-| Secret-aware context export | ✅ |
 | Evidence-backed context packs | ✅ |
+| Temporal/causal verification | ✅ |
+| Contradiction and evidence-gap reporting | ✅ |
+| Explicit no-evidence abstention | ✅ |
 | Hosted memory service required | ❌ |
 | Automatic cloud sync required | ❌ |
 
@@ -71,6 +103,7 @@ flowchart TB
       F[Policy]
       G[Ledger]
       H[Context packs]
+      V[Kosh Verify]
 
       R --> C
       R --> D
@@ -78,6 +111,8 @@ flowchart TB
       C --> E
       C --> G
       C --> H
+      C --> V
+      D --> V
     end
 
     C --> I[(Local cartridge)]
@@ -125,14 +160,16 @@ The core project is usable now:
 
 - Python package published as [`llm-kosh`](https://pypi.org/project/llm-kosh/)
 - local CLI for creating, searching, importing, packing, and verifying cartridges
+- Kosh Verify CLI and Python API for evidence-aware temporal/causal verification
+- deterministic Kosh Verify incident demo and acceptance tests
 - local MCP server
 - background service for intake and maintenance jobs
 - plain-file, inspectable storage with local indexes
 - tamper-evident mutation ledger
-- GitHub Actions test and publishing workflows
+- GitHub Actions test, quality, security-scanning, and publishing workflows
 - experimental company-brain foundation for evidence-backed memory and cited context
 
-The remaining release work is primarily desktop packaging polish and signing across Windows, macOS, and Linux.
+The remaining release work is primarily desktop packaging polish and signing across Windows, macOS, and Linux. Kosh Verify is currently exposed through the CLI and Python API; direct exposure through the main MCP tool surface remains future work.
 
 ## Use with MCP clients
 
@@ -234,7 +271,7 @@ See [SECURITY.md](SECURITY.md) for the canonical threat model, reporting guidanc
 
 LLM-Kosh is actively maintained open-source infrastructure for durable agent memory.
 
-The Python package, CLI, MCP server, local service, test workflow, and publishing path are operational. Current work focuses on interoperability, packaging, governed memory, evidence-backed retrieval, and making the project easier for external contributors to extend safely.
+The Python package, CLI, MCP server, local service, Kosh Verify surface, test workflow, and publishing path are operational. Current work focuses on interoperability, packaging, governed memory, evidence-aware verification, and making the project easier for external contributors to extend safely.
 
 The Electron desktop app is packaged separately from the Python package. Local developer builds and Windows installer smoke tests are supported; public GA desktop distribution still requires verified Windows code signing and macOS Developer ID signing/notarization.
 
@@ -245,6 +282,12 @@ See [GA_READINESS.md](GA_READINESS.md) for the detailed release posture.
 ```bash
 python -m pip install -e ".[server,watch,ingest]"
 python -m pytest -q
+```
+
+Run the small public verification acceptance contract separately:
+
+```bash
+python scripts/kosh_verify_acceptance.py
 ```
 
 For packaging or release changes:
@@ -267,6 +310,7 @@ Contributions are welcome, especially around:
 - local-first memory workflows
 - security hardening
 - evidence and retrieval quality
+- reproducible verification and benchmark methodology
 
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing substantial changes. Use GitHub Issues for reproducible, non-sensitive bugs and feature proposals, and follow [SECURITY.md](SECURITY.md) for security-sensitive reports.
 
@@ -275,6 +319,7 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing substantial chan
 | Guide | Purpose |
 | --- | --- |
 | [Quickstart](QUICKSTART.md) | First installation and local use |
+| [Kosh Verify](docs/KOSH_VERIFY.md) | Evidence-aware verification contract and reproducible demo |
 | [Architecture](docs/ARCHITECTURE.md) | System structure and design |
 | [CLI reference](docs/CLI_REFERENCE.md) | Command reference |
 | [MCP guide](docs/MCP_GUIDE.md) | MCP setup and usage |

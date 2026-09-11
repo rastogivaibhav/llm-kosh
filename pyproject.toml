@@ -62,6 +62,7 @@ all = [
 [project.scripts]
 llm-kosh = "llm_kosh.cli:main"
 llm-kosh-service = "llm_kosh.service:main"
+llm-kosh-mcp = "llm_kosh.mcp_verify_server:main"
 
 [tool.setuptools.packages.find]
 include = ["llm_kosh*"]

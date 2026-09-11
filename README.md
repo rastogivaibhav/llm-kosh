@@ -68,7 +68,7 @@ llm-kosh --root ./kosh-demo kosh-verify \
 python scripts/kosh_verify_acceptance.py
 ```
 
-See [Kosh Verify](docs/KOSH_VERIFY.md) for the contract, boundaries, API example, and reproducible checks.
+See [Kosh Verify](docs/KOSH_VERIFY.md) for the contract, boundaries, API example, MCP surface, and reproducible checks.
 
 ## What makes LLM-Kosh different
 
@@ -162,41 +162,53 @@ The core project is usable now:
 - local CLI for creating, searching, importing, packing, and verifying cartridges
 - Kosh Verify CLI and Python API for evidence-aware temporal/causal verification
 - deterministic Kosh Verify incident demo and acceptance tests
-- local MCP server
+- local MCP server with explicit write, mutation, and private-export capability gates
+- source-level MCP composition that adds read-only `kosh_verify` without changing those gates
 - background service for intake and maintenance jobs
 - plain-file, inspectable storage with local indexes
 - tamper-evident mutation ledger
 - GitHub Actions test, quality, security-scanning, and publishing workflows
 - experimental company-brain foundation for evidence-backed memory and cited context
 
-The remaining release work is primarily desktop packaging polish and signing across Windows, macOS, and Linux. Kosh Verify is currently exposed through the CLI and Python API; direct exposure through the main MCP tool surface remains future work.
+The remaining release work is primarily desktop packaging polish and signing across Windows, macOS, and Linux. The `llm-kosh-mcp` entry point described below is present on current `master` source and is intended for the next package release; the currently published PyPI 2.1.3 package predates that entry point.
 
 ## Use with MCP clients
 
-Start the MCP server against a cartridge:
+The currently published package exposes the standard MCP server through the existing CLI:
 
 ```bash
 llm-kosh --root ./my-cartridge mcp-server
 ```
 
-The MCP server starts **read-only**.
-
-Grant stronger capabilities only to clients that should have them:
+On current source, the composed MCP entry point exposes the same server plus the read-only `kosh_verify` tool:
 
 ```bash
-llm-kosh --root ./my-cartridge mcp-server --allow-write
-llm-kosh --root ./my-cartridge mcp-server --allow-write --allow-mutate
-llm-kosh --root ./my-cartridge mcp-server --allow-private
+python -m pip install -e .
+llm-kosh-mcp --root ./my-cartridge
 ```
 
-MCP can also run over local HTTP:
+Equivalent module invocation:
 
 ```bash
-llm-kosh --root ./my-cartridge mcp-server --http --port 8000
+python -m llm_kosh.mcp_verify_server --root ./my-cartridge
+```
+
+Kosh Verify does **not** require additional privileges. Write, mutation, and private-export capabilities remain opt-in and continue to use the standard server flags:
+
+```bash
+llm-kosh-mcp --root ./my-cartridge --allow-write
+llm-kosh-mcp --root ./my-cartridge --allow-write --allow-mutate
+llm-kosh-mcp --root ./my-cartridge --allow-private
+```
+
+The composed server also supports local streamable HTTP:
+
+```bash
+llm-kosh-mcp --root ./my-cartridge --http --port 8000
 # endpoint: http://127.0.0.1:8000/mcp
 ```
 
-Treat HTTP transport as a real network boundary if you expose it beyond loopback.
+Treat HTTP transport as a real network boundary if you expose it beyond loopback. See [Kosh Verify](docs/KOSH_VERIFY.md) for the `kosh_verify` tool contract and [MCP guide](docs/MCP_GUIDE.md) for general MCP setup.
 
 ## Company-brain foundation
 

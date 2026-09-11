@@ -17,6 +17,7 @@ from .models import (
     RetrievalMode,
     RiskTier,
 )
+from .persistence import RUNTIME_SCHEMA_VERSION, RuntimeStore
 from .policy import AdmissionPolicy, load_admission_policy
 
 __all__ = [
@@ -30,8 +31,10 @@ __all__ = [
     "EvidenceSignals",
     "MemoryProposal",
     "MemorySource",
+    "RUNTIME_SCHEMA_VERSION",
     "RetrievalMode",
     "RiskTier",
+    "RuntimeStore",
     "infer_risk_tier",
     "load_admission_policy",
     "proposal_id_for",

@@ -1,41 +1,38 @@
-import pytest
-from pathlib import Path
+"""Broad module-surface smoke tests.
 
-def test_brute_force_coverage(temp_workspace):
+This file intentionally does not execute every discovered function with fabricated
+arguments. Many engine functions perform real filesystem, SQLite, service, or index
+work, so arbitrary invocation is both non-deterministic and a poor proxy for
+coverage. Behaviour is exercised by the focused tests elsewhere in the suite.
+"""
+
+import inspect
+
+
+def test_engine_module_surfaces_are_importable_and_inspectable():
+    """Public Python functions in core engine modules expose valid signatures."""
     from llm_kosh.engine import commands, search, healing, compiler, safety
     from llm_kosh.core import memory, utils
-    import inspect
-    
-    root = Path(temp_workspace)
-    memory.init_cartridge(root, "user")
-    
-    modules = [commands, search, healing, compiler, safety, memory, utils]
-    
-    for mod in modules:
-        for name, obj in inspect.getmembers(mod):
-            if inspect.isfunction(obj):
-                if name in ("watch_command", "start_server", "serve", "serve_forever"):
-                    continue
-                # Try calling it with generic args
-                try: obj(root)
-                except BaseException: pass
-                
-                try: obj(str(root))
-                except BaseException: pass
-                
-                try: obj(root, "test")
-                except BaseException: pass
-                
-                try: obj(root, "test", "test")
-                except BaseException: pass
-                
-                try: obj()
-                except BaseException: pass
-                
-                try: obj("test")
-                except BaseException: pass
 
-def test_fix_audit():
-    # Just fix the failing test
-    root = Path("dummy")
-    assert True
+    modules = [commands, search, healing, compiler, safety, memory, utils]
+
+    for module in modules:
+        functions = [
+            (name, obj)
+            for name, obj in inspect.getmembers(module, inspect.isfunction)
+            if not name.startswith("_") and obj.__module__ == module.__name__
+        ]
+
+        assert functions, f"{module.__name__} exposes no public functions"
+        for name, function in functions:
+            signature = inspect.signature(function)
+            assert signature is not None, f"Could not inspect {module.__name__}.{name}"
+
+
+def test_index_entry_points_are_exposed():
+    """Keep explicit smoke coverage for the index APIs implicated by CI."""
+    from llm_kosh.engine import search
+
+    assert callable(search.rebuild_index)
+    assert callable(search.build_vector_index)
+    assert callable(search.inspect_index)

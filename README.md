@@ -2,6 +2,10 @@
 
 <!-- mcp-name: io.github.rastogivaibhav/llm-kosh -->
 
+[![PyPI](https://img.shields.io/pypi/v/llm-kosh.svg)](https://pypi.org/project/llm-kosh/)
+[![Python](https://img.shields.io/pypi/pyversions/llm-kosh.svg)](https://pypi.org/project/llm-kosh/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 `llm-kosh` is a local-first memory cartridge for MCP-compatible AI clients.
 It gives your agents durable memory without handing your workspace to a hosted
 memory service.
@@ -26,6 +30,17 @@ lifecycles, permission-first retrieval, and structured cited context packs. See
 - Drop receipts or intake files into watched folders and let the service absorb them.
 - Connect MCP clients with minimal privilege by default.
 - Publish and verify the same artifact through GitHub Actions.
+
+## Open source and maintenance
+
+`llm-kosh` is an open-source project licensed under the [MIT License](LICENSE) and
+maintained in this repository. The Python package is published as `llm-kosh` on PyPI.
+Bug reports, focused pull requests, interoperability improvements, tests, and
+documentation contributions are welcome.
+
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing substantial changes.
+- Follow [SECURITY.md](SECURITY.md) for the current threat model and vulnerability-reporting guidance.
+- Use GitHub Issues for reproducible, non-sensitive bugs and feature proposals.
 
 ## What works today
 
@@ -168,18 +183,21 @@ python -m build
 python -m twine check dist/*
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and review expectations.
+
 ## Security model
 
 - Storage and search are local by default.
 - There is no automatic cloud sync or telemetry in the Python package.
 - MCP starts read-only.
 - Write, mutation, and private-export capabilities require explicit opt-in.
+- HTTP transport is optional and should be treated as a real network boundary when enabled.
 - Context exports are checked for common secret patterns before sharing.
 - Cartridge files are plaintext; use operating-system disk encryption if local
   data at rest needs encryption.
 
-See [SECURITY.md](SECURITY.md) and [docs/SECURITY.md](docs/SECURITY.md) for
-boundaries and limitations.
+See [SECURITY.md](SECURITY.md) for the canonical threat model, reporting guidance,
+and current security boundaries.
 
 ## Desktop app status
 
@@ -204,6 +222,8 @@ see [GA_READINESS.md](GA_READINESS.md).
 - [Desktop developer guide](docs/DESKTOP_DEVELOPER_GUIDE.md)
 - [Release engineering](docs/RELEASE_ENGINEERING.md)
 - [Documentation standards](docs/DOCUMENTATION_STANDARDS.md)
+- [Contributing](CONTRIBUTING.md)
+- [Security](SECURITY.md)
 - [GA readiness](GA_READINESS.md)
 - [Archived historical docs](docs/archive/README.md)
 
@@ -213,4 +233,6 @@ Native C++ math acceleration is optional. Set `LLM_KOSH_BUILD_NATIVE=1` and
 install `pybind11` before building if you want to test it. Release wheels use
 the portable pure-Python fallback.
 
-Licensed under the MIT License.
+## License
+
+Licensed under the [MIT License](LICENSE).

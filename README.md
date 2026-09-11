@@ -1,20 +1,22 @@
 <div align="center">
   <img src="./llm-kosh-icon.PNG" alt="LLM-Kosh" width="128" />
-
-# LLM-Kosh
-
-**Local-first durable memory for AI agents.**
-
-Give Claude, Cursor, and other MCP-compatible clients persistent, inspectable memory without handing your workspace to a hosted memory service.
-
-[![PyPI](https://img.shields.io/pypi/v/llm-kosh.svg)](https://pypi.org/project/llm-kosh/)
-[![Python](https://img.shields.io/pypi/pyversions/llm-kosh.svg)](https://pypi.org/project/llm-kosh/)
-[![Tests](https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml/badge.svg)](https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/rastogivaibhav/llm-kosh?style=flat)](https://github.com/rastogivaibhav/llm-kosh/stargazers)
-
-[Quickstart](#60-second-quickstart) · [Architecture](#architecture) · [MCP](#use-with-mcp-clients) · [Security](#security-model) · [Contributing](CONTRIBUTING.md)
-
+  <h1>LLM-Kosh</h1>
+  <p><strong>Local-first durable memory for AI agents.</strong></p>
+  <p>Give Claude, Cursor, and other MCP-compatible clients persistent, inspectable memory without handing your workspace to a hosted memory service.</p>
+  <p>
+    <a href="https://pypi.org/project/llm-kosh/"><img src="https://img.shields.io/pypi/v/llm-kosh.svg" alt="PyPI" /></a>
+    <a href="https://pypi.org/project/llm-kosh/"><img src="https://img.shields.io/pypi/pyversions/llm-kosh.svg" alt="Python" /></a>
+    <a href="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml"><img src="https://github.com/rastogivaibhav/llm-kosh/actions/workflows/test.yml/badge.svg" alt="Tests" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+    <a href="https://github.com/rastogivaibhav/llm-kosh/stargazers"><img src="https://img.shields.io/github/stars/rastogivaibhav/llm-kosh?style=flat" alt="GitHub stars" /></a>
+  </p>
+  <p>
+    <a href="#60-second-quickstart">Quickstart</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="#use-with-mcp-clients">MCP</a> ·
+    <a href="#security-model">Security</a> ·
+    <a href="CONTRIBUTING.md">Contributing</a>
+  </p>
 </div>
 
 <!-- mcp-name: io.github.rastogivaibhav/llm-kosh -->
@@ -56,25 +58,35 @@ It gives agents a durable memory layer built from ordinary local files plus stru
 
 ```mermaid
 flowchart TB
-    A[AI client / agent] -->|MCP| B[LLM-Kosh]
+    A[AI client / agent] -->|MCP| R[Access layer]
+    M[CLI] --> R
+    N[Background service] --> R
+    O[Local HTTP MCP - optional] --> R
 
-    subgraph B[LLM-Kosh]
+    subgraph KOSH[LLM-Kosh]
+      R
       C[Memory]
       D[Evidence]
       E[Search]
       F[Policy]
       G[Ledger]
       H[Context packs]
+
+      R --> C
+      R --> D
+      R --> F
+      C --> E
+      C --> G
+      C --> H
     end
 
-    B --> I[(Local cartridge)]
+    C --> I[(Local cartridge)]
+    D --> I
+    E --> I
+    G --> I
     I --> J[Plain files]
     I --> K[SQLite / FTS]
     I --> L[Audit ledger]
-
-    M[CLI] --> B
-    N[Background service] --> B
-    O[Local HTTP MCP - optional] --> B
 ```
 
 The **repository root** contains the code. The **cartridge root** contains the live memory store. Watched **intake folders** can feed new material into the cartridge without mixing runtime data into the source checkout.

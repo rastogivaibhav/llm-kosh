@@ -26,7 +26,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .
-          python -m pip install ruff
+          python -m pip install ruff pytest pytest-asyncio
 
       - name: Compile Python sources
         run: python -m compileall -q llm_kosh
@@ -35,12 +35,17 @@ jobs:
         run: |
           ruff check \
             llm_kosh/verify \
+            llm_kosh/mcp_verify_server.py \
             examples/kosh_verify \
             scripts/kosh_verify_acceptance.py \
+            tests/test_kosh_verify_mcp.py \
             --select E9,F63,F7,F82
 
       - name: Run deterministic Kosh Verify acceptance checks
         run: python scripts/kosh_verify_acceptance.py
+
+      - name: Run focused Kosh Verify MCP tests
+        run: python -m pytest -q tests/test_kosh_verify_mcp.py
 
       - name: Validate installed dependency graph
         run: python -m pip check

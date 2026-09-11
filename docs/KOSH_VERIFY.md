@@ -85,6 +85,33 @@ For machine-readable output:
 print(report.to_json(indent=2))
 ```
 
+## MCP surface
+
+The package also exposes the standard LLM-Kosh MCP server with one additional read-only tool named `kosh_verify`:
+
+```bash
+llm-kosh-mcp --root ./my-cartridge
+```
+
+The equivalent module invocation is:
+
+```bash
+python -m llm_kosh.mcp_verify_server --root ./my-cartridge
+```
+
+`kosh_verify` accepts:
+
+- `query` — the question to verify
+- `temporal_context` — optional ISO-8601 time context
+- `depth` — causal traversal depth, default `4`
+- `dialectic` — whether to run the dialectical verification loop, default `true`
+
+The tool returns the same structured JSON report as the Python API. It is registered on top of the existing MCP server rather than replacing its permission model.
+
+Importantly, **Kosh Verify does not require `--allow-write`, `--allow-mutate`, or `--allow-private`**. It does not seed evidence, change memory lifecycle, write to the cartridge, or export private context. Existing MCP write, mutation, and private-export tools remain behind their existing explicit capability gates.
+
+The repository's `.mcp.json` uses this composed server and points to the portable default cartridge path `~/.llmkosh/cartridge`; it no longer contains a maintainer-specific absolute filesystem path.
+
 ## Why this belongs in a memory system
 
 Persistent memory changes the failure mode of an agent. A bad answer can disappear after one session; a bad memory can be recalled repeatedly and influence later decisions.
@@ -116,5 +143,6 @@ The quality of a verification is bounded by the evidence available to the cartri
 - [Shared-memory framework-agent verification](product/KOSH_VERIFY_FRAMEWORK_AGENTS_SHARED_MEMORY.md)
 - [Multi-agent ServiceNow example](product/KOSH_VERIFY_MULTI_AGENT_SERVICENOW.md)
 - [Incident demo](../examples/kosh_verify/incident_demo.py)
+- [MCP surface tests](../tests/test_kosh_verify_mcp.py)
 - [Product acceptance tests](../tests/test_kosh_verify_product_wedge.py)
 - [Temporal/causal provenance dataset tests](../tests/test_kosh_verify_temporal_causal_provenance_datasets.py)

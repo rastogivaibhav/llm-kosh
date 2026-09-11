@@ -16,6 +16,7 @@ keywords = ["mcp", "llm", "memory", "claude", "ai", "context", "cartridge", "sql
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -32,7 +33,10 @@ dependencies = [
 [project.urls]
 Homepage = "https://rastogivaibhav.github.io/llm-kosh"
 Repository = "https://github.com/rastogivaibhav/llm-kosh"
+Documentation = "https://github.com/rastogivaibhav/llm-kosh/tree/master/docs"
 "Bug Tracker" = "https://github.com/rastogivaibhav/llm-kosh/issues"
+Security = "https://github.com/rastogivaibhav/llm-kosh/blob/master/SECURITY.md"
+Changelog = "https://github.com/rastogivaibhav/llm-kosh/blob/master/CHANGELOG.md"
 
 [project.optional-dependencies]
 watch = [

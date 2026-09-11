@@ -1,0 +1,46 @@
+name: Quality
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project and quality tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install ruff
+
+      - name: Compile Python sources
+        run: python -m compileall -q llm_kosh
+
+      - name: Lint public verification surface
+        run: |
+          ruff check \
+            llm_kosh/verify \
+            examples/kosh_verify \
+            scripts/kosh_verify_acceptance.py \
+            --select E9,F63,F7,F82
+
+      - name: Run deterministic Kosh Verify acceptance checks
+        run: python scripts/kosh_verify_acceptance.py
+
+      - name: Validate installed dependency graph
+        run: python -m pip check

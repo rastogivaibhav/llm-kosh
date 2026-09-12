@@ -1,4 +1,4 @@
-"""Trusted Memory Runtime public contracts and deterministic admission logic."""
+"""Trusted Memory Runtime public contracts and deterministic trust logic."""
 
 from .admission import (
     AdmissionEngine,
@@ -7,6 +7,7 @@ from .admission import (
     infer_risk_tier,
     proposal_id_for,
 )
+from .conflicts import ConflictCandidate, ConflictDetector
 from .models import (
     AdmissionAssessment,
     AdmissionDecision,
@@ -26,6 +27,8 @@ __all__ = [
     "AdmissionEngine",
     "AdmissionPolicy",
     "Authority",
+    "ConflictCandidate",
+    "ConflictDetector",
     "ConflictSignals",
     "ConflictState",
     "EvidenceSignals",

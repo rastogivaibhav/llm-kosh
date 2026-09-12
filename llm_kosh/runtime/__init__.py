@@ -21,6 +21,7 @@ from .models import (
 from .persistence import RUNTIME_SCHEMA_VERSION, RuntimeStore
 from .policy import AdmissionPolicy, load_admission_policy
 from .retrieval import TrustedRetrieval
+from .service import TrustedMemoryRuntime
 
 __all__ = [
     "AdmissionAssessment",
@@ -39,6 +40,7 @@ __all__ = [
     "RetrievalMode",
     "RiskTier",
     "RuntimeStore",
+    "TrustedMemoryRuntime",
     "TrustedRetrieval",
     "infer_risk_tier",
     "load_admission_policy",

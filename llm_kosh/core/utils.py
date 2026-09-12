@@ -99,20 +99,63 @@ def _unlock_file(f) -> None:
         pass
 
 
+def _ensure_lock_byte(lock_path: Path, timeout: float = 10.0) -> None:
+    """Ensure the byte used by ``msvcrt.locking`` exists before contention.
+
+    Windows cannot lock past EOF. Multiple processes can race while creating a
+    brand-new lock file; if they all observe size zero, one process may receive
+    ``PermissionError`` while another is flushing byte zero. Initialization is
+    therefore a separate retried operation. Once the byte exists, normal lock
+    acquisition never writes to the lock file.
+    """
+    import os
+    import time
+
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            with lock_path.open("a+b") as lock_file:
+                lock_file.seek(0, os.SEEK_END)
+                if lock_file.tell() == 0:
+                    lock_file.write(b"\0")
+                    lock_file.flush()
+                    os.fsync(lock_file.fileno())
+            return
+        except (PermissionError, OSError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
+
+
 @contextmanager
 def _ledger_lock(lock_path: Path) -> Iterator[None]:
     """Serialize ledger/head updates across threads and processes."""
+    import time
+
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    with lock_path.open("a+b") as lock_file:
-        # msvcrt cannot lock a byte beyond EOF, so ensure byte zero exists.
-        if lock_file.seek(0, 2) == 0:
-            lock_file.write(b"\0")
-            lock_file.flush()
+    _ensure_lock_byte(lock_path)
+
+    # A byte-range lock should not normally prevent opening the lock file, but
+    # Windows antivirus/indexing and concurrent initialization can transiently
+    # deny an open. Retry the open itself without ever proceeding unlocked.
+    deadline = time.monotonic() + 10.0
+    lock_file = None
+    while lock_file is None:
+        try:
+            lock_file = lock_path.open("r+b")
+        except (PermissionError, OSError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
+
+    try:
         _lock_file(lock_file)
         try:
             yield
         finally:
             _unlock_file(lock_file)
+    finally:
+        lock_file.close()
 
 
 def row_hash(row: dict) -> str:

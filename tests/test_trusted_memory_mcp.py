@@ -229,7 +229,9 @@ def test_conflicting_agent_memory_is_quarantined_and_visible(trusted_cartridge: 
     assert explanation["admission_history"][-1]["conflict_state"] == "direct_contradiction"
 
 
-def test_review_requires_mutate_capability(trusted_cartridge: Path) -> None:
+def test_review_requires_mutate_without_upgrading_source_authority(
+    trusted_cartridge: Path,
+) -> None:
     start_server(
         trusted_cartridge,
         stdio=False,
@@ -272,10 +274,19 @@ def test_review_requires_mutate_capability(trusted_cartridge: Path) -> None:
     )
     assert reviewed["lifecycle"] == "verified"
 
-    current = json.loads(
+    normal = json.loads(
+        trusted_memory_recall("validation workflow", project_id="llm-kosh", mode="normal")
+    )
+    assert [item["memory_id"] for item in normal] == [candidate["memory_id"]]
+    assert normal[0]["authority"] == "contextual"
+
+    strict = json.loads(
         trusted_memory_recall("validation workflow", project_id="llm-kosh", mode="strict")
     )
-    assert [item["memory_id"] for item in current] == [candidate["memory_id"]]
+    assert strict == []
+
+    explanation = json.loads(trusted_memory_explain(candidate["memory_id"]))
+    assert explanation["runtime"]["authority"] == "contextual"
 
 
 @pytest.mark.asyncio

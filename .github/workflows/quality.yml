@@ -37,10 +37,12 @@ jobs:
             llm_kosh/verify \
             llm_kosh/runtime \
             llm_kosh/mcp_verify_server.py \
+            llm_kosh/mcp_trusted_memory_server.py \
             examples/kosh_verify \
             scripts/kosh_verify_acceptance.py \
             scripts/trusted_memory_acceptance.py \
             tests/test_kosh_verify_mcp.py \
+            tests/test_trusted_memory_mcp.py \
             tests/runtime \
             --select E9,F63,F7,F82
 
@@ -50,8 +52,8 @@ jobs:
       - name: Run deterministic Trusted Memory Runtime acceptance checks
         run: python scripts/trusted_memory_acceptance.py
 
-      - name: Run focused Kosh Verify MCP tests
-        run: python -m pytest -q tests/test_kosh_verify_mcp.py
+      - name: Run focused MCP contract tests
+        run: python -m pytest -q tests/test_kosh_verify_mcp.py tests/test_trusted_memory_mcp.py
 
       - name: Run Trusted Memory Runtime contract tests
         run: python -m pytest -q tests/runtime

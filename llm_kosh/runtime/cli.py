@@ -1,8 +1,8 @@
 """Standalone CLI for the Trusted Memory Runtime.
 
-This module deliberately keeps product-facing memory operations on top of the
-runtime facade/reviewer instead of duplicating admission, retrieval, or review
-logic in argparse handlers.
+The CLI is intentionally a thin product surface over TrustedMemoryRuntime and
+TrustedMemoryReviewer. Admission, retrieval, conflict handling, and lifecycle
+policy stay in the runtime rather than being reimplemented in argparse code.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
-import os
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -27,6 +26,7 @@ from llm_kosh.core.constants import DEFAULT_ROOT_NAME
 from llm_kosh.core.memory import ensure_root
 
 from .models import MemoryProposal, MemorySource, RetrievalMode
+from .persistence import RuntimeStore
 from .review import TrustedMemoryReviewer
 from .service import TrustedMemoryRuntime
 
@@ -65,10 +65,13 @@ def _principal(args: argparse.Namespace) -> Principal:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="llm-kosh-memory",
-        description="Trusted local memory: propose, recall, inspect, and review evidence-backed memory.",
+        description=(
+            "Trusted local memory: propose, recall, inspect, and explicitly "
+            "review evidence-backed memory."
+        ),
     )
     parser.add_argument("--root", default=_default_root(), help="Cartridge root folder")
-    actions = parser.add_subparsers(dest="action", required=True)
+    actions = parser.add_subparsers(dest="command", required=True)
 
     propose = actions.add_parser("propose", help="Propose evidence-backed memory for admission")
     propose.add_argument("--type", required=True, choices=sorted(MEMORY_TYPES))
@@ -78,7 +81,7 @@ def _parser() -> argparse.ArgumentParser:
         "--source-type",
         default=MemorySource.USER_DIRECT.value,
         choices=[item.value for item in MemorySource],
-        help="Origin of the claim; defaults to direct CLI user input",
+        help="Origin of newly created evidence; defaults to direct user input",
     )
     propose.add_argument("--project", default="")
     propose.add_argument("--classification", choices=CLASSIFICATIONS, default="restricted")
@@ -131,12 +134,12 @@ def _parser() -> argparse.ArgumentParser:
     review.add_argument("memory_id")
     review.add_argument(
         "--action",
+        dest="review_action",
         required=True,
         choices=["approve", "quarantine", "reject", "supersede"],
     )
     review.add_argument("--reason", required=True)
     review.add_argument("--supersede-id", action="append", default=[])
-    review.add_argument("--json", action="store_true")
     _principal_arguments(review)
 
     return parser
@@ -146,14 +149,16 @@ def _create_or_validate_evidence(
     root: Path,
     args: argparse.Namespace,
     principal: Principal,
-) -> str:
+) -> tuple[str, str]:
+    """Return evidence id and the source type actually attached to that evidence."""
+
     if args.evidence_id and args.evidence_file:
         raise SystemExit("Use either --evidence-id or --evidence-file, not both")
 
     store = CompanyBrainStore(root)
     if args.evidence_id:
-        store.inspect_evidence(args.evidence_id, principal, strong=True)
-        return args.evidence_id
+        inspection = store.inspect_evidence(args.evidence_id, principal, strong=True)
+        return args.evidence_id, str(inspection.get("source_type") or MemorySource.UNKNOWN.value)
 
     policy = AccessPolicy(allowed_principals=[principal.principal_id])
     native_id = args.source_native_id.strip()
@@ -162,7 +167,7 @@ def _create_or_validate_evidence(
         mime_type = mimetypes.guess_type(evidence_path.name)[0] or "application/octet-stream"
         storage_mode = "snapshot" if args.snapshot_evidence else "reference"
         content = evidence_path.read_bytes() if args.snapshot_evidence else None
-        return store.put_evidence(
+        evidence_id = store.put_evidence(
             EvidenceInput(
                 tenant_id=principal.tenant_id,
                 source_type=args.source_type,
@@ -176,9 +181,10 @@ def _create_or_validate_evidence(
                 access_policy=policy,
             )
         )
+        return evidence_id, args.source_type
 
     evidence_text = f"{args.title}\n\n{args.statement}\n"
-    return store.put_evidence(
+    evidence_id = store.put_evidence(
         EvidenceInput(
             tenant_id=principal.tenant_id,
             source_type=args.source_type,
@@ -192,6 +198,23 @@ def _create_or_validate_evidence(
             access_policy=policy,
         )
     )
+    return evidence_id, args.source_type
+
+
+def _with_latest_assessment(root: Path, items: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Add conflict details that are intentionally stored in assessment history."""
+
+    runtime_store = RuntimeStore(root)
+    enriched: list[dict[str, Any]] = []
+    for original in items:
+        item = dict(original)
+        history = runtime_store.list_assessments(str(item["memory_id"]))
+        latest = history[-1] if history else {}
+        item["conflict_state"] = latest.get("conflict_state") or "none"
+        item["conflicting_memory_ids"] = list(latest.get("conflicting_memory_ids") or [])
+        item["admission_reasons"] = list(latest.get("reasons") or [])
+        enriched.append(item)
+    return enriched
 
 
 def _render_recall(items: Sequence[dict[str, Any]]) -> None:
@@ -225,10 +248,11 @@ def _render_inbox(items: Sequence[dict[str, Any]]) -> None:
 def run_memory_command(root: Path, args: argparse.Namespace) -> None:
     ensure_root(root)
     principal = _principal(args)
+    runtime = TrustedMemoryRuntime(root)
 
-    if args.action == "propose":
-        evidence_id = _create_or_validate_evidence(root, args, principal)
-        metadata = {}
+    if args.command == "propose":
+        evidence_id, evidence_source_type = _create_or_validate_evidence(root, args, principal)
+        metadata: dict[str, Any] = {}
         if args.supersedes:
             metadata["supersedes"] = list(dict.fromkeys(args.supersedes))
         proposal = MemoryProposal(
@@ -236,7 +260,7 @@ def run_memory_command(root: Path, args: argparse.Namespace) -> None:
             title=args.title,
             statement=args.statement,
             evidence_ids=[evidence_id],
-            source_type=args.source_type,
+            source_type=evidence_source_type,
             project_id=args.project,
             observed_at=args.observed_at,
             confidence=args.confidence,
@@ -248,13 +272,14 @@ def run_memory_command(root: Path, args: argparse.Namespace) -> None:
             object_value=args.object_value,
             metadata=metadata,
         )
-        result = TrustedMemoryRuntime(root).propose(proposal, principal)
+        result = runtime.propose(proposal, principal)
         print(json.dumps({**result, "evidence_id": evidence_id}, indent=2))
         return
 
-    if args.action in {"recall", "inbox", "conflicts"}:
-        mode = RetrievalMode.CANDIDATE if args.action in {"inbox", "conflicts"} else args.mode
-        items = TrustedMemoryRuntime(root).recall(
+    if args.command in {"recall", "inbox", "conflicts"}:
+        mode: RetrievalMode | str
+        mode = RetrievalMode.CANDIDATE if args.command in {"inbox", "conflicts"} else args.mode
+        items = runtime.recall(
             args.query,
             principal,
             project_id=args.project,
@@ -263,45 +288,50 @@ def run_memory_command(root: Path, args: argparse.Namespace) -> None:
             mode=mode,
             limit=args.limit,
         )
-        if args.action == "conflicts":
-            items = [item for item in items if (item.get("conflict_state") or "none") != "none"]
+        if args.command in {"inbox", "conflicts"}:
+            items = _with_latest_assessment(root, items)
+        if args.command == "conflicts":
+            items = [item for item in items if item.get("conflict_state") != "none"]
         if args.json:
             print(json.dumps(items, indent=2))
-        elif args.action == "recall":
+        elif args.command == "recall":
             _render_recall(items)
         else:
             _render_inbox(items)
         return
 
-    if args.action == "explain":
-        result = TrustedMemoryRuntime(root).explain(args.memory_id, principal)
+    if args.command == "explain":
+        result = runtime.explain(args.memory_id, principal)
         if args.json:
             print(json.dumps(result, indent=2))
         else:
             memory = result["memory"]
-            runtime = result.get("runtime") or {}
+            runtime_metadata = result.get("runtime") or {}
+            history = result.get("admission_history") or []
+            latest = history[-1] if history else {}
             print(f"{memory['title']}\n{memory['statement']}\n")
             print(f"Memory: {memory['memory_id']}  lifecycle={memory['lifecycle']}")
             print(
-                f"Authority: {runtime.get('authority') or 'unassessed'}  "
-                f"admission={runtime.get('admission_decision') or 'unassessed'}"
+                f"Authority: {runtime_metadata.get('authority') or 'unassessed'}  "
+                f"admission={runtime_metadata.get('admission_decision') or 'unassessed'}"
             )
+            print(f"Conflict: {latest.get('conflict_state') or 'none'}")
             print(f"Evidence: {len(memory.get('evidence') or [])}")
-            print(f"Admission assessments: {len(result.get('admission_history') or [])}")
+            print(f"Admission assessments: {len(history)}")
         return
 
-    if args.action == "review":
+    if args.command == "review":
         result = TrustedMemoryReviewer(root).review(
             args.memory_id,
             principal,
-            action=args.action,
+            action=args.review_action,
             reason=args.reason,
             supersede_ids=args.supersede_id,
         )
         print(json.dumps(result, indent=2))
         return
 
-    raise SystemExit(f"Unsupported memory action: {args.action}")
+    raise SystemExit(f"Unsupported memory command: {args.command}")
 
 
 def main(argv: Sequence[str] | None = None) -> None:

@@ -5,6 +5,7 @@ from argparse import Namespace
 
 from llm_kosh.company_brain.models import EvidenceInput, Principal
 from llm_kosh.company_brain.store import CompanyBrainStore
+from llm_kosh.core.memory import init_cartridge
 from llm_kosh.runtime.cli import (
     _create_or_validate_evidence,
     _parser,
@@ -16,6 +17,11 @@ def _invoke_json(capsys, args: list[str]) -> object:
     main(args)
     output = capsys.readouterr().out
     return json.loads(output)
+
+
+def _init(root, capsys) -> None:
+    init_cartridge(root, "test-owner")
+    capsys.readouterr()
 
 
 def test_review_action_does_not_overwrite_subcommand_dispatch() -> None:
@@ -63,6 +69,7 @@ def test_existing_evidence_source_type_cannot_be_relabelled(tmp_path) -> None:
 
 
 def test_cli_lists_real_conflict_state_from_admission_history(tmp_path, capsys) -> None:
+    _init(tmp_path, capsys)
     root = str(tmp_path)
     old = _invoke_json(
         capsys,
@@ -137,6 +144,7 @@ def test_cli_lists_real_conflict_state_from_admission_history(tmp_path, capsys) 
 
 
 def test_cli_explicit_supersession_and_strict_recall(tmp_path, capsys) -> None:
+    _init(tmp_path, capsys)
     root = str(tmp_path)
     old = _invoke_json(
         capsys,

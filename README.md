@@ -160,17 +160,18 @@ The core project is usable now:
 
 - Python package published as [`llm-kosh`](https://pypi.org/project/llm-kosh/)
 - local CLI for creating, searching, importing, packing, and verifying cartridges
+- governed `llm-kosh-memory` CLI for proposing, recalling, inspecting, conflicting, and explicitly reviewing Trusted Memory
 - Kosh Verify CLI and Python API for evidence-aware temporal/causal verification
 - deterministic Kosh Verify incident demo and acceptance tests
 - local MCP server with explicit write, mutation, and private-export capability gates
-- source-level MCP composition that adds read-only `kosh_verify` without changing those gates
+- source-level MCP composition that adds read-only `kosh_verify` plus governed Trusted Memory tools without changing those gates
 - background service for intake and maintenance jobs
 - plain-file, inspectable storage with local indexes
 - tamper-evident mutation ledger
 - GitHub Actions test, quality, security-scanning, and publishing workflows
 - experimental company-brain foundation for evidence-backed memory and cited context
 
-The remaining release work is primarily desktop packaging polish and signing across Windows, macOS, and Linux. The `llm-kosh-mcp` entry point described below is present on current `master` source and is intended for the next package release; the currently published PyPI 2.1.3 package predates that entry point.
+The remaining release work is primarily desktop packaging polish and signing across Windows, macOS, and Linux. The `llm-kosh-mcp` and `llm-kosh-memory` entry points described here are present on current `master` source and are intended for the next package release; the currently published PyPI 2.1.3 package predates those entry points.
 
 ## Use with MCP clients
 
@@ -180,7 +181,7 @@ The currently published package exposes the standard MCP server through the exis
 llm-kosh --root ./my-cartridge mcp-server
 ```
 
-On current source, the composed MCP entry point exposes the same server plus the read-only `kosh_verify` tool:
+On current source, the composed MCP entry point exposes the standard server, read-only `kosh_verify`, and governed Trusted Memory tools:
 
 ```bash
 python -m pip install -e .
@@ -190,8 +191,16 @@ llm-kosh-mcp --root ./my-cartridge
 Equivalent module invocation:
 
 ```bash
-python -m llm_kosh.mcp_verify_server --root ./my-cartridge
+python -m llm_kosh.mcp_trusted_memory_server --root ./my-cartridge
 ```
+
+The Trusted Memory MCP surface is deliberately permissioned:
+
+- `trusted_memory_recall`, `trusted_memory_inbox`, `trusted_memory_conflicts`, and `trusted_memory_explain` are read-only.
+- `trusted_memory_propose` requires `--allow-write`.
+- `trusted_memory_review` requires `--allow-mutate`.
+- agent-created proposal evidence is recorded as `agent_observation`, never self-elevated to `user_direct`.
+- explicit review can change lifecycle without rewriting the original source authority; strict recall still requires authoritative/trusted evidence.
 
 Kosh Verify does **not** require additional privileges. Write, mutation, and private-export capabilities remain opt-in and continue to use the standard server flags:
 
@@ -208,7 +217,7 @@ llm-kosh-mcp --root ./my-cartridge --http --port 8000
 # endpoint: http://127.0.0.1:8000/mcp
 ```
 
-Treat HTTP transport as a real network boundary if you expose it beyond loopback. See [Kosh Verify](docs/KOSH_VERIFY.md) for the `kosh_verify` tool contract and [MCP guide](docs/MCP_GUIDE.md) for general MCP setup.
+Treat HTTP transport as a real network boundary if you expose it beyond loopback. See [Trusted Memory over MCP](docs/TRUSTED_MEMORY_MCP.md) for the governed memory contract, [Kosh Verify](docs/KOSH_VERIFY.md) for the `kosh_verify` contract, and [MCP guide](docs/MCP_GUIDE.md) for general MCP setup.
 
 ## Company-brain foundation
 
@@ -332,6 +341,7 @@ Please read [CONTRIBUTING.md](CONTRIBUTING.md) before proposing substantial chan
 | --- | --- |
 | [Quickstart](QUICKSTART.md) | First installation and local use |
 | [Kosh Verify](docs/KOSH_VERIFY.md) | Evidence-aware verification contract and reproducible demo |
+| [Trusted Memory over MCP](docs/TRUSTED_MEMORY_MCP.md) | Governed cross-agent recall, proposal, conflict, and review over MCP |
 | [Architecture](docs/ARCHITECTURE.md) | System structure and design |
 | [CLI reference](docs/CLI_REFERENCE.md) | Command reference |
 | [MCP guide](docs/MCP_GUIDE.md) | MCP setup and usage |

@@ -62,7 +62,7 @@ all = [
 [project.scripts]
 llm-kosh = "llm_kosh.cli:main"
 llm-kosh-service = "llm_kosh.service:main"
-llm-kosh-mcp = "llm_kosh.mcp_verify_server:main"
+llm-kosh-mcp = "llm_kosh.mcp_trusted_memory_server:main"
 llm-kosh-memory = "llm_kosh.runtime.cli:main"
 
 [tool.setuptools.packages.find]
